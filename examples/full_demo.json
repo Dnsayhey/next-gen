@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "vars": {
+    "base_url": "https://httpbin.org"
+  },
+  "steps": {
+    "get_test": {
+      "request": {
+        "method": "GET",
+        "url": "${base_url}/get",
+        "params": {
+          "name": "test"
+        }
+      },
+      "extract": {
+        "param_name": "$.args.name"
+      },
+      "validate": [
+        { "eq": ["$.args.name", "test"] }
+      ]
+    },
+    "post_json": {
+      "request": {
+        "method": "POST",
+        "url": "${base_url}/post",
+        "json": {
+          "username": "admin",
+          "password": "123456"
+        }
+      },
+      "extract": {
+        "param_name": "$.args.name"
+      },
+      "validate": [
+        { "eq": ["$.json.username", "admin"] }
+      ]
+    },
+    "post_form": {
+      "request": {
+        "method": "POST",
+        "url": "${base_url}/post",
+        "form": {
+          "field1": "value1",
+          "field2": "value2"
+        }
+      },
+      "validate": [
+        { "eq": ["$.form.field1", "value1"] }
+      ]
+    },
+    "post_raw": {
+      "request": {
+        "method": "POST",
+        "url": "${base_url}/post",
+        "body": "<root><name>test</name></root>",
+        "content_type": "application/xml"
+      },
+      "validate": [
+        { "eq": ["$.data", "<root><name>test</name></root>"] }
+      ]
+    },
+    "dependent_step": {
+      "depends_on": ["post_json"],
+      "request": {
+        "method": "GET",
+        "url": "${base_url}/get",
+        "params": {
+          "ref": "${param_name}"
+        }
+      },
+      "validate": [
+        { "eq": ["$.args.ref", "test"] }
+      ]
+    },
+    "custom_headers": {
+      "request": {
+        "method": "GET",
+        "url": "${base_url}/headers",
+        "headers": {
+          "X-Custom-Header": "my-value",
+          "Authorization": "Bearer token123"
+        }
+      },
+      "validate": [
+        { "contains": ["$.headers.X-Custom-Header", "my-value"] },
+        { "contains": ["$.headers.Authorization", "Bearer"] }
+      ]
+    }
+  }
+}
