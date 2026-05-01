@@ -1,0 +1,29 @@
+version: 1
+
+vars:
+  base_url: https://httpbin.org
+
+steps:
+  # 固定间隔重试
+  fixed_retry:
+    request:
+      method: GET
+      url: ${base_url}/status/500
+    config:
+      retry: 2
+      retry_delay: 1
+    validate:
+      - eq: [$.status_code, 200]
+
+  # 指数退避重试
+  backoff_retry:
+    request:
+      method: GET
+      url: ${base_url}/status/500
+    config:
+      retry: 3
+      retry_delay: 1
+      retry_backoff: true
+      retry_max_delay: 10
+    validate:
+      - eq: [$.status_code, 200]

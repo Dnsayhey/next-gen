@@ -184,9 +184,22 @@ steps:
   with_retry:
     request: ...
     config:
-      retry: 3            # 最大重试次数
-      retry_delay: 1      # 重试间隔（秒）
-      timeout: 30         # 步骤超时（秒），包含所有重试
+      retry: 3              # 最大重试次数
+      retry_delay: 1        # 重试间隔（秒）
+      retry_backoff: true   # 启用指数退避
+      retry_max_delay: 60   # 最大重试间隔（秒），默认 60
+      timeout: 30           # 步骤超时（秒），包含所有重试
+```
+
+**指数退避公式：** `delay = min(base * (2 ** attempt), max_delay)`
+
+```
+retry_delay: 1, retry_max_delay: 60
+attempt 0 → 1s
+attempt 1 → 2s
+attempt 2 → 4s
+attempt 3 → 8s
+...
 ```
 
 ### 4.6 超时配置

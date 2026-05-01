@@ -164,11 +164,23 @@ class Scheduler:
                 if step.retry_count < max_retry:
                     step.retry_count += 1
                     step.status = StepStatus.RETRYING
+
+                    # 计算重试延迟
+                    if step.node.config.get("retry_backoff"):
+                        # 指数退避
+                        base_delay = step.node.config.get("retry_delay", 1)
+                        max_delay = step.node.config.get("retry_max_delay", 60)
+                        delay = min(base_delay * (2 ** (step.retry_count - 1)), max_delay)
+                    else:
+                        # 固定间隔
+                        delay = step.node.config.get("retry_delay", 1)
+
                     logger.warning(
                         f"步骤 {step.node.name} 失败，"
-                        f"重试 {step.retry_count}/{max_retry}"
+                        f"重试 {step.retry_count}/{max_retry}，"
+                        f"等待 {delay}秒"
                     )
-                    await asyncio.sleep(1)  # 固定间隔
+                    await asyncio.sleep(delay)
                     return await self.run_step(step)
 
                 step.status = StepStatus.FAILED
