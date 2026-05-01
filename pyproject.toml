@@ -16,5 +16,11 @@ dependencies = [
     "pyyaml>=6.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+]
+
 [project.scripts]
 nextgen = "nextgen.cli:app"

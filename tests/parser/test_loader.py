@@ -1,0 +1,178 @@
+"""loader.py 单元测试"""
+
+import json
+import tempfile
+from pathlib import Path
+
+import pytest
+import yaml
+
+from nextgen.core.model import StepNode, TestCase
+from nextgen.parser.loader import (
+    find_action_type,
+    load_file,
+    load_testcase,
+    parse_assertions,
+    parse_request,
+    parse_step,
+    parse_testcase,
+)
+
+
+class TestLoadFile:
+    """测试 load_file"""
+
+    def test_load_yaml(self, tmp_path):
+        data = {"version": 1, "steps": {"test": {"request": {"method": "GET", "url": "http://test.com"}}}}
+        file = tmp_path / "test.yaml"
+        file.write_text(yaml.dump(data))
+        result = load_file(file)
+        assert result["version"] == 1
+
+    def test_load_json(self, tmp_path):
+        data = {"version": 1, "steps": {"test": {"request": {"method": "GET", "url": "http://test.com"}}}}
+        file = tmp_path / "test.json"
+        file.write_text(json.dumps(data))
+        result = load_file(file)
+        assert result["version"] == 1
+
+    def test_file_not_found(self):
+        with pytest.raises(FileNotFoundError):
+            load_file("/nonexistent/file.yaml")
+
+    def test_unsupported_extension(self, tmp_path):
+        file = tmp_path / "test.txt"
+        file.write_text("content")
+        with pytest.raises(ValueError, match="不支持的文件格式"):
+            load_file(file)
+
+
+class TestFindActionType:
+    """测试 find_action_type"""
+
+    def test_find_request(self):
+        data = {"request": {"method": "GET", "url": "http://test.com"}}
+        assert find_action_type(data) == "request"
+
+    def test_no_action(self):
+        data = {"depends_on": ["a"]}
+        assert find_action_type(data) is None
+
+
+class TestParseRequest:
+    """测试 parse_request"""
+
+    def test_valid_request(self):
+        config = {"method": "GET", "url": "http://test.com"}
+        parse_request(config)  # 不应抛出异常
+
+    def test_missing_method(self):
+        config = {"url": "http://test.com"}
+        with pytest.raises(ValueError, match="method"):
+            parse_request(config)
+
+    def test_missing_url(self):
+        config = {"method": "GET"}
+        with pytest.raises(ValueError, match="url"):
+            parse_request(config)
+
+    def test_mutual_exclusion(self):
+        config = {
+            "method": "POST",
+            "url": "http://test.com",
+            "json": {"key": "value"},
+            "form": {"key": "value"},
+        }
+        with pytest.raises(ValueError, match="不能同时出现"):
+            parse_request(config)
+
+
+class TestParseAssertions:
+    """测试 parse_assertions"""
+
+    def test_valid_assertions(self):
+        data = [
+            {"eq": ["$.code", 0]},
+            {"contains": ["$.message", "success"]},
+        ]
+        assertions = parse_assertions(data)
+        assert len(assertions) == 2
+        assert assertions[0].op == "eq"
+        assert assertions[0].left == "$.code"
+        assert assertions[0].right == 0
+
+    def test_invalid_format(self):
+        with pytest.raises(ValueError, match="断言格式错误"):
+            parse_assertions([{"eq": 1, "ne": 2}])
+
+    def test_invalid_args(self):
+        with pytest.raises(ValueError, match="两个参数"):
+            parse_assertions([{"eq": [1]}])
+
+
+class TestParseStep:
+    """测试 parse_step"""
+
+    def test_valid_step(self):
+        data = {
+            "request": {"method": "GET", "url": "http://test.com"},
+            "extract": {"token": "$.data.token"},
+            "validate": [{"eq": ["$.code", 0]}],
+        }
+        step = parse_step("test", data)
+        assert step.name == "test"
+        assert step.action_type == "request"
+        assert step.extract == {"token": "$.data.token"}
+        assert len(step.validate) == 1
+
+    def test_missing_action(self):
+        with pytest.raises(ValueError, match="缺少 action 字段"):
+            parse_step("test", {"depends_on": ["a"]})
+
+
+class TestParseTestcase:
+    """测试 parse_testcase"""
+
+    def test_valid_testcase(self):
+        data = {
+            "version": 1,
+            "vars": {"base_url": "http://test.com"},
+            "steps": {
+                "test": {
+                    "request": {"method": "GET", "url": "${base_url}/api"},
+                },
+            },
+        }
+        testcase = parse_testcase(data)
+        assert testcase.version == 1
+        assert len(testcase.steps) == 1
+        assert testcase.vars["base_url"] == "http://test.com"
+
+    def test_missing_version(self):
+        data = {"steps": {"test": {"request": {"method": "GET", "url": "http://test.com"}}}}
+        with pytest.raises(ValueError, match="version"):
+            parse_testcase(data)
+
+    def test_missing_steps(self):
+        data = {"version": 1}
+        with pytest.raises(ValueError, match="steps"):
+            parse_testcase(data)
+
+
+class TestLoadTestcase:
+    """测试 load_testcase"""
+
+    def test_load_yaml(self, tmp_path):
+        data = {
+            "version": 1,
+            "steps": {
+                "test": {
+                    "request": {"method": "GET", "url": "http://test.com"},
+                },
+            },
+        }
+        file = tmp_path / "test.yaml"
+        file.write_text(yaml.dump(data))
+        testcase = load_testcase(file)
+        assert isinstance(testcase, TestCase)
+        assert len(testcase.steps) == 1
