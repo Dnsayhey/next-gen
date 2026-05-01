@@ -57,13 +57,16 @@ steps:
 
 ```bash
 # 基本执行
-nextgen run demo.yaml
+uv run nextgen demo.yaml
 
 # 指定并发数
-nextgen run demo.yaml --parallel=5
+uv run nextgen demo.yaml --parallel=5
 
 # 显示详细日志
-nextgen run demo.yaml --verbose
+uv run nextgen demo.yaml --verbose
+
+# 或使用 python -m 方式
+uv run python -m nextgen.cli demo.yaml
 ```
 
 ## 支持的请求体类型
