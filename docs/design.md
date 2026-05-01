@@ -186,7 +186,26 @@ steps:
     config:
       retry: 3            # 最大重试次数
       retry_delay: 1      # 重试间隔（秒）
+      timeout: 30         # 步骤超时（秒），包含所有重试
 ```
+
+### 4.6 超时配置
+
+支持两个层次的超时：
+
+```yaml
+steps:
+  slow_api:
+    request:
+      method: GET
+      url: ${base_url}/slow
+      timeout: 10         # 请求级超时（秒），传递给 httpx
+    config:
+      timeout: 30         # 步骤级超时（秒），包含重试的总时间
+      retry: 3
+```
+
+**超时优先级：** 请求级 > 步骤级 > httpx 默认（30s）
 
 ---
 

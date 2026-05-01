@@ -28,6 +28,7 @@ class RequestNode:
     multipart: dict[str, str] | None = None
     body: str | None = None
     content_type: str | None = None
+    timeout: float | None = None  # 请求超时（秒）
 
     def body_type(self) -> str | None:
         """获取请求体类型"""

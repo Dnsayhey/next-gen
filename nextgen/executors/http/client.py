@@ -24,6 +24,7 @@ def parse_request_config(config: dict[str, Any]) -> RequestNode:
         multipart=config.get("multipart"),
         body=config.get("body"),
         content_type=config.get("content_type"),
+        timeout=config.get("timeout"),
     )
 
 
@@ -52,10 +53,13 @@ async def execute_request(
 
     logger.info(f"发送请求: {request.method} {url}")
 
+    # 设置超时
+    timeout = request.timeout if request.timeout else None
+
     # 根据请求体类型发送请求
     body_type = request.body_type()
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=timeout) as client:
         if body_type == "json":
             json_body = ctx.render_dict(request.json)
             response = await client.request(

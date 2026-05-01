@@ -104,38 +104,57 @@ class Scheduler:
             for d in step.node.depends_on
         )
 
+    async def _execute_step_logic(self, step: StepRuntime) -> None:
+        """执行步骤的核心逻辑"""
+        action_type = step.node.action_type
+
+        # 检查 executor 是否存在
+        if action_type not in EXECUTOR_REGISTRY:
+            raise ValueError(f"未注册的 action 类型: {action_type}")
+
+        executor = EXECUTOR_REGISTRY[action_type]
+
+        # 执行
+        result = await executor["execute"](
+            step.node.action_config,
+            self.context,
+        )
+        step.result = result
+
+        # 验证
+        errors = executor["validate"](result, step.node.validate)
+        if errors:
+            raise AssertionError("; ".join(errors))
+
+        # 提取变量
+        if step.node.extract:
+            executor["extract"](result, step.node.extract, self.context)
+
+        step.status = StepStatus.SUCCESS
+
     async def run_step(self, step: StepRuntime) -> None:
-        """执行单个步骤"""
+        """执行单个步骤（支持超时）"""
         async with self.semaphore:
             step.status = StepStatus.RUNNING
             step.start_time = time.time()
 
             try:
-                action_type = step.node.action_type
+                # 获取步骤级超时配置
+                step_timeout = step.node.config.get("timeout")
 
-                # 检查 executor 是否存在
-                if action_type not in EXECUTOR_REGISTRY:
-                    raise ValueError(f"未注册的 action 类型: {action_type}")
+                if step_timeout:
+                    # 使用 asyncio.wait_for 实现超时
+                    await asyncio.wait_for(
+                        self._execute_step_logic(step),
+                        timeout=step_timeout,
+                    )
+                else:
+                    await self._execute_step_logic(step)
 
-                executor = EXECUTOR_REGISTRY[action_type]
-
-                # 执行
-                result = await executor["execute"](
-                    step.node.action_config,
-                    self.context,
-                )
-                step.result = result
-
-                # 验证
-                errors = executor["validate"](result, step.node.validate)
-                if errors:
-                    raise AssertionError("; ".join(errors))
-
-                # 提取变量
-                if step.node.extract:
-                    executor["extract"](result, step.node.extract, self.context)
-
-                step.status = StepStatus.SUCCESS
+            except asyncio.TimeoutError:
+                step.error = f"步骤执行超时（{step.node.config.get('timeout')}秒）"
+                step.status = StepStatus.FAILED
+                logger.error(f"步骤 {step.node.name} 超时")
 
             except Exception as e:
                 step.error = str(e)
