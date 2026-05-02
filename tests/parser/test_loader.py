@@ -129,6 +129,65 @@ class TestParseStep:
         with pytest.raises(ValueError, match="缺少 action 字段"):
             parse_step("test", {"depends_on": ["a"]})
 
+    def test_step_with_when_list(self):
+        data = {
+            "request": {"method": "GET", "url": "http://test.com"},
+            "when": [{"eq": ["${env}", "staging"]}],
+        }
+        step = parse_step("test", data)
+        assert step.when == [{"eq": ["${env}", "staging"]}]
+
+    def test_step_with_when_and(self):
+        data = {
+            "request": {"method": "GET", "url": "http://test.com"},
+            "when": {
+                "and": [
+                    {"eq": ["${role}", "admin"]},
+                    {"gt": ["${level}", 5]},
+                ]
+            },
+        }
+        step = parse_step("test", data)
+        assert step.when == {
+            "and": [
+                {"eq": ["${role}", "admin"]},
+                {"gt": ["${level}", 5]},
+            ]
+        }
+
+    def test_step_with_when_or(self):
+        data = {
+            "request": {"method": "GET", "url": "http://test.com"},
+            "when": {
+                "or": [
+                    {"eq": ["${env}", "staging"]},
+                    {"eq": ["${env}", "dev"]},
+                ]
+            },
+        }
+        step = parse_step("test", data)
+        assert step.when == {
+            "or": [
+                {"eq": ["${env}", "staging"]},
+                {"eq": ["${env}", "dev"]},
+            ]
+        }
+
+    def test_step_without_when(self):
+        data = {
+            "request": {"method": "GET", "url": "http://test.com"},
+        }
+        step = parse_step("test", data)
+        assert step.when is None
+
+    def test_step_with_invalid_when_dict(self):
+        data = {
+            "request": {"method": "GET", "url": "http://test.com"},
+            "when": {"invalid": []},
+        }
+        with pytest.raises(ValueError, match="when 格式错误"):
+            parse_step("test", data)
+
 
 class TestParseTestcase:
     """测试 parse_testcase"""

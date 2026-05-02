@@ -220,6 +220,51 @@ steps:
 
 **超时优先级：** 请求级 > 步骤级 > httpx 默认（30s）
 
+### 4.7 条件执行（when）
+
+支持基于变量的条件执行，条件不满足时步骤自动跳过。
+
+```yaml
+steps:
+  # 简单条件（列表默认 AND）
+  login:
+    request: ...
+    extract:
+      is_admin: $.data.is_admin
+
+  admin_only:
+    when:
+      - eq: [${is_admin}, true]
+    request: ...
+
+  # 显式 AND 逻辑
+  complex_and:
+    when:
+      and:
+        - eq: [${role}, admin]
+        - gt: [${level}, 5]
+    request: ...
+
+  # 显式 OR 逻辑
+  fallback:
+    when:
+      or:
+        - eq: [${env}, staging]
+        - eq: [${env}, development]
+    request: ...
+```
+
+**条件格式：**
+- `list` — 断言列表，默认 AND 逻辑
+- `dict` — 必须包含 `and` 或 `or` 键，值为断言列表
+- 支持所有断言操作符：eq / ne / gt / lt / gte / lte / contains
+- 支持 `${var}` 变量替换
+
+**执行行为：**
+- 条件为 false → 步骤标记为 SKIPPED
+- SKIPPED 的步骤不会阻塞后续步骤
+- 依赖被跳过步骤的步骤也会被跳过
+
 ---
 
 ## 5. AST 设计
@@ -235,6 +280,7 @@ class StepNode:
     depends_on: list[str]
     extract: dict[str, str]
     validate: list[AssertionNode]
+    when: list | dict | None      # 条件执行（list=AND, dict=and/or）
     config: dict[str, Any]
 ```
 

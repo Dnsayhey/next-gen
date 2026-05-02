@@ -102,6 +102,30 @@ def parse_assertions(data: list[dict[str, Any]]) -> list[AssertionNode]:
     return assertions
 
 
+def parse_when(data: list | dict | None) -> list | dict | None:
+    """解析 when 条件
+
+    格式:
+    - list: [{eq: [$.code, 0]}, ...]  → 默认 AND
+    - dict: {and: [...]} 或 {or: [...]}  → 显式逻辑
+    """
+    if data is None:
+        return None
+
+    if isinstance(data, list):
+        # 列表格式，默认 AND，直接返回
+        return data
+
+    if isinstance(data, dict):
+        if "and" in data:
+            return {"and": data["and"]}
+        if "or" in data:
+            return {"or": data["or"]}
+        raise ValueError(f"when 格式错误: dict 必须包含 and 或 or 键，得到 {list(data.keys())}")
+
+    raise ValueError(f"when 格式错误: 期望 list 或 dict，得到 {type(data).__name__}")
+
+
 def parse_step(name: str, data: dict[str, Any]) -> StepNode:
     """解析单个 step"""
     # 查找 action 类型
@@ -133,6 +157,7 @@ def parse_step(name: str, data: dict[str, Any]) -> StepNode:
         depends_on=data.get("depends_on", []),
         extract=data.get("extract", {}),
         validate=parse_assertions(data.get("validate", [])),
+        when=parse_when(data.get("when")),
         config=data.get("config", {}),
     )
 

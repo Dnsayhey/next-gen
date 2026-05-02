@@ -6,6 +6,7 @@ from typing import Any
 
 from loguru import logger
 
+from nextgen.core.condition import evaluate_condition
 from nextgen.core.context import Context
 from nextgen.core.model import (
     StepNode,
@@ -208,6 +209,12 @@ class Scheduler:
                 if self.should_skip(s):
                     s.status = StepStatus.SKIPPED
                     logger.info(f"跳过步骤: {s.node.name}")
+
+            # 检查条件执行
+            for s in pending:
+                if s.status == StepStatus.PENDING and not evaluate_condition(s.node.when, self.context):
+                    s.status = StepStatus.SKIPPED
+                    logger.info(f"条件不满足，跳过步骤: {s.node.name}")
 
             # 找出可执行的步骤
             runnable = [s for s in pending if self.is_runnable(s)]
