@@ -167,6 +167,7 @@ def parse_step(name: str, data: dict[str, Any]) -> StepNode:
         extract=data.get("extract", {}),
         validate=parse_assertions(data.get("validate", [])),
         when=parse_when(data.get("when")),
+        set_vars=data.get("set_vars", {}),
         config=data.get("config", {}),
     )
 

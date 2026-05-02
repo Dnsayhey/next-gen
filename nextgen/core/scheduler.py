@@ -120,6 +120,12 @@ class Scheduler:
 
     async def _execute_step_logic(self, step: StepRuntime) -> None:
         """执行步骤的核心逻辑"""
+        # 设置变量（在 action 之前）
+        if step.node.set_vars:
+            for key, value in step.node.set_vars.items():
+                rendered = self.context.render(value)
+                self.context.set(key, rendered)
+
         action_type = step.node.action_type
 
         # 检查 executor 是否存在

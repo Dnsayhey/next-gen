@@ -61,6 +61,7 @@ class StepNode:
     extract: dict[str, str] = field(default_factory=dict)
     validate: list[AssertionNode] = field(default_factory=list)
     when: list | dict | None = None  # 条件执行（list=AND, dict=and/or）
+    set_vars: dict[str, str] = field(default_factory=dict)  # 设置变量
     config: dict[str, Any] = field(default_factory=dict)
 
 

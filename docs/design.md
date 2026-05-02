@@ -265,6 +265,29 @@ steps:
 - SKIPPED 的步骤不会阻塞后续步骤
 - 依赖被跳过步骤的步骤也会被跳过
 
+### 4.8 设置变量（set_vars）
+
+在步骤执行前设置变量，支持变量拼接。
+
+```yaml
+steps:
+  setup:
+    set_vars:
+      user1: ${user}_1          # 变量拼接
+      endpoint: ${base_url}/api # 构建 URL
+      prefix: test              # 常量
+    request:
+      method: GET
+      url: ${endpoint}/${user1}
+```
+
+**执行顺序：**
+1. `set_vars` — 先设置变量
+2. `when` — 评估条件
+3. `request` / `db` — 执行 action
+4. `validate` — 验证结果
+5. `extract` — 提取变量
+
 ---
 
 ## 5. AST 设计
@@ -281,6 +304,7 @@ class StepNode:
     extract: dict[str, str]
     validate: list[AssertionNode]
     when: list | dict | None      # 条件执行（list=AND, dict=and/or）
+    set_vars: dict[str, str]      # 设置变量
     config: dict[str, Any]
 ```
 

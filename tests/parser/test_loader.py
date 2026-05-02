@@ -188,6 +188,24 @@ class TestParseStep:
         with pytest.raises(ValueError, match="when 格式错误"):
             parse_step("test", data)
 
+    def test_step_with_set_vars(self):
+        data = {
+            "request": {"method": "GET", "url": "http://test.com"},
+            "set_vars": {
+                "user1": "${user}_1",
+                "prefix": "test",
+            },
+        }
+        step = parse_step("test", data)
+        assert step.set_vars == {"user1": "${user}_1", "prefix": "test"}
+
+    def test_step_without_set_vars(self):
+        data = {
+            "request": {"method": "GET", "url": "http://test.com"},
+        }
+        step = parse_step("test", data)
+        assert step.set_vars == {}
+
 
 class TestParseTestcase:
     """测试 parse_testcase"""

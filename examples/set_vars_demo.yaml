@@ -1,0 +1,32 @@
+version: 1
+
+vars:
+  base_url: https://httpbin.org
+  user: admin
+
+steps:
+  # 设置变量
+  setup:
+    set_vars:
+      user1: ${user}_1
+      endpoint: ${base_url}/get
+    request:
+      method: GET
+      url: ${endpoint}
+      params:
+        user: ${user1}
+    validate:
+      - eq: ["$.args.user", "admin_1"]
+
+  # 使用设置的变量
+  use_vars:
+    depends_on: [setup]
+    set_vars:
+      post_url: ${base_url}/post
+    request:
+      method: POST
+      url: ${post_url}
+      json:
+        user: ${user1}
+    validate:
+      - eq: ["$.json.user", "admin_1"]
