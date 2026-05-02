@@ -1,0 +1,52 @@
+version: 1
+
+vars:
+  db_url: sqlite:///tmp/test.db
+
+steps:
+  # 创建表
+  create_table:
+    db:
+      url: ${db_url}
+      query: |
+        CREATE TABLE IF NOT EXISTS users (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          email TEXT
+        )
+    validate:
+      - eq: ["$.row_count", 0]
+
+  # 插入数据
+  insert_user:
+    depends_on: [create_table]
+    db:
+      url: ${db_url}
+      query: "INSERT INTO users (name, email) VALUES ($1, $2)"
+      params: ["Alice", "alice@example.com"]
+    validate:
+      - eq: ["$.row_count", 1]
+
+  # 查询数据
+  query_user:
+    depends_on: [insert_user]
+    db:
+      url: ${db_url}
+      query: "SELECT * FROM users WHERE name = $1"
+      params: ["Alice"]
+    extract:
+      user_id: "$.rows[0].id"
+      user_email: "$.rows[0].email"
+    validate:
+      - eq: ["$.row_count", 1]
+      - eq: ["$.rows[0].name", "Alice"]
+
+  # 使用提取的变量
+  query_by_id:
+    depends_on: [query_user]
+    db:
+      url: ${db_url}
+      query: "SELECT * FROM users WHERE id = $1"
+      params: ["${user_id}"]
+    validate:
+      - eq: ["$.rows[0].email", "alice@example.com"]

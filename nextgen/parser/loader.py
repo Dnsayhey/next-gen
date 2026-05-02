@@ -17,7 +17,7 @@ from nextgen.core.model import (
 SUPPORTED_EXTENSIONS = {".yaml", ".yml", ".json"}
 
 # 已注册的 action 类型
-SUPPORTED_ACTIONS = {"request"}
+SUPPORTED_ACTIONS = {"request", "db"}
 
 
 def register_action(action_type: str) -> None:
@@ -69,9 +69,18 @@ def parse_request(config: dict[str, Any]) -> None:
         raise ValueError("json/form/multipart/body 不能同时出现，只能选择一种")
 
 
+def parse_db(config: dict[str, Any]) -> None:
+    """验证 db 配置"""
+    if "url" not in config:
+        raise ValueError("db 必须包含 url 字段")
+    if "query" not in config:
+        raise ValueError("db 必须包含 query 字段")
+
+
 # Action 配置验证器注册表
 ACTION_VALIDATORS = {
     "request": parse_request,
+    "db": parse_db,
 }
 
 

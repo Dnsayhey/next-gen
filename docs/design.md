@@ -393,6 +393,41 @@ class Executor(Protocol):
     def validate(self, result: dict, assertions: list) -> list[str]: ...
 ```
 
+### 6.6 DB 执行器
+
+支持 PostgreSQL、MySQL、SQLite 三种数据库。
+
+**DSL 示例：**
+```yaml
+vars:
+  pg_url: postgres://user:pass@localhost:5432/mydb
+
+steps:
+  query_user:
+    db:
+      url: ${pg_url}
+      query: SELECT * FROM users WHERE id = $1
+      params: [${user_id}]
+    extract:
+      username: $.rows[0].name
+    validate:
+      - eq: [$.row_count, 1]
+```
+
+**结果格式：**
+```python
+{
+    "rows": [{"id": 1, "name": "Alice"}, ...],
+    "row_count": 1,
+    "columns": ["id", "name"],
+}
+```
+
+**支持的 URL 格式：**
+- PostgreSQL: `postgres://user:pass@host:5432/dbname`
+- MySQL: `mysql://user:pass@host:3306/dbname`
+- SQLite: `sqlite:///path/to/db.sqlite`
+
 ---
 
 ## 7. 状态机设计
@@ -430,17 +465,27 @@ nextgen/
 │   ├── model.py        # AST 模型（StepNode, RequestNode 等）
 │   ├── context.py      # 变量系统
 │   ├── planner.py      # DAG 规划
+│   ├── condition.py    # 条件评估器
 │   ├── protocol.py     # Action/Executor 协议定义
 │   └── scheduler.py    # 调度器（executor 注册表）
 ├── parser/
 │   └── loader.py       # YAML/JSON 解析（action 注册表）
 ├── executors/
-│   └── http/           # HTTP 执行器
+│   ├── http/           # HTTP 执行器
+│   │   ├── __init__.py
+│   │   ├── client.py   # 请求发送
+│   │   ├── extract.py  # 变量提取
+│   │   ├── validate.py # 断言验证
+│   │   └── utils.py    # 工具函数
+│   └── db/             # DB 执行器
 │       ├── __init__.py
-│       ├── client.py   # 请求发送
+│       ├── client.py   # 查询执行（路由）
 │       ├── extract.py  # 变量提取
-│       ├── validate.py # 断言验证
-│       └── utils.py    # 工具函数
+│       ├── validate.py # 结果验证
+│       └── drivers/    # 数据库驱动
+│           ├── postgres.py
+│           ├── mysql.py
+│           └── sqlite.py
 └── reporter/
     └── json_reporter.py
 ```

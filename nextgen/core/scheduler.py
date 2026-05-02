@@ -16,6 +16,7 @@ from nextgen.core.model import (
     TestResult,
 )
 from nextgen.executors.http import execute_request, extract_variables, validate_response
+from nextgen.executors.db import execute_query, extract_variables as db_extract, validate_result
 
 
 # Executor 注册表
@@ -24,6 +25,11 @@ EXECUTOR_REGISTRY = {
         "execute": execute_request,
         "extract": extract_variables,
         "validate": validate_response,
+    },
+    "db": {
+        "execute": execute_query,
+        "extract": db_extract,
+        "validate": validate_result,
     },
 }
 
@@ -68,6 +74,13 @@ class StepRuntime:
             method = config.get("method", "").upper()
             url = config.get("url", "")
             return f"{method} {url}"
+        if self.node.action_type == "db":
+            config = self.node.action_config
+            url = config.get("url", "")
+            query = config.get("query", "")
+            # 显示数据库类型和查询前 50 字符
+            db_type = url.split("://")[0] if "://" in url else "db"
+            return f"{db_type}: {query[:50]}"
         return f"{self.node.action_type}: {self.node.name}"
 
 
