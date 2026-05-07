@@ -28,9 +28,6 @@
           "password": "123456"
         }
       },
-      "extract": {
-        "param_name": "$.args.name"
-      },
       "validate": [
         { "eq": ["$.json.username", "admin"] }
       ]

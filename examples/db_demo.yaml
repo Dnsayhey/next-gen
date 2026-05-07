@@ -17,9 +17,17 @@ steps:
     validate:
       - eq: ["$.row_count", 0]
 
+  # 清理示例数据，保证重复运行仍然稳定
+  cleanup_user:
+    depends_on: [create_table]
+    db:
+      url: ${db_url}
+      query: "DELETE FROM users WHERE name = $1"
+      params: ["Alice"]
+
   # 插入数据
   insert_user:
-    depends_on: [create_table]
+    depends_on: [cleanup_user]
     db:
       url: ${db_url}
       query: "INSERT INTO users (name, email) VALUES ($1, $2)"
