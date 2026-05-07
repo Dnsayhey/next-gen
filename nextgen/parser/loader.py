@@ -180,6 +180,10 @@ def parse_testcase(data: dict[str, Any]) -> TestCase:
     if "steps" not in data or not data["steps"]:
         raise ValueError("缺少 steps 字段或 steps 为空")
 
+    mode = data.get("mode", "sequential")
+    if mode not in ("sequential", "parallel"):
+        raise ValueError(f"不支持的执行模式: {mode}，支持: sequential, parallel")
+
     steps = {}
     for name, raw in data["steps"].items():
         steps[name] = parse_step(name, raw)
@@ -188,6 +192,7 @@ def parse_testcase(data: dict[str, Any]) -> TestCase:
         version=data["version"],
         vars=data.get("vars", {}),
         steps=steps,
+        mode=mode,
     )
 
 

@@ -235,6 +235,41 @@ class TestParseTestcase:
         with pytest.raises(ValueError, match="steps"):
             parse_testcase(data)
 
+    def test_default_mode(self):
+        data = {
+            "version": 1,
+            "steps": {"test": {"request": {"method": "GET", "url": "http://test.com"}}},
+        }
+        testcase = parse_testcase(data)
+        assert testcase.mode == "sequential"
+
+    def test_sequential_mode(self):
+        data = {
+            "version": 1,
+            "mode": "sequential",
+            "steps": {"test": {"request": {"method": "GET", "url": "http://test.com"}}},
+        }
+        testcase = parse_testcase(data)
+        assert testcase.mode == "sequential"
+
+    def test_parallel_mode(self):
+        data = {
+            "version": 1,
+            "mode": "parallel",
+            "steps": {"test": {"request": {"method": "GET", "url": "http://test.com"}}},
+        }
+        testcase = parse_testcase(data)
+        assert testcase.mode == "parallel"
+
+    def test_invalid_mode(self):
+        data = {
+            "version": 1,
+            "mode": "invalid",
+            "steps": {"test": {"request": {"method": "GET", "url": "http://test.com"}}},
+        }
+        with pytest.raises(ValueError, match="不支持的执行模式"):
+            parse_testcase(data)
+
 
 class TestLoadTestcase:
     """测试 load_testcase"""

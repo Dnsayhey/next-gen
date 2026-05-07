@@ -19,16 +19,43 @@ def make_step(name: str, depends_on: list[str] | None = None) -> StepNode:
 class TestBuildGraph:
     """测试 build_graph"""
 
-    def test_no_dependencies(self):
+    def test_parallel_mode_no_dependencies(self):
         testcase = TestCase(
             version=1,
             steps={
                 "a": make_step("a"),
                 "b": make_step("b"),
             },
+            mode="parallel",
         )
         graph = build_graph(testcase)
         assert graph == {"a": [], "b": []}
+
+    def test_sequential_mode_auto_dependencies(self):
+        testcase = TestCase(
+            version=1,
+            steps={
+                "a": make_step("a"),
+                "b": make_step("b"),
+                "c": make_step("c"),
+            },
+            mode="sequential",
+        )
+        graph = build_graph(testcase)
+        assert graph == {"a": [], "b": ["a"], "c": ["b"]}
+
+    def test_sequential_mode_with_explicit_dependencies(self):
+        testcase = TestCase(
+            version=1,
+            steps={
+                "a": make_step("a"),
+                "b": make_step("b"),
+                "c": make_step("c", ["a"]),
+            },
+            mode="sequential",
+        )
+        graph = build_graph(testcase)
+        assert graph == {"a": [], "b": ["a"], "c": ["a"]}
 
     def test_with_dependencies(self):
         testcase = TestCase(

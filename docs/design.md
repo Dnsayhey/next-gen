@@ -58,7 +58,47 @@ Reporter（结果输出）
 
 ## 4. DSL 设计
 
-### 4.1 完整示例
+### 4.1 执行模式（mode）
+
+支持两种执行模式：
+
+```yaml
+version: 1
+mode: sequential  # 默认值，可省略
+
+steps:
+  login:
+    request: ...
+  get_user:
+    request: ...      # 自动依赖 login
+  get_order:
+    request: ...      # 自动依赖 get_user
+```
+
+| 模式 | 行为 |
+|------|------|
+| `sequential`（默认） | 无 `depends_on` 则按定义顺序串行 |
+| `parallel` | 无 `depends_on` 则可并行执行 |
+
+**显式依赖优先：**
+```yaml
+mode: sequential
+
+steps:
+  login:
+    request: ...
+  get_user:
+    request: ...           # 自动依赖 login
+  independent_task:
+    depends_on: [login]    # 显式依赖，覆盖自动顺序
+    request: ...
+```
+
+**适用场景：**
+- API 测试：`parallel`（独立步骤可并行）
+- UI 自动化：`sequential`（步骤必须顺序执行）
+
+### 4.2 完整示例
 
 ```yaml
 version: 1
@@ -332,6 +372,17 @@ class AssertionNode:
     op: str      # eq / ne / gt / lt / gte / lte / contains
     left: str    # 表达式（由 executor 解释）
     right: Any   # 期望值
+```
+
+### 5.4 TestCase
+
+```python
+@dataclass
+class TestCase:
+    version: int
+    steps: dict[str, StepNode]
+    vars: dict[str, Any]
+    mode: str = "sequential"  # "sequential" | "parallel"
 ```
 
 ---

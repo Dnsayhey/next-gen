@@ -71,6 +71,7 @@ class TestCase:
     version: int
     steps: dict[str, StepNode]
     vars: dict[str, Any] = field(default_factory=dict)
+    mode: str = "sequential"  # "sequential" | "parallel"
 
 
 @dataclass
