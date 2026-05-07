@@ -8,6 +8,7 @@ import pytest
 
 from nextgen.core.model import HookAction, StepNode, StepStatus, TestCase
 from nextgen.core.scheduler import Scheduler, register_executor
+from nextgen.core.hooks import register_hook
 
 
 def make_step(
@@ -43,9 +44,7 @@ def scheduler_executor_registry():
             await asyncio.sleep(0.06)
 
         if name == "flaky":
-            count = ctx.get("flaky_count") or 0
-            ctx.set("flaky_count", count + 1)
-            if count == 0:
+            if events.count("execute:flaky") == 1:
                 raise RuntimeError("boom")
 
         return {
@@ -185,7 +184,6 @@ class TestScheduler:
                     },
                 ),
             },
-            vars={"flaky_count": 0},
         )
 
         scheduler = Scheduler(testcase)
@@ -262,7 +260,11 @@ class TestScheduler:
         assert scheduler.loaded_hook_files == [str(hook_file)]
 
     @pytest.mark.asyncio
-    async def test_before_each_and_after_each_run_once_across_retry(self, tmp_path):
+    async def test_before_each_and_after_each_run_once_across_retry(
+        self,
+        tmp_path,
+        scheduler_executor_registry,
+    ):
         trace_file = tmp_path / "retry_trace.log"
         hook_file = tmp_path / "hooks.py"
         hook_file.write_text(
@@ -320,7 +322,11 @@ class TestScheduler:
         ]
 
     @pytest.mark.asyncio
-    async def test_after_hook_can_see_extracted_variables(self, tmp_path):
+    async def test_after_hook_can_see_extracted_variables(
+        self,
+        tmp_path,
+        scheduler_executor_registry,
+    ):
         trace_file = tmp_path / "after_trace.log"
         hook_file = tmp_path / "hooks.py"
         hook_file.write_text(
@@ -396,4 +402,177 @@ class TestScheduler:
             os.chdir(previous_cwd)
 
         assert scheduler_executor_registry == []
-        assert result.steps[0].status == StepStatus.PENDING
+        assert result.steps[0].status == StepStatus.FAILED
+        assert result.summary["failed"] == 1
+        assert "before_all" in (result.steps[0].error or "")
+
+    @pytest.mark.asyncio
+    async def test_after_all_failure_marks_result_failed(self, scheduler_executor_registry):
+        @register_hook("boomAfterAllForResult")
+        async def boom_after_all(ctx, params):
+            raise RuntimeError("after all exploded")
+
+        testcase = TestCase(
+            version=1,
+            mode="parallel",
+            steps={"one": make_step("one")},
+        )
+        testcase.hooks.after_all = [HookAction("boomAfterAllForResult", {})]
+
+        scheduler = Scheduler(testcase)
+        result = await scheduler.run()
+
+        assert scheduler_executor_registry == ["execute:one"]
+        assert result.steps[0].status == StepStatus.FAILED
+        assert result.summary["failed"] == 1
+        assert "after_all" in (result.steps[0].error or "")
+
+    @pytest.mark.asyncio
+    async def test_before_each_failure_marks_current_step_failed(
+        self,
+        scheduler_executor_registry,
+    ):
+        @register_hook("boomBeforeEachForResult")
+        async def boom_before_each(ctx, params):
+            raise RuntimeError("before each exploded")
+
+        testcase = TestCase(
+            version=1,
+            mode="parallel",
+            steps={"one": make_step("one")},
+        )
+        testcase.hooks.before_each = [HookAction("boomBeforeEachForResult", {})]
+
+        scheduler = Scheduler(testcase)
+        result = await scheduler.run()
+
+        assert scheduler_executor_registry == []
+        assert result.steps[0].status == StepStatus.FAILED
+        assert result.summary["failed"] == 1
+        assert "before_each" in (result.steps[0].error or "")
+
+    @pytest.mark.asyncio
+    async def test_after_each_runs_when_before_each_fails(
+        self,
+        tmp_path,
+        scheduler_executor_registry,
+    ):
+        trace_file = tmp_path / "before_each_failure.log"
+
+        @register_hook("traceBeforeEachThenFail")
+        async def trace_before_each_then_fail(ctx, params):
+            with open(params["file"], "a", encoding="utf-8") as f:
+                f.write("before_each\n")
+            raise RuntimeError("before each exploded")
+
+        @register_hook("traceAfterEachAfterBeforeFailure")
+        async def trace_after_each_after_before_failure(ctx, params):
+            with open(params["file"], "a", encoding="utf-8") as f:
+                f.write("after_each\n")
+
+        testcase = TestCase(
+            version=1,
+            mode="parallel",
+            steps={"one": make_step("one")},
+        )
+        testcase.hooks.before_each = [
+            HookAction("traceBeforeEachThenFail", {"file": str(trace_file)})
+        ]
+        testcase.hooks.after_each = [
+            HookAction("traceAfterEachAfterBeforeFailure", {"file": str(trace_file)})
+        ]
+
+        scheduler = Scheduler(testcase)
+        result = await scheduler.run()
+
+        assert scheduler_executor_registry == []
+        assert result.steps[0].status == StepStatus.FAILED
+        assert trace_file.read_text(encoding="utf-8").splitlines() == [
+            "before_each",
+            "after_each",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_after_hook_failure_does_not_publish_extracted_variables(
+        self,
+        scheduler_executor_registry,
+    ):
+        @register_hook("boomAfterForPublish")
+        async def boom_after(ctx, params):
+            raise RuntimeError("after exploded")
+
+        testcase = TestCase(
+            version=1,
+            mode="parallel",
+            steps={"one": make_step("one")},
+        )
+        testcase.steps["one"].extract = {"token": "$.name"}
+        testcase.steps["one"].hooks.after = [HookAction("boomAfterForPublish", {})]
+
+        scheduler = Scheduler(testcase)
+        result = await scheduler.run()
+
+        assert scheduler_executor_registry == ["execute:one"]
+        assert result.steps[0].status == StepStatus.FAILED
+        assert scheduler.context.get("token") is None
+
+    @pytest.mark.asyncio
+    async def test_after_each_failure_does_not_publish_extracted_variables(
+        self,
+        scheduler_executor_registry,
+    ):
+        @register_hook("boomAfterEachForPublish")
+        async def boom_after_each(ctx, params):
+            raise RuntimeError("after each exploded")
+
+        testcase = TestCase(
+            version=1,
+            mode="parallel",
+            steps={"one": make_step("one")},
+        )
+        testcase.steps["one"].extract = {"token": "$.name"}
+        testcase.hooks.after_each = [HookAction("boomAfterEachForPublish", {})]
+
+        scheduler = Scheduler(testcase)
+        result = await scheduler.run()
+
+        assert scheduler_executor_registry == ["execute:one"]
+        assert result.steps[0].status == StepStatus.FAILED
+        assert scheduler.context.get("token") is None
+
+    @pytest.mark.asyncio
+    async def test_retry_attempt_does_not_reuse_step_local_context(
+        self,
+        tmp_path,
+        scheduler_executor_registry,
+    ):
+        @register_hook("dirtyAttemptContext")
+        async def dirty_attempt_context(ctx, params):
+            seen = ctx.get("attempt_local")
+            with open(params["file"], "a", encoding="utf-8") as f:
+                f.write(str(seen) + "\n")
+            ctx.set("attempt_local", "dirty")
+
+        trace_file = tmp_path / "attempt_context_trace.log"
+
+        testcase = TestCase(
+            version=1,
+            mode="parallel",
+            steps={
+                "flaky": make_step(
+                    "flaky",
+                    config={"retry": 1, "retry_delay": 0.01, "timeout": 0.2},
+                ),
+            },
+        )
+        testcase.steps["flaky"].hooks.before = [
+            HookAction("dirtyAttemptContext", {"file": str(trace_file)})
+        ]
+
+        scheduler = Scheduler(testcase)
+        result = await scheduler.run()
+        lines = trace_file.read_text(encoding="utf-8").splitlines()
+
+        assert result.steps[0].status == StepStatus.SUCCESS
+        assert scheduler_executor_registry == ["execute:flaky", "execute:flaky"]
+        assert lines == ["None", "None"]
