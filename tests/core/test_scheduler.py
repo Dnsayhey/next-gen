@@ -1,11 +1,12 @@
 """scheduler.py 单元测试"""
 
 import asyncio
+import os
 import time
 
 import pytest
 
-from nextgen.core.model import StepNode, StepStatus, TestCase
+from nextgen.core.model import HookAction, StepNode, StepStatus, TestCase
 from nextgen.core.scheduler import Scheduler, register_executor
 
 
@@ -54,7 +55,16 @@ def scheduler_executor_registry():
         }
 
     def extract(result, config, ctx):
-        return {}
+        extracted = {}
+        body = result.get("body", {})
+        for var_name, path in config.items():
+            if path == "$.name":
+                value = body.get("name")
+            else:
+                value = None
+            ctx.set(var_name, value)
+            extracted[var_name] = value
+        return extracted
 
     def validate(result, assertions):
         return []
@@ -111,7 +121,7 @@ class TestScheduler:
 
         assert result.steps[0].status == StepStatus.SUCCESS
         assert scheduler_executor_registry == ["execute:allowed"]
-        assert scheduler.context.get("env") == "staging"
+        assert scheduler.context.get("env") is None
 
     @pytest.mark.asyncio
     async def test_when_can_skip_step_after_set_vars(self, scheduler_executor_registry):
@@ -184,3 +194,206 @@ class TestScheduler:
         assert result.steps[0].status == StepStatus.SUCCESS
         assert scheduler_executor_registry == ["execute:flaky", "execute:flaky"]
         assert scheduler.steps["flaky"].retry_count == 1
+
+    @pytest.mark.asyncio
+    async def test_testcase_and_step_hooks_run_in_expected_order(self, tmp_path):
+        trace_file = tmp_path / "trace.log"
+        hook_file = tmp_path / "hooks.py"
+        hook_file.write_text(
+            "\n".join(
+                [
+                    "from nextgen import register_hook",
+                    "",
+                    "@register_hook('trace')",
+                    "async def trace(ctx, params):",
+                    "    with open(params['file'], 'a', encoding='utf-8') as f:",
+                    "        f.write(params['value'] + '\\n')",
+                ]
+            )
+        )
+
+        testcase = TestCase(
+            version=1,
+            mode="parallel",
+            steps={
+                "one": make_step(
+                    "one",
+                    set_vars={"from_step": "value"},
+                ),
+            },
+            source_path=str(tmp_path / "case.yaml"),
+        )
+        testcase.hooks.before_all = [
+            HookAction("trace", {"file": str(trace_file), "value": "before_all"})
+        ]
+        testcase.hooks.before_each = [
+            HookAction("trace", {"file": str(trace_file), "value": "before_each"}),
+        ]
+        testcase.hooks.after_each = [
+            HookAction("trace", {"file": str(trace_file), "value": "after_each"})
+        ]
+        testcase.hooks.after_all = [
+            HookAction("trace", {"file": str(trace_file), "value": "after_all"})
+        ]
+        testcase.steps["one"].hooks.before = [
+            HookAction("trace", {"file": str(trace_file), "value": "before"})
+        ]
+        testcase.steps["one"].hooks.after = [
+            HookAction("trace", {"file": str(trace_file), "value": "after"})
+        ]
+
+        previous_cwd = os.getcwd()
+        os.chdir(tmp_path)
+        try:
+            scheduler = Scheduler(testcase)
+            result = await scheduler.run()
+        finally:
+            os.chdir(previous_cwd)
+
+        assert result.steps[0].status == StepStatus.SUCCESS
+        assert trace_file.read_text(encoding="utf-8").splitlines() == [
+            "before_all",
+            "before_each",
+            "before",
+            "after",
+            "after_each",
+            "after_all",
+        ]
+        assert scheduler.loaded_hook_files == [str(hook_file)]
+
+    @pytest.mark.asyncio
+    async def test_before_each_and_after_each_run_once_across_retry(self, tmp_path):
+        trace_file = tmp_path / "retry_trace.log"
+        hook_file = tmp_path / "hooks.py"
+        hook_file.write_text(
+            "\n".join(
+                [
+                    "from nextgen import register_hook",
+                    "",
+                    "@register_hook('trace')",
+                    "async def trace(ctx, params):",
+                    "    with open(params['file'], 'a', encoding='utf-8') as f:",
+                    "        f.write(params['value'] + '\\n')",
+                ]
+            )
+        )
+
+        testcase = TestCase(
+            version=1,
+            mode="parallel",
+            steps={
+                "flaky": make_step(
+                    "flaky",
+                    config={"retry": 1, "retry_delay": 0.01, "timeout": 0.2},
+                ),
+            },
+            source_path=str(tmp_path / "case.yaml"),
+        )
+        testcase.hooks.before_each = [
+            HookAction("trace", {"file": str(trace_file), "value": "before_each"})
+        ]
+        testcase.hooks.after_each = [
+            HookAction("trace", {"file": str(trace_file), "value": "after_each"})
+        ]
+        testcase.steps["flaky"].hooks.before = [
+            HookAction("trace", {"file": str(trace_file), "value": "before"})
+        ]
+        testcase.steps["flaky"].hooks.after = [
+            HookAction("trace", {"file": str(trace_file), "value": "after"})
+        ]
+
+        previous_cwd = os.getcwd()
+        os.chdir(tmp_path)
+        try:
+            scheduler = Scheduler(testcase)
+            result = await scheduler.run()
+        finally:
+            os.chdir(previous_cwd)
+
+        assert result.steps[0].status == StepStatus.SUCCESS
+        assert trace_file.read_text(encoding="utf-8").splitlines() == [
+            "before_each",
+            "before",
+            "before",
+            "after",
+            "after_each",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_after_hook_can_see_extracted_variables(self, tmp_path):
+        trace_file = tmp_path / "after_trace.log"
+        hook_file = tmp_path / "hooks.py"
+        hook_file.write_text(
+            "\n".join(
+                [
+                    "from nextgen import register_hook",
+                    "",
+                    "@register_hook('traceVar')",
+                    "async def trace_var(ctx, params):",
+                    "    value = ctx.get(params['source'])",
+                    "    with open(params['file'], 'a', encoding='utf-8') as f:",
+                    "        f.write(str(value) + '\\n')",
+                ]
+            )
+        )
+
+        testcase = TestCase(
+            version=1,
+            mode="parallel",
+            steps={
+                "one": make_step("one"),
+            },
+            source_path=str(tmp_path / "case.yaml"),
+        )
+        testcase.steps["one"].extract = {"token": "$.name"}
+        testcase.steps["one"].hooks.after = [
+            HookAction("traceVar", {"file": str(trace_file), "source": "token"})
+        ]
+
+        previous_cwd = os.getcwd()
+        os.chdir(tmp_path)
+        try:
+            scheduler = Scheduler(testcase)
+            result = await scheduler.run()
+        finally:
+            os.chdir(previous_cwd)
+
+        assert result.steps[0].status == StepStatus.SUCCESS
+        assert scheduler.context.get("token") == "one"
+        assert trace_file.read_text(encoding="utf-8").splitlines() == ["one"]
+
+    @pytest.mark.asyncio
+    async def test_before_all_failure_aborts_execution(self, tmp_path, scheduler_executor_registry):
+        hook_file = tmp_path / "hooks.py"
+        hook_file.write_text(
+            "\n".join(
+                [
+                    "from nextgen import register_hook",
+                    "",
+                    "@register_hook('boomHook')",
+                    "async def boom_hook(ctx, params):",
+                    "    raise RuntimeError('boom')",
+                ]
+            )
+        )
+
+        testcase = TestCase(
+            version=1,
+            mode="parallel",
+            steps={"one": make_step("one")},
+            source_path=str(tmp_path / "case.yaml"),
+        )
+        testcase.hooks.before_all = [
+            __import__("nextgen.core.model", fromlist=["HookAction"]).HookAction("boomHook", {})
+        ]
+
+        previous_cwd = os.getcwd()
+        os.chdir(tmp_path)
+        try:
+            scheduler = Scheduler(testcase)
+            result = await scheduler.run()
+        finally:
+            os.chdir(previous_cwd)
+
+        assert scheduler_executor_registry == []
+        assert result.steps[0].status == StepStatus.PENDING

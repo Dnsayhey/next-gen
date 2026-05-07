@@ -1,5 +1,6 @@
 """变量上下文 - 管理测试执行过程中的变量"""
 
+from copy import deepcopy
 from typing import Any
 
 from loguru import logger
@@ -22,6 +23,22 @@ class Context:
     def get(self, key: str) -> Any | None:
         """获取变量"""
         return self.vars.get(key)
+
+    def snapshot(self) -> dict[str, Any]:
+        """获取当前上下文快照"""
+        return deepcopy(self.vars)
+
+    def derive(self, initial: dict[str, Any] | None = None) -> "Context":
+        """基于当前上下文创建子上下文"""
+        data = self.snapshot()
+        if initial:
+            data.update(initial)
+        return Context(data)
+
+    def merge(self, updates: dict[str, Any]) -> None:
+        """批量合并变量"""
+        for key, value in updates.items():
+            self.set(key, value)
 
     def render(self, value: Any) -> Any:
         """渲染变量替换

@@ -5,7 +5,7 @@ vars:
   user: admin
 
 steps:
-  # 设置变量
+  # set_vars 仅在当前步骤内可见
   setup:
     set_vars:
       user1: ${user}_1
@@ -15,11 +15,13 @@ steps:
       url: ${endpoint}
       params:
         user: ${user1}
+    extract:
+      echoed_user: $.args.user
     validate:
       - eq: ["$.args.user", "admin_1"]
 
-  # 使用设置的变量
-  use_vars:
+  # 跨步骤复用请使用 extract 导出的变量
+  use_extracted_vars:
     depends_on: [setup]
     set_vars:
       post_url: ${base_url}/post
@@ -27,6 +29,6 @@ steps:
       method: POST
       url: ${post_url}
       json:
-        user: ${user1}
+        user: ${echoed_user}
     validate:
       - eq: ["$.json.user", "admin_1"]

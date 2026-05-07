@@ -12,6 +12,7 @@ from nextgen.parser.loader import (
     find_action_type,
     load_file,
     load_testcase,
+    parse_hook_action,
     parse_assertions,
     parse_request,
     parse_step,
@@ -110,6 +111,31 @@ class TestParseAssertions:
             parse_assertions([{"eq": [1]}])
 
 
+class TestParseHookAction:
+    """测试 parse_hook_action"""
+
+    def test_parse_sleep_shorthand(self):
+        action = parse_hook_action({"sleep": 2})
+        assert action.type == "sleep"
+        assert action.params == {"seconds": 2}
+
+    def test_parse_log_shorthand(self):
+        action = parse_hook_action({"log": "hello"})
+        assert action.params == {"message": "hello"}
+
+    def test_parse_var_shorthand(self):
+        action = parse_hook_action({"getTimestamp": "start"})
+        assert action.params == {"var": "start"}
+
+    def test_parse_full_dict(self):
+        action = parse_hook_action({"getRandomStr": {"var": "rid", "length": 12}})
+        assert action.params == {"var": "rid", "length": 12}
+
+    def test_invalid_hook_format(self):
+        with pytest.raises(ValueError, match="hook 格式错误"):
+            parse_hook_action({"a": 1, "b": 2})
+
+
 class TestParseStep:
     """测试 parse_step"""
 
@@ -206,6 +232,19 @@ class TestParseStep:
         step = parse_step("test", data)
         assert step.set_vars == {}
 
+    def test_step_with_hooks(self):
+        data = {
+            "request": {"method": "GET", "url": "http://test.com"},
+            "hooks": {
+                "before": [{"log": "before"}],
+                "after": [{"log": {"message": "after", "level": "warning"}}],
+            },
+        }
+        step = parse_step("test", data)
+        assert [action.type for action in step.hooks.before] == ["log"]
+        assert step.hooks.before[0].params == {"message": "before"}
+        assert step.hooks.after[0].params == {"message": "after", "level": "warning"}
+
 
 class TestParseTestcase:
     """测试 parse_testcase"""
@@ -261,6 +300,20 @@ class TestParseTestcase:
         testcase = parse_testcase(data)
         assert testcase.mode == "parallel"
 
+    def test_testcase_with_hooks(self):
+        data = {
+            "version": 1,
+            "hooks": {
+                "before_all": [{"log": "suite start"}],
+                "after_each": [{"sleep": 1}],
+            },
+            "steps": {"test": {"request": {"method": "GET", "url": "http://test.com"}}},
+        }
+        testcase = parse_testcase(data)
+        assert testcase.hooks.before_all[0].type == "log"
+        assert testcase.hooks.before_all[0].params == {"message": "suite start"}
+        assert testcase.hooks.after_each[0].params == {"seconds": 1}
+
     def test_invalid_mode(self):
         data = {
             "version": 1,
@@ -288,3 +341,4 @@ class TestLoadTestcase:
         testcase = load_testcase(file)
         assert isinstance(testcase, TestCase)
         assert len(testcase.steps) == 1
+        assert testcase.source_path == str(file)

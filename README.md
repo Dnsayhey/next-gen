@@ -69,6 +69,28 @@ uv run nextgen demo.yaml --verbose
 uv run python -m nextgen.cli demo.yaml
 ```
 
+## 示例
+
+可以直接从 `examples/` 里的 DSL 开始试跑：
+
+- `examples/full_demo.yaml`：HTTP DSL 的完整示例，覆盖 GET/POST、提取、断言、依赖和重试
+- `examples/full_demo.json`：JSON 版完整示例
+- `examples/conditional_demo.yaml`：`when` 条件执行示例
+- `examples/set_vars_demo.yaml`：`set_vars` 与 `extract` 的作用域示例
+- `examples/hook_demo.yaml`：`before_all / after_all / before_each / after_each / before / after` 与自定义 hook 示例
+- `examples/retry_demo.yaml`：固定间隔和指数退避重试示例
+- `examples/timeout_demo.yaml`：请求级和步骤级超时示例
+- `examples/db_demo.yaml`：SQLite 查询、提取和跨步骤引用示例
+
+例如：
+
+```bash
+uv run nextgen examples/full_demo.yaml --verbose
+uv run nextgen examples/hook_demo.yaml --verbose
+```
+
+`examples/hook_demo.yaml` 会自动加载同目录下的 [examples/hooks.py](/Users/yanlei/Projects/python/next-gen/examples/hooks.py:1)，用来演示自定义 hook 的发现与注册。
+
 ## 支持的请求体类型
 
 ```yaml

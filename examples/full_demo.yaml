@@ -69,7 +69,7 @@ steps:
 
   # 6. 依赖关系（DAG）
   dependent_step:
-    depends_on: [post_json]
+    depends_on: [get_with_params, post_json]
     request:
       method: GET
       url: ${base_url}/get

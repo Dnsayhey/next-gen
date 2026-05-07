@@ -9,9 +9,12 @@ from loguru import logger
 
 from nextgen.core.model import (
     AssertionNode,
+    HookAction,
     RequestNode,
     StepNode,
+    StepHooks,
     TestCase,
+    TestCaseHooks,
 )
 
 SUPPORTED_EXTENSIONS = {".yaml", ".yml", ".json"}
@@ -135,6 +138,58 @@ def parse_when(data: list | dict | None) -> list | dict | None:
     raise ValueError(f"when 格式错误: 期望 list 或 dict，得到 {type(data).__name__}")
 
 
+def parse_hook_action(data: dict[str, Any]) -> HookAction:
+    """解析单个 hook 动作"""
+    if not isinstance(data, dict) or len(data) != 1:
+        raise ValueError(f"hook 格式错误: {data}")
+
+    hook_type = list(data.keys())[0]
+    raw_params = data[hook_type]
+
+    if isinstance(raw_params, dict):
+        params = raw_params
+    elif hook_type == "sleep":
+        params = {"seconds": raw_params}
+    elif hook_type == "log":
+        params = {"message": raw_params}
+    elif hook_type in {"getTimestamp", "getTimeStr", "getRandomStr"}:
+        params = {"var": raw_params}
+    elif raw_params is None:
+        params = {}
+    else:
+        params = {"value": raw_params}
+
+    return HookAction(type=hook_type, params=params)
+
+
+def parse_step_hooks(data: dict[str, Any] | None) -> StepHooks:
+    """解析步骤级 hooks"""
+    if data is None:
+        return StepHooks()
+    if not isinstance(data, dict):
+        raise ValueError(f"step hooks 格式错误: 期望 dict，得到 {type(data).__name__}")
+
+    return StepHooks(
+        before=[parse_hook_action(item) for item in data.get("before", [])],
+        after=[parse_hook_action(item) for item in data.get("after", [])],
+    )
+
+
+def parse_testcase_hooks(data: dict[str, Any] | None) -> TestCaseHooks:
+    """解析用例级 hooks"""
+    if data is None:
+        return TestCaseHooks()
+    if not isinstance(data, dict):
+        raise ValueError(f"testcase hooks 格式错误: 期望 dict，得到 {type(data).__name__}")
+
+    return TestCaseHooks(
+        before_all=[parse_hook_action(item) for item in data.get("before_all", [])],
+        after_all=[parse_hook_action(item) for item in data.get("after_all", [])],
+        before_each=[parse_hook_action(item) for item in data.get("before_each", [])],
+        after_each=[parse_hook_action(item) for item in data.get("after_each", [])],
+    )
+
+
 def parse_step(name: str, data: dict[str, Any]) -> StepNode:
     """解析单个 step"""
     # 查找 action 类型
@@ -169,6 +224,7 @@ def parse_step(name: str, data: dict[str, Any]) -> StepNode:
         when=parse_when(data.get("when")),
         set_vars=data.get("set_vars", {}),
         config=data.get("config", {}),
+        hooks=parse_step_hooks(data.get("hooks")),
     )
 
 
@@ -193,12 +249,15 @@ def parse_testcase(data: dict[str, Any]) -> TestCase:
         vars=data.get("vars", {}),
         steps=steps,
         mode=mode,
+        hooks=parse_testcase_hooks(data.get("hooks")),
     )
 
 
 def load_testcase(path: str | Path) -> TestCase:
     """从 YAML/JSON 文件加载测试用例"""
+    path = Path(path)
     data = load_file(path)
     testcase = parse_testcase(data)
+    testcase.source_path = str(path)
     logger.info(f"解析测试用例: {path}, 包含 {len(testcase.steps)} 个步骤")
     return testcase

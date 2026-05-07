@@ -2,11 +2,14 @@
 
 from nextgen.core.model import (
     AssertionNode,
+    HookAction,
     RequestNode,
     StepNode,
+    StepHooks,
     StepStatus,
     StepResult,
     TestCase,
+    TestCaseHooks,
     TestResult,
 )
 
@@ -86,6 +89,7 @@ class TestStepNode:
         assert step.extract == {}
         assert step.validate == []
         assert step.config == {}
+        assert step.hooks == StepHooks()
 
 
 class TestTestCase:
@@ -105,6 +109,17 @@ class TestTestCase:
         assert testcase.version == 1
         assert len(testcase.steps) == 1
         assert testcase.vars["base_url"] == "http://test.com"
+        assert testcase.hooks == TestCaseHooks()
+        assert testcase.source_path is None
+
+
+class TestHooksModel:
+    """测试 hook 数据模型"""
+
+    def test_hook_action_creation(self):
+        action = HookAction(type="log", params={"message": "hello"})
+        assert action.type == "log"
+        assert action.params == {"message": "hello"}
 
 
 class TestStepResult:

@@ -1,6 +1,7 @@
 """调度器 - 状态机驱动的 DAG 调度"""
 
 import asyncio
+import os
 import time
 from typing import Any
 
@@ -8,7 +9,9 @@ from loguru import logger
 
 from nextgen.core.condition import evaluate_condition
 from nextgen.core.context import Context
+from nextgen.core.hooks import get_hook, load_discovered_hooks
 from nextgen.core.model import (
+    HookAction,
     StepNode,
     StepResult,
     StepStatus,
@@ -97,11 +100,33 @@ class Scheduler:
         self.context = Context(testcase.vars)
         self.semaphore = asyncio.Semaphore(max_concurrency)
         self.graph = build_graph(testcase)
+        self.loaded_hook_files: list[str] = []
 
         self.steps: dict[str, StepRuntime] = {
             name: StepRuntime(node)
             for name, node in testcase.steps.items()
         }
+
+    async def execute_hooks(
+        self,
+        hooks: list[HookAction],
+        ctx: Context,
+        *,
+        step: StepRuntime | None = None,
+        phase: str,
+    ) -> None:
+        """顺序执行一组 hook"""
+        for hook in hooks:
+            handler = get_hook(hook.type)
+            if handler is None:
+                raise ValueError(f"未注册的 hook: {hook.type}")
+
+            params = ctx.render_dict(hook.params)
+            try:
+                await handler(ctx, params)
+            except Exception as exc:
+                target = step.node.name if step else "testcase"
+                raise RuntimeError(f"{phase} hook '{hook.type}' 执行失败 ({target}): {exc}") from exc
 
     def is_runnable(self, step: StepRuntime) -> bool:
         """判断步骤是否可执行"""
@@ -120,19 +145,26 @@ class Scheduler:
             for d in self.graph[step.node.name]
         )
 
-    async def _execute_step_logic(self, step: StepRuntime) -> None:
+    async def _execute_step_logic(self, step: StepRuntime, step_ctx: Context) -> None:
         """执行步骤的核心逻辑"""
         # 设置变量（在 action 之前）
         if step.node.set_vars:
             for key, value in step.node.set_vars.items():
-                rendered = self.context.render(value)
-                self.context.set(key, rendered)
+                rendered = step_ctx.render(value)
+                step_ctx.set(key, rendered)
 
         # 条件执行（可使用当前步骤的 set_vars）
-        if not evaluate_condition(step.node.when, self.context):
+        if not evaluate_condition(step.node.when, step_ctx):
             step.status = StepStatus.SKIPPED
             logger.info(f"条件不满足，跳过步骤: {step.node.name}")
             return
+
+        await self.execute_hooks(
+            step.node.hooks.before,
+            step_ctx,
+            step=step,
+            phase="before",
+        )
 
         action_type = step.node.action_type
 
@@ -145,7 +177,7 @@ class Scheduler:
         # 执行
         result = await executor["execute"](
             step.node.action_config,
-            self.context,
+            step_ctx,
         )
         step.result = result
 
@@ -156,47 +188,76 @@ class Scheduler:
 
         # 提取变量
         if step.node.extract:
-            executor["extract"](result, step.node.extract, self.context)
+            executor["extract"](result, step.node.extract, step_ctx)
+            self.context.merge({key: step_ctx.get(key) for key in step.node.extract})
+
+        await self.execute_hooks(
+            step.node.hooks.after,
+            step_ctx,
+            step=step,
+            phase="after",
+        )
 
         step.status = StepStatus.SUCCESS
 
     async def _run_step_with_retry(self, step: StepRuntime) -> None:
         """执行单个步骤，重试和跳过都在一个生命周期内完成"""
         max_retry = step.node.config.get("retry", 0)
+        step_ctx = self.context.derive()
 
-        while True:
-            step.status = StepStatus.RUNNING
+        await self.execute_hooks(
+            self.testcase.hooks.before_each,
+            step_ctx,
+            step=step,
+            phase="before_each",
+        )
 
+        try:
+            while True:
+                step.status = StepStatus.RUNNING
+
+                try:
+                    await self._execute_step_logic(step, step_ctx)
+                    return
+
+                except Exception as e:
+                    step.error = str(e)
+
+                    if step.retry_count < max_retry:
+                        step.retry_count += 1
+                        step.status = StepStatus.RETRYING
+
+                        # 计算重试延迟
+                        if step.node.config.get("retry_backoff"):
+                            base_delay = step.node.config.get("retry_delay", 1)
+                            max_delay = step.node.config.get("retry_max_delay", 60)
+                            delay = min(base_delay * (2 ** (step.retry_count - 1)), max_delay)
+                        else:
+                            delay = step.node.config.get("retry_delay", 1)
+
+                        logger.warning(
+                            f"步骤 {step.node.name} 失败，"
+                            f"重试 {step.retry_count}/{max_retry}，"
+                            f"等待 {delay}秒"
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+
+                    step.status = StepStatus.FAILED
+                    logger.error(f"步骤 {step.node.name} 失败: {e}")
+                    return
+        finally:
             try:
-                await self._execute_step_logic(step)
-                return
-
-            except Exception as e:
-                step.error = str(e)
-
-                if step.retry_count < max_retry:
-                    step.retry_count += 1
-                    step.status = StepStatus.RETRYING
-
-                    # 计算重试延迟
-                    if step.node.config.get("retry_backoff"):
-                        base_delay = step.node.config.get("retry_delay", 1)
-                        max_delay = step.node.config.get("retry_max_delay", 60)
-                        delay = min(base_delay * (2 ** (step.retry_count - 1)), max_delay)
-                    else:
-                        delay = step.node.config.get("retry_delay", 1)
-
-                    logger.warning(
-                        f"步骤 {step.node.name} 失败，"
-                        f"重试 {step.retry_count}/{max_retry}，"
-                        f"等待 {delay}秒"
-                    )
-                    await asyncio.sleep(delay)
-                    continue
-
+                await self.execute_hooks(
+                    self.testcase.hooks.after_each,
+                    step_ctx,
+                    step=step,
+                    phase="after_each",
+                )
+            except Exception as exc:
+                step.error = str(exc)
                 step.status = StepStatus.FAILED
-                logger.error(f"步骤 {step.node.name} 失败: {e}")
-                return
+                logger.error(str(exc))
 
     async def run_step(self, step: StepRuntime) -> None:
         """执行单个步骤（步骤级超时覆盖全部重试）"""
@@ -226,6 +287,38 @@ class Scheduler:
         """执行测试用例"""
         logger.info(f"开始执行测试用例，共 {len(self.steps)} 个步骤")
         start_time = time.time()
+
+        if self.testcase.source_path:
+            self.loaded_hook_files = [
+                str(path) for path in load_discovered_hooks(
+                    self.testcase.source_path,
+                    os.getcwd(),
+                )
+            ]
+
+        try:
+            await self.execute_hooks(
+                self.testcase.hooks.before_all,
+                self.context,
+                phase="before_all",
+            )
+        except Exception as exc:
+            total_ms = int((time.time() - start_time) * 1000)
+            logger.error(str(exc))
+            return TestResult(
+                testcase="",
+                total_duration_ms=total_ms,
+                steps=[
+                    StepResult(
+                        name=name,
+                        status=runtime.status,
+                        duration_ms=runtime.duration_ms,
+                        request_summary=runtime.request_summary,
+                        error=runtime.error,
+                    )
+                    for name, runtime in self.steps.items()
+                ],
+            )
 
         while True:
             pending = [
@@ -260,6 +353,17 @@ class Scheduler:
             await asyncio.gather(
                 *[self.run_step(s) for s in runnable]
             )
+
+        after_all_error: str | None = None
+        try:
+            await self.execute_hooks(
+                self.testcase.hooks.after_all,
+                self.context,
+                phase="after_all",
+            )
+        except Exception as exc:
+            after_all_error = str(exc)
+            logger.error(after_all_error)
 
         # 构建结果
         total_ms = int((time.time() - start_time) * 1000)

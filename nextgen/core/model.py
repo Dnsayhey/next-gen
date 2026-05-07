@@ -52,6 +52,29 @@ class AssertionNode:
 
 
 @dataclass
+class HookAction:
+    """钩子动作"""
+    type: str
+    params: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class TestCaseHooks:
+    """用例级钩子"""
+    before_all: list[HookAction] = field(default_factory=list)
+    after_all: list[HookAction] = field(default_factory=list)
+    before_each: list[HookAction] = field(default_factory=list)
+    after_each: list[HookAction] = field(default_factory=list)
+
+
+@dataclass
+class StepHooks:
+    """步骤级钩子"""
+    before: list[HookAction] = field(default_factory=list)
+    after: list[HookAction] = field(default_factory=list)
+
+
+@dataclass
 class StepNode:
     """测试步骤节点"""
     name: str
@@ -63,6 +86,7 @@ class StepNode:
     when: list | dict | None = None  # 条件执行（list=AND, dict=and/or）
     set_vars: dict[str, str] = field(default_factory=dict)  # 设置变量
     config: dict[str, Any] = field(default_factory=dict)
+    hooks: StepHooks = field(default_factory=StepHooks)
 
 
 @dataclass
@@ -72,6 +96,8 @@ class TestCase:
     steps: dict[str, StepNode]
     vars: dict[str, Any] = field(default_factory=dict)
     mode: str = "sequential"  # "sequential" | "parallel"
+    hooks: TestCaseHooks = field(default_factory=TestCaseHooks)
+    source_path: str | None = None
 
 
 @dataclass

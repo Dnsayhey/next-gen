@@ -28,11 +28,11 @@
 
 ### 设计决策
 
-* **变量作用域**：局部优先（extract 覆盖全局同名变量）
+* **变量作用域**：`set_vars` 和大部分 step hook 默认只在当前步骤内可见，`extract` 声明的变量会回写全局上下文
 * **断言操作符**：基础比较（eq / ne / gt / lt / gte / lte）+ contains
 * **报告格式**：JSON 输出到 stdout
 * **DSL 格式**：支持 YAML 和 JSON 两种格式
-* **Executor 架构**：Protocol + 注册表模式，支持扩展
+* **Executor / Hook 架构**：注册表模式，支持扩展 action 和自定义 hook
 
 ---
 
@@ -185,9 +185,11 @@ vars:
 
 steps:
   login:
+    set_vars:
+      request_user: admin
     request: ...
     extract:
-      token: $.data.token  # 从响应中提取变量（局部优先）
+      token: $.data.token  # 声明导出到全局上下文
 
   use_token:
     request:
@@ -200,6 +202,12 @@ steps:
 - `$.data.token` — 从 response body 提取（JSONPath）
 - `$.status_code` — 提取状态码
 - `$.headers.xxx` — 从 response body 中的 headers 字段提取
+
+**作用域规则：**
+- `vars`、`before_all` 写入、历史步骤 `extract` 的结果存在于全局上下文
+- `set_vars` 默认只在当前步骤内可见
+- `before_each` / `before` / `after` / `after_each` 默认操作当前步骤上下文
+- `extract` 声明的变量在步骤成功后提交到全局上下文，供后续步骤使用
 
 ### 4.4 断言系统
 
@@ -228,7 +236,7 @@ steps:
       retry_delay: 1        # 重试间隔（秒）
       retry_backoff: true   # 启用指数退避
       retry_max_delay: 60   # 最大重试间隔（秒），默认 60
-      timeout: 30           # 步骤超时（秒），包含所有重试
+      timeout: 30           # 步骤总超时（秒），包含 retry 和 hook
 ```
 
 **指数退避公式：** `delay = min(base * (2 ** attempt), max_delay)`
@@ -254,11 +262,14 @@ steps:
       url: ${base_url}/slow
       timeout: 10         # 请求级超时（秒），传递给 httpx
     config:
-      timeout: 30         # 步骤级超时（秒），包含重试的总时间
+      timeout: 30         # 步骤总超时（秒），包含 hook / retry / 等待时间
       retry: 3
 ```
 
-**超时优先级：** 请求级 > 步骤级 > httpx 默认（30s）
+**说明：**
+- `request.timeout` 只作用于单次请求
+- `config.timeout` 作用于整个步骤生命周期
+- 步骤总超时覆盖：`before_each -> set_vars -> when -> before -> action -> validate -> extract -> after -> after_each`
 
 ### 4.7 条件执行（when）
 
@@ -302,7 +313,8 @@ steps:
 
 **执行行为：**
 - 条件为 false → 步骤标记为 SKIPPED
-- SKIPPED 的步骤不会阻塞后续步骤
+- `when` 可使用同一步 `set_vars` 产生的变量
+- SKIPPED 的步骤不会执行 action / validate / extract / step hooks
 - 依赖被跳过步骤的步骤也会被跳过
 
 ### 4.8 设置变量（set_vars）
@@ -324,9 +336,69 @@ steps:
 **执行顺序：**
 1. `set_vars` — 先设置变量
 2. `when` — 评估条件
-3. `request` / `db` — 执行 action
-4. `validate` — 验证结果
-5. `extract` — 提取变量
+3. `before` — 执行步骤前 hook
+4. `request` / `db` — 执行 action
+5. `validate` — 验证结果
+6. `extract` — 提取变量并提交声明导出变量
+7. `after` — 执行步骤后 hook
+
+**作用域说明：**
+- `set_vars` 默认只对当前步骤可见
+- 跨步骤复用数据时，应通过 `extract` 显式导出变量
+
+### 4.9 Hook 系统
+
+支持 testcase 级和 step 级 hook：
+
+```yaml
+version: 1
+
+hooks:
+  before_all:
+    - log: "suite start"
+  after_all:
+    - log: "suite end"
+  before_each:
+    - log: "step start"
+  after_each:
+    - log: "step end"
+
+steps:
+  login:
+    request:
+      method: POST
+      url: ${base_url}/post
+    hooks:
+      before:
+        - getRandomStr: { var: "request_id", length: 12 }
+      after:
+        - log: "request_id=${request_id}"
+```
+
+**支持的 hook 层级：**
+- testcase 级：`before_all` / `after_all` / `before_each` / `after_each`
+- step 级：`before` / `after`
+
+**内置 hook：**
+- `sleep`
+- `log`
+- `getTimestamp`
+- `getTimeStr`
+- `getRandomStr`
+
+**步骤内完整顺序：**
+
+```text
+before_each -> set_vars -> when -> before -> action -> validate -> extract -> after -> after_each
+```
+
+**retry 语义：**
+- `before_each` / `after_each`：每个步骤只执行一次
+- `before` / `after`：每次 attempt 执行一次
+
+**自定义 hook：**
+- 用户可在 `hooks.py` 中通过 `from nextgen import register_hook` 注册
+- 运行时会从 testcase 所在目录向上扫描到当前工作目录，按从外到内顺序加载
 
 ---
 
@@ -346,6 +418,7 @@ class StepNode:
     when: list | dict | None      # 条件执行（list=AND, dict=and/or）
     set_vars: dict[str, str]      # 设置变量
     config: dict[str, Any]
+    hooks: StepHooks
 ```
 
 ### 5.2 RequestNode
@@ -374,7 +447,30 @@ class AssertionNode:
     right: Any   # 期望值
 ```
 
-### 5.4 TestCase
+### 5.4 HookAction / Hooks
+
+```python
+@dataclass
+class HookAction:
+    type: str
+    params: dict[str, Any]
+
+
+@dataclass
+class StepHooks:
+    before: list[HookAction]
+    after: list[HookAction]
+
+
+@dataclass
+class TestCaseHooks:
+    before_all: list[HookAction]
+    after_all: list[HookAction]
+    before_each: list[HookAction]
+    after_each: list[HookAction]
+```
+
+### 5.5 TestCase
 
 ```python
 @dataclass
@@ -383,6 +479,8 @@ class TestCase:
     steps: dict[str, StepNode]
     vars: dict[str, Any]
     mode: str = "sequential"  # "sequential" | "parallel"
+    hooks: TestCaseHooks = field(default_factory=TestCaseHooks)
+    source_path: str | None = None
 ```
 
 ---
@@ -398,7 +496,7 @@ class TestCase:
 
 **Action 注册表：**
 ```python
-SUPPORTED_ACTIONS = {"request"}
+SUPPORTED_ACTIONS = {"request", "db"}
 
 def register_action(action_type: str) -> None:
     """注册新的 action 类型"""
@@ -415,9 +513,16 @@ def register_action(action_type: str) -> None:
 class Context:
     def set(self, key: str, value: Any) -> None: ...
     def get(self, key: str) -> Any | None: ...
+    def snapshot(self) -> dict[str, Any]: ...
+    def derive(self, initial: dict[str, Any] | None = None) -> "Context": ...
+    def merge(self, updates: dict[str, Any]) -> None: ...
     def render(self, value: Any) -> Any: ...
     def render_dict(self, data: dict) -> dict: ...
 ```
+
+调度器运行时会基于全局上下文派生步骤局部上下文，以支持：
+- `set_vars` 和 step hooks 的局部可见性
+- `extract` 成功后再回写全局上下文
 
 ### 6.3 Planner（DAG 规划）
 
@@ -438,6 +543,8 @@ def get_execution_order(graph: dict[str, list[str]]) -> list[list[str]]: ...
 - 状态机驱动的 DAG 调度
 - 并发控制（asyncio.Semaphore）
 - 重试逻辑
+- hook 生命周期调度
+- 自动发现并加载 `hooks.py`
 
 **Executor 注册表：**
 ```python
@@ -458,7 +565,18 @@ def register_executor(action_type, execute_fn, extract_fn, validate_fn) -> None:
     }
 ```
 
-### 6.5 Executor（执行器）
+### 6.5 Hooks（hook 注册表）
+
+```python
+HOOK_REGISTRY: dict[str, HookHandler] = {}
+
+def register_hook(name: str): ...
+def get_hook(name: str): ...
+def discover_hooks(testcase_path: str | Path, cwd: str | Path) -> list[Path]: ...
+def load_discovered_hooks(testcase_path: str | Path, cwd: str | Path) -> list[Path]: ...
+```
+
+### 6.6 Executor（执行器）
 
 **Protocol 定义：**
 ```python
@@ -468,7 +586,7 @@ class Executor(Protocol):
     def validate(self, result: dict, assertions: list) -> list[str]: ...
 ```
 
-### 6.6 DB 执行器
+### 6.7 DB 执行器
 
 支持 PostgreSQL、MySQL、SQLite 三种数据库。
 
@@ -541,7 +659,7 @@ nextgen/
 │   ├── context.py      # 变量系统
 │   ├── planner.py      # DAG 规划
 │   ├── condition.py    # 条件评估器
-│   ├── protocol.py     # Action/Executor 协议定义
+│   ├── hooks.py        # hook 注册表与发现逻辑
 │   └── scheduler.py    # 调度器（executor 注册表）
 ├── parser/
 │   └── loader.py       # YAML/JSON 解析（action 注册表）
@@ -595,16 +713,22 @@ register_executor("db", execute_db, extract_db, validate_db)
 
 ```bash
 # 基本执行
-nextgen run demo.yaml
+nextgen demo.yaml
 
 # 指定并发数
-nextgen run demo.yaml --parallel=5
+nextgen demo.yaml --parallel=5
 
 # 显示详细日志
-nextgen run demo.yaml --verbose
+nextgen demo.yaml --verbose
 
 # 支持 JSON 格式
-nextgen run demo.json
+nextgen demo.json
+```
+
+也可以通过 `uv` 运行：
+
+```bash
+uv run nextgen demo.yaml
 ```
 
 ---
@@ -617,6 +741,7 @@ nextgen run demo.json
 * [x] AST 模型
 * [x] DAG 调度
 * [x] HTTP 执行器
+* [x] DB 执行器
 * [x] 变量系统
 * [x] 断言系统
 * [x] 重试机制
@@ -624,13 +749,12 @@ nextgen run demo.json
 * [x] JSON 报告
 * [x] CLI 工具
 * [x] Executor 注册表架构
+* [x] Hook 系统（内置 + 自定义）
+* [x] 超时配置
+* [x] 指数退避重试
 
 ### 待实现
 
-* [ ] DB 执行器
-* [ ] Python 执行器
-* [ ] 指数退避重试
-* [ ] 超时配置
 * [ ] fail-fast 策略
 * [ ] 彩色终端报告
 * [ ] HTML 报告

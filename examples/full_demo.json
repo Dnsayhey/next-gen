@@ -60,7 +60,7 @@
       ]
     },
     "dependent_step": {
-      "depends_on": ["post_json"],
+      "depends_on": ["get_test", "post_json"],
       "request": {
         "method": "GET",
         "url": "${base_url}/get",
