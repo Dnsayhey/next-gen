@@ -7,10 +7,10 @@ from typing import Any
 import yaml
 from loguru import logger
 
+from nextgen.core.actions import list_actions, get_action
 from nextgen.core.model import (
     AssertionNode,
     HookAction,
-    RequestNode,
     StepNode,
     StepHooks,
     TestCase,
@@ -18,14 +18,6 @@ from nextgen.core.model import (
 )
 
 SUPPORTED_EXTENSIONS = {".yaml", ".yml", ".json"}
-
-# 已注册的 action 类型
-SUPPORTED_ACTIONS = {"request", "db"}
-
-
-def register_action(action_type: str) -> None:
-    """注册新的 action 类型"""
-    SUPPORTED_ACTIONS.add(action_type)
 
 
 def load_file(path: str | Path) -> dict[str, Any]:
@@ -53,43 +45,10 @@ def load_file(path: str | Path) -> dict[str, Any]:
 
 def find_action_type(data: dict[str, Any]) -> str | None:
     """从 step 数据中找到 action 类型"""
-    for action_type in SUPPORTED_ACTIONS:
+    for action_type in list_actions():
         if action_type in data:
             return action_type
     return None
-
-
-def parse_request(config: dict[str, Any]) -> None:
-    """验证 request 配置"""
-    if "method" not in config:
-        raise ValueError("request 必须包含 method 字段")
-    if "url" not in config:
-        raise ValueError("request 必须包含 url 字段")
-
-    # 检查请求体互斥
-    body_fields = [f for f in ["json", "form", "multipart", "body"] if config.get(f) is not None]
-    if len(body_fields) > 1:
-        raise ValueError("json/form/multipart/body 不能同时出现，只能选择一种")
-
-
-def parse_db(config: dict[str, Any]) -> None:
-    """验证 db 配置"""
-    if "url" not in config:
-        raise ValueError("db 必须包含 url 字段")
-    if "query" not in config:
-        raise ValueError("db 必须包含 query 字段")
-
-
-# Action 配置验证器注册表
-ACTION_VALIDATORS = {
-    "request": parse_request,
-    "db": parse_db,
-}
-
-
-def register_action_validator(action_type: str, validator) -> None:
-    """注册新的 action 配置验证器"""
-    ACTION_VALIDATORS[action_type] = validator
 
 
 def parse_assertions(data: list[dict[str, Any]]) -> list[AssertionNode]:
@@ -198,11 +157,11 @@ def parse_step(name: str, data: dict[str, Any]) -> StepNode:
     if not action_type:
         raise ValueError(
             f"step '{name}' 缺少 action 字段，"
-            f"支持的 action 类型: {SUPPORTED_ACTIONS}"
+            f"支持的 action 类型: {list_actions()}"
         )
 
     # 检查是否有多个 action
-    found_actions = [a for a in SUPPORTED_ACTIONS if a in data]
+    found_actions = [a for a in list_actions() if a in data]
     if len(found_actions) > 1:
         raise ValueError(
             f"step '{name}' 包含多个 action: {found_actions}，只能有一个"
@@ -211,8 +170,9 @@ def parse_step(name: str, data: dict[str, Any]) -> StepNode:
     action_config = data[action_type]
 
     # 验证 action 配置
-    if action_type in ACTION_VALIDATORS:
-        ACTION_VALIDATORS[action_type](action_config)
+    action = get_action(action_type)
+    if action and action.validate_config:
+        action.validate_config(action_config)
 
     return StepNode(
         name=name,
@@ -255,9 +215,10 @@ def parse_testcase(data: dict[str, Any]) -> TestCase:
 
 def load_testcase(path: str | Path) -> TestCase:
     """从 YAML/JSON 文件加载测试用例"""
-    path = Path(path)
+    path = Path(path).resolve()
     data = load_file(path)
     testcase = parse_testcase(data)
     testcase.source_path = str(path)
+    testcase.base_dir = str(path.parent)
     logger.info(f"解析测试用例: {path}, 包含 {len(testcase.steps)} 个步骤")
     return testcase

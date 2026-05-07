@@ -9,7 +9,7 @@ from loguru import logger
 from nextgen.core.context import Context
 from nextgen.core.model import RequestNode
 
-from .utils import check_content_type_conflict, load_file_content
+from .utils import check_content_type_conflict, load_file_content, resolve_case_path
 
 
 def parse_request_config(config: dict[str, Any]) -> RequestNode:
@@ -38,6 +38,7 @@ async def execute_request(
         dict: {"status_code": int, "body": Any, "headers": dict, "response": httpx.Response}
     """
     request = parse_request_config(action_config)
+    base_dir = ctx.metadata.get("base_dir")
 
     # 渲染变量
     url = ctx.render(request.url)
@@ -89,8 +90,8 @@ async def execute_request(
             for key, value in multipart_data.items():
                 if isinstance(value, str) and value.startswith("@"):
                     # 文件上传
-                    file_content = load_file_content(value)
-                    file_path = Path(value[1:])
+                    file_content = load_file_content(value, base_dir)
+                    file_path = resolve_case_path(value[1:], base_dir)
                     files[key] = (
                         file_path.name,
                         file_content,
@@ -110,7 +111,7 @@ async def execute_request(
 
         elif body_type == "raw":
             # 处理 @ 前缀的文件
-            raw_content = load_file_content(request.body)
+            raw_content = load_file_content(request.body, base_dir)
             if isinstance(raw_content, str):
                 raw_content = ctx.render(raw_content)
 

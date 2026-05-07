@@ -7,7 +7,15 @@ from loguru import logger
 from nextgen.core.model import RequestNode
 
 
-def load_file_content(path_str: str) -> bytes | str:
+def resolve_case_path(path_str: str, base_dir: str | Path | None = None) -> Path:
+    """解析 testcase 相对路径"""
+    path = Path(path_str)
+    if path.is_absolute() or base_dir is None:
+        return path
+    return Path(base_dir) / path
+
+
+def load_file_content(path_str: str, base_dir: str | Path | None = None) -> bytes | str:
     """加载 @ 前缀的文件内容
 
     Args:
@@ -19,7 +27,7 @@ def load_file_content(path_str: str) -> bytes | str:
     if not path_str.startswith("@"):
         return path_str
 
-    file_path = Path(path_str[1:])
+    file_path = resolve_case_path(path_str[1:], base_dir)
     if not file_path.exists():
         raise FileNotFoundError(f"文件不存在: {file_path}")
 

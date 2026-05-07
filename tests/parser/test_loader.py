@@ -7,17 +7,23 @@ from pathlib import Path
 import pytest
 import yaml
 
-from nextgen.core.model import StepNode, TestCase
+from nextgen.bootstrap import load_builtin_actions
+from nextgen.core.model import StepNode, TestCase as CaseModel
+from nextgen.executors.http.config import validate_request_config
 from nextgen.parser.loader import (
     find_action_type,
     load_file,
     load_testcase,
     parse_hook_action,
     parse_assertions,
-    parse_request,
     parse_step,
     parse_testcase,
 )
+
+
+@pytest.fixture(autouse=True)
+def builtin_actions():
+    load_builtin_actions()
 
 
 class TestLoadFile:
@@ -65,17 +71,17 @@ class TestParseRequest:
 
     def test_valid_request(self):
         config = {"method": "GET", "url": "http://test.com"}
-        parse_request(config)  # 不应抛出异常
+        validate_request_config(config)  # 不应抛出异常
 
     def test_missing_method(self):
         config = {"url": "http://test.com"}
         with pytest.raises(ValueError, match="method"):
-            parse_request(config)
+            validate_request_config(config)
 
     def test_missing_url(self):
         config = {"method": "GET"}
         with pytest.raises(ValueError, match="url"):
-            parse_request(config)
+            validate_request_config(config)
 
     def test_mutual_exclusion(self):
         config = {
@@ -85,7 +91,7 @@ class TestParseRequest:
             "form": {"key": "value"},
         }
         with pytest.raises(ValueError, match="不能同时出现"):
-            parse_request(config)
+            validate_request_config(config)
 
 
 class TestParseAssertions:
@@ -339,6 +345,7 @@ class TestLoadTestcase:
         file = tmp_path / "test.yaml"
         file.write_text(yaml.dump(data))
         testcase = load_testcase(file)
-        assert isinstance(testcase, TestCase)
+        assert isinstance(testcase, CaseModel)
         assert len(testcase.steps) == 1
-        assert testcase.source_path == str(file)
+        assert testcase.source_path == str(file.resolve())
+        assert testcase.base_dir == str(tmp_path.resolve())

@@ -6,8 +6,10 @@ from pathlib import Path
 import typer
 from loguru import logger
 
+from nextgen.bootstrap import load_builtin_actions
 from nextgen.core.planner import validate_testcase
 from nextgen.core.scheduler import Scheduler
+from nextgen.core.model import TestStatus
 from nextgen.parser.loader import load_testcase
 from nextgen.reporter.json_reporter import to_json
 
@@ -26,6 +28,8 @@ def run(
         logger.add(lambda m: None, level="WARNING")
 
     try:
+        load_builtin_actions()
+
         # 加载测试用例
         testcase = load_testcase(file)
 
@@ -41,7 +45,7 @@ def run(
         print(to_json(result))
 
         # 退出码
-        if result.summary["failed"] > 0:
+        if result.status == TestStatus.FAILED:
             raise typer.Exit(code=1)
 
     except FileNotFoundError as e:

@@ -12,8 +12,13 @@ class Context:
     变量作用域：局部优先（extract 覆盖全局同名变量）
     """
 
-    def __init__(self, initial: dict[str, Any] | None = None):
+    def __init__(
+        self,
+        initial: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ):
         self.vars: dict[str, Any] = initial or {}
+        self.metadata: dict[str, Any] = metadata or {}
 
     def set(self, key: str, value: Any) -> None:
         """设置变量"""
@@ -33,7 +38,7 @@ class Context:
         data = self.snapshot()
         if initial:
             data.update(initial)
-        return Context(data)
+        return Context(data, metadata=self.metadata)
 
     def merge(self, updates: dict[str, Any]) -> None:
         """批量合并变量"""

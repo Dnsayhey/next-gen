@@ -6,8 +6,9 @@ import time
 
 import pytest
 
-from nextgen.core.model import HookAction, StepNode, StepStatus, TestCase
-from nextgen.core.scheduler import Scheduler, register_executor
+from nextgen.core.actions import ActionSpec, register_action, restore_actions, snapshot_actions
+from nextgen.core.model import HookAction, StepNode, StepStatus, TestCase as CaseModel
+from nextgen.core.scheduler import Scheduler
 from nextgen.core.hooks import register_hook
 
 
@@ -34,6 +35,7 @@ def make_step(
 @pytest.fixture
 def scheduler_executor_registry():
     """注册测试用 executor"""
+    actions = snapshot_actions()
     events: list[str] = []
 
     async def execute(action_config, ctx):
@@ -68,8 +70,14 @@ def scheduler_executor_registry():
     def validate(result, assertions):
         return []
 
-    register_executor("test_scheduler_action", execute, extract, validate)
-    return events
+    register_action(ActionSpec(
+        name="test_scheduler_action",
+        execute=execute,
+        extract=extract,
+        validate=validate,
+    ))
+    yield events
+    restore_actions(actions)
 
 
 class TestScheduler:
@@ -77,7 +85,7 @@ class TestScheduler:
 
     @pytest.mark.asyncio
     async def test_sequential_mode_uses_planned_dependencies(self, scheduler_executor_registry):
-        testcase = TestCase(
+        testcase = CaseModel(
             version=1,
             mode="sequential",
             steps={
@@ -103,7 +111,7 @@ class TestScheduler:
 
     @pytest.mark.asyncio
     async def test_set_vars_is_visible_to_when(self, scheduler_executor_registry):
-        testcase = TestCase(
+        testcase = CaseModel(
             version=1,
             mode="parallel",
             steps={
@@ -124,7 +132,7 @@ class TestScheduler:
 
     @pytest.mark.asyncio
     async def test_when_can_skip_step_after_set_vars(self, scheduler_executor_registry):
-        testcase = TestCase(
+        testcase = CaseModel(
             version=1,
             mode="parallel",
             steps={
@@ -144,7 +152,7 @@ class TestScheduler:
 
     @pytest.mark.asyncio
     async def test_step_timeout_covers_retry_and_wait(self, scheduler_executor_registry):
-        testcase = TestCase(
+        testcase = CaseModel(
             version=1,
             mode="parallel",
             steps={
@@ -171,7 +179,7 @@ class TestScheduler:
 
     @pytest.mark.asyncio
     async def test_retry_can_succeed_within_total_timeout(self, scheduler_executor_registry):
-        testcase = TestCase(
+        testcase = CaseModel(
             version=1,
             mode="parallel",
             steps={
@@ -194,7 +202,11 @@ class TestScheduler:
         assert scheduler.steps["flaky"].retry_count == 1
 
     @pytest.mark.asyncio
-    async def test_testcase_and_step_hooks_run_in_expected_order(self, tmp_path):
+    async def test_testcase_and_step_hooks_run_in_expected_order(
+        self,
+        tmp_path,
+        scheduler_executor_registry,
+    ):
         trace_file = tmp_path / "trace.log"
         hook_file = tmp_path / "hooks.py"
         hook_file.write_text(
@@ -210,7 +222,7 @@ class TestScheduler:
             )
         )
 
-        testcase = TestCase(
+        testcase = CaseModel(
             version=1,
             mode="parallel",
             steps={
@@ -280,7 +292,7 @@ class TestScheduler:
             )
         )
 
-        testcase = TestCase(
+        testcase = CaseModel(
             version=1,
             mode="parallel",
             steps={
@@ -343,7 +355,7 @@ class TestScheduler:
             )
         )
 
-        testcase = TestCase(
+        testcase = CaseModel(
             version=1,
             mode="parallel",
             steps={
@@ -383,7 +395,7 @@ class TestScheduler:
             )
         )
 
-        testcase = TestCase(
+        testcase = CaseModel(
             version=1,
             mode="parallel",
             steps={"one": make_step("one")},
@@ -412,7 +424,7 @@ class TestScheduler:
         async def boom_after_all(ctx, params):
             raise RuntimeError("after all exploded")
 
-        testcase = TestCase(
+        testcase = CaseModel(
             version=1,
             mode="parallel",
             steps={"one": make_step("one")},
@@ -436,7 +448,7 @@ class TestScheduler:
         async def boom_before_each(ctx, params):
             raise RuntimeError("before each exploded")
 
-        testcase = TestCase(
+        testcase = CaseModel(
             version=1,
             mode="parallel",
             steps={"one": make_step("one")},
@@ -470,7 +482,7 @@ class TestScheduler:
             with open(params["file"], "a", encoding="utf-8") as f:
                 f.write("after_each\n")
 
-        testcase = TestCase(
+        testcase = CaseModel(
             version=1,
             mode="parallel",
             steps={"one": make_step("one")},
@@ -501,7 +513,7 @@ class TestScheduler:
         async def boom_after(ctx, params):
             raise RuntimeError("after exploded")
 
-        testcase = TestCase(
+        testcase = CaseModel(
             version=1,
             mode="parallel",
             steps={"one": make_step("one")},
@@ -525,7 +537,7 @@ class TestScheduler:
         async def boom_after_each(ctx, params):
             raise RuntimeError("after each exploded")
 
-        testcase = TestCase(
+        testcase = CaseModel(
             version=1,
             mode="parallel",
             steps={"one": make_step("one")},
@@ -555,7 +567,7 @@ class TestScheduler:
 
         trace_file = tmp_path / "attempt_context_trace.log"
 
-        testcase = TestCase(
+        testcase = CaseModel(
             version=1,
             mode="parallel",
             steps={

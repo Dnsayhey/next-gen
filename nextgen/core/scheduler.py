@@ -1,12 +1,12 @@
 """调度器 - 状态机驱动的 DAG 调度"""
 
 import asyncio
-import os
 import time
 from typing import Any
 
 from loguru import logger
 
+from nextgen.core.actions import get_action
 from nextgen.core.condition import evaluate_condition
 from nextgen.core.context import Context
 from nextgen.core.hooks import get_hook, load_discovered_hooks
@@ -17,39 +17,9 @@ from nextgen.core.model import (
     StepStatus,
     TestCase,
     TestResult,
+    TestStatus,
 )
 from nextgen.core.planner import build_graph
-from nextgen.executors.http import execute_request, extract_variables, validate_response
-from nextgen.executors.db import execute_query, extract_variables as db_extract, validate_result
-
-
-# Executor 注册表
-EXECUTOR_REGISTRY = {
-    "request": {
-        "execute": execute_request,
-        "extract": extract_variables,
-        "validate": validate_response,
-    },
-    "db": {
-        "execute": execute_query,
-        "extract": db_extract,
-        "validate": validate_result,
-    },
-}
-
-
-def register_executor(
-    action_type: str,
-    execute_fn,
-    extract_fn,
-    validate_fn,
-) -> None:
-    """注册新的 executor"""
-    EXECUTOR_REGISTRY[action_type] = {
-        "execute": execute_fn,
-        "extract": extract_fn,
-        "validate": validate_fn,
-    }
 
 
 class StepRuntime:
@@ -98,7 +68,8 @@ class Scheduler:
         max_concurrency: int = 10,
     ):
         self.testcase = testcase
-        self.context = Context(testcase.vars)
+        metadata = {"base_dir": testcase.base_dir} if testcase.base_dir else {}
+        self.context = Context(testcase.vars, metadata=metadata)
         self.semaphore = asyncio.Semaphore(max_concurrency)
         self.graph = build_graph(testcase)
         self.loaded_hook_files: list[str] = []
@@ -146,9 +117,10 @@ class Scheduler:
             for d in self.graph[step.node.name]
         )
 
-    def _build_result(self, start_time: float) -> TestResult:
+    def _build_result(self, start_time: float, errors: list[str] | None = None) -> TestResult:
         """基于当前运行时状态构建测试结果"""
         total_ms = int((time.time() - start_time) * 1000)
+        result_errors = errors or []
         results = []
         for name, runtime in self.steps.items():
             results.append(StepResult(
@@ -160,10 +132,18 @@ class Scheduler:
                 error=runtime.error,
             ))
 
+        status = (
+            TestStatus.FAILED
+            if result_errors or any(s.status == StepStatus.FAILED for s in results)
+            else TestStatus.SUCCESS
+        )
+
         return TestResult(
             testcase="",  # TODO: 从文件路径获取
             total_duration_ms=total_ms,
             steps=results,
+            status=status,
+            errors=result_errors,
         )
 
     def _mark_suite_failure(self, error: str) -> None:
@@ -198,26 +178,25 @@ class Scheduler:
         action_type = step.node.action_type
 
         # 检查 executor 是否存在
-        if action_type not in EXECUTOR_REGISTRY:
+        action = get_action(action_type)
+        if action is None:
             raise ValueError(f"未注册的 action 类型: {action_type}")
 
-        executor = EXECUTOR_REGISTRY[action_type]
-
         # 执行
-        result = await executor["execute"](
+        result = await action.execute(
             step.node.action_config,
             step_ctx,
         )
         step.result = result
 
         # 验证
-        errors = executor["validate"](result, step.node.validate)
+        errors = action.validate(result, step.node.validate)
         if errors:
             raise AssertionError("; ".join(errors))
 
         # 提取变量
         if step.node.extract:
-            executor["extract"](result, step.node.extract, step_ctx)
+            action.extract(result, step.node.extract, step_ctx)
             step.pending_extracts = {key: step_ctx.get(key) for key in step.node.extract}
         else:
             step.pending_extracts = {}
@@ -339,10 +318,11 @@ class Scheduler:
         start_time = time.time()
 
         if self.testcase.source_path:
+            hook_root = self.testcase.base_dir or "."
             self.loaded_hook_files = [
                 str(path) for path in load_discovered_hooks(
                     self.testcase.source_path,
-                    os.getcwd(),
+                    hook_root,
                 )
             ]
 
@@ -356,7 +336,7 @@ class Scheduler:
             error = str(exc)
             logger.error(error)
             self._mark_suite_failure(error)
-            return self._build_result(start_time)
+            return self._build_result(start_time, [error])
 
         while True:
             pending = [
@@ -392,7 +372,7 @@ class Scheduler:
                 *[self.run_step(s) for s in runnable]
             )
 
-        after_all_error: str | None = None
+        after_all_errors: list[str] = []
         try:
             await self.execute_hooks(
                 self.testcase.hooks.after_all,
@@ -400,8 +380,8 @@ class Scheduler:
                 phase="after_all",
             )
         except Exception as exc:
-            after_all_error = str(exc)
-            logger.error(after_all_error)
-            self._mark_suite_failure(after_all_error)
+            after_all_errors.append(str(exc))
+            logger.error(after_all_errors[-1])
+            self._mark_suite_failure(after_all_errors[-1])
 
-        return self._build_result(start_time)
+        return self._build_result(start_time, after_all_errors)

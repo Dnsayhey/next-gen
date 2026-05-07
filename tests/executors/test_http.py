@@ -5,6 +5,7 @@ import pytest
 from nextgen.core.context import Context
 from nextgen.core.model import AssertionNode
 from nextgen.executors.http.extract import extract_variables
+from nextgen.executors.http.utils import load_file_content, resolve_case_path
 from nextgen.executors.http.validate import validate_response
 
 
@@ -69,6 +70,19 @@ class TestValidateResponse:
         assertions = [AssertionNode(op="eq", left="$.code", right=0)]
         errors = validate_response(result, assertions)
         assert errors == []
+
+
+class TestHttpFileUtils:
+    """测试 HTTP 文件路径工具"""
+
+    def test_resolve_relative_path_against_case_base_dir(self, tmp_path):
+        assert resolve_case_path("data.txt", tmp_path) == tmp_path / "data.txt"
+
+    def test_load_file_content_uses_case_base_dir(self, tmp_path):
+        file = tmp_path / "payload.txt"
+        file.write_text("hello", encoding="utf-8")
+
+        assert load_file_content("@payload.txt", tmp_path) == "hello"
 
     def test_eq_fail(self):
         result = {

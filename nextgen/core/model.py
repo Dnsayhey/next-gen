@@ -15,6 +15,12 @@ class StepStatus(str, Enum):
     RETRYING = "retrying"
 
 
+class TestStatus(str, Enum):
+    """测试用例执行状态"""
+    SUCCESS = "success"
+    FAILED = "failed"
+
+
 @dataclass
 class RequestNode:
     """HTTP 请求节点"""
@@ -98,6 +104,7 @@ class TestCase:
     mode: str = "sequential"  # "sequential" | "parallel"
     hooks: TestCaseHooks = field(default_factory=TestCaseHooks)
     source_path: str | None = None
+    base_dir: str | None = None
 
 
 @dataclass
@@ -118,6 +125,8 @@ class TestResult:
     testcase: str  # 文件名
     total_duration_ms: int
     steps: list[StepResult]
+    status: TestStatus
+    errors: list[str] = field(default_factory=list)
 
     @property
     def summary(self) -> dict[str, int]:

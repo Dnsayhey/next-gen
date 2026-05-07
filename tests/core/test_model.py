@@ -7,10 +7,11 @@ from nextgen.core.model import (
     StepNode,
     StepHooks,
     StepStatus,
+    TestStatus as CaseRunStatus,
     StepResult,
-    TestCase,
-    TestCaseHooks,
-    TestResult,
+    TestCase as CaseModel,
+    TestCaseHooks as CaseHookModel,
+    TestResult as CaseRunResult,
 )
 
 
@@ -92,7 +93,7 @@ class TestStepNode:
         assert step.hooks == StepHooks()
 
 
-class TestTestCase:
+class TestCaseModel:
     """测试 TestCase"""
 
     def test_testcase_creation(self):
@@ -101,7 +102,7 @@ class TestTestCase:
             action_type="request",
             action_config={"method": "GET", "url": "http://test.com"},
         )
-        testcase = TestCase(
+        testcase = CaseModel(
             version=1,
             steps={"test_step": step},
             vars={"base_url": "http://test.com"},
@@ -109,8 +110,9 @@ class TestTestCase:
         assert testcase.version == 1
         assert len(testcase.steps) == 1
         assert testcase.vars["base_url"] == "http://test.com"
-        assert testcase.hooks == TestCaseHooks()
+        assert testcase.hooks == CaseHookModel()
         assert testcase.source_path is None
+        assert testcase.base_dir is None
 
 
 class TestHooksModel:
@@ -139,7 +141,7 @@ class TestStepResult:
         assert result.error is None
 
 
-class TestTestResult:
+class TestCaseResult:
     """测试 TestResult"""
 
     def test_summary(self):
@@ -148,9 +150,15 @@ class TestTestResult:
             StepResult(name="s2", status=StepStatus.FAILED, duration_ms=200, request_summary="POST /"),
             StepResult(name="s3", status=StepStatus.SKIPPED, duration_ms=0, request_summary="GET /"),
         ]
-        result = TestResult(testcase="test.yaml", total_duration_ms=300, steps=steps)
+        result = CaseRunResult(
+            testcase="test.yaml",
+            total_duration_ms=300,
+            steps=steps,
+            status=CaseRunStatus.FAILED,
+        )
         summary = result.summary
         assert summary["total"] == 3
         assert summary["success"] == 1
         assert summary["failed"] == 1
         assert summary["skipped"] == 1
+        assert result.status == CaseRunStatus.FAILED

@@ -136,18 +136,22 @@ nextgen/
 ## 扩展新 Action 类型
 
 ```python
-from nextgen.parser.loader import register_action, register_action_validator
-from nextgen.core.scheduler import register_executor
+from nextgen import ActionSpec, register_action
 
 # 1. 实现 executor 函数
 async def execute_db(action_config, ctx): ...
 def extract_db(result, config, ctx): ...
 def validate_db(result, assertions): ...
+def validate_db_config(config): ...
 
 # 2. 注册
-register_action("db")
-register_action_validator("db", validate_db_config)
-register_executor("db", execute_db, extract_db, validate_db)
+register_action(ActionSpec(
+    name="db",
+    execute=execute_db,
+    extract=extract_db,
+    validate=validate_db,
+    validate_config=validate_db_config,
+))
 ```
 
 ## 文档

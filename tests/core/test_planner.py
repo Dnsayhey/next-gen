@@ -2,7 +2,7 @@
 
 import pytest
 
-from nextgen.core.model import StepNode, TestCase
+from nextgen.core.model import StepNode, TestCase as CaseModel
 from nextgen.core.planner import build_graph, detect_cycle, get_execution_order
 
 
@@ -20,7 +20,7 @@ class TestBuildGraph:
     """测试 build_graph"""
 
     def test_parallel_mode_no_dependencies(self):
-        testcase = TestCase(
+        testcase = CaseModel(
             version=1,
             steps={
                 "a": make_step("a"),
@@ -32,7 +32,7 @@ class TestBuildGraph:
         assert graph == {"a": [], "b": []}
 
     def test_sequential_mode_auto_dependencies(self):
-        testcase = TestCase(
+        testcase = CaseModel(
             version=1,
             steps={
                 "a": make_step("a"),
@@ -45,7 +45,7 @@ class TestBuildGraph:
         assert graph == {"a": [], "b": ["a"], "c": ["b"]}
 
     def test_sequential_mode_with_explicit_dependencies(self):
-        testcase = TestCase(
+        testcase = CaseModel(
             version=1,
             steps={
                 "a": make_step("a"),
@@ -58,7 +58,7 @@ class TestBuildGraph:
         assert graph == {"a": [], "b": ["a"], "c": ["a"]}
 
     def test_with_dependencies(self):
-        testcase = TestCase(
+        testcase = CaseModel(
             version=1,
             steps={
                 "a": make_step("a"),

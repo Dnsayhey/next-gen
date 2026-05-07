@@ -496,11 +496,16 @@ class TestCase:
 
 **Action 注册表：**
 ```python
-SUPPORTED_ACTIONS = {"request", "db"}
+@dataclass(frozen=True)
+class ActionSpec:
+    name: str
+    execute: ActionExecute
+    extract: ActionExtract
+    validate: ActionValidate
+    validate_config: ActionConfigValidator | None = None
 
-def register_action(action_type: str) -> None:
-    """注册新的 action 类型"""
-    SUPPORTED_ACTIONS.add(action_type)
+def register_action(spec: ActionSpec) -> None: ...
+def get_action(name: str) -> ActionSpec | None: ...
 ```
 
 ### 6.2 Context（变量系统）
@@ -546,24 +551,7 @@ def get_execution_order(graph: dict[str, list[str]]) -> list[list[str]]: ...
 - hook 生命周期调度
 - 自动发现并加载 `hooks.py`
 
-**Executor 注册表：**
-```python
-EXECUTOR_REGISTRY = {
-    "request": {
-        "execute": execute_request,
-        "extract": extract_variables,
-        "validate": validate_response,
-    },
-}
-
-def register_executor(action_type, execute_fn, extract_fn, validate_fn) -> None:
-    """注册新的 executor"""
-    EXECUTOR_REGISTRY[action_type] = {
-        "execute": execute_fn,
-        "extract": extract_fn,
-        "validate": validate_fn,
-    }
-```
+Scheduler 从 Action 注册表读取 `execute / extract / validate`，不再维护独立 executor 注册表。
 
 ### 6.5 Hooks（hook 注册表）
 
@@ -699,12 +687,15 @@ def validate_db(result: dict, assertions: list) -> list[str]:
     ...
 
 # 2. 注册
-from nextgen.parser.loader import register_action, register_action_validator
-from nextgen.core.scheduler import register_executor
+from nextgen import ActionSpec, register_action
 
-register_action("db")
-register_action_validator("db", validate_db_config)
-register_executor("db", execute_db, extract_db, validate_db)
+register_action(ActionSpec(
+    name="db",
+    execute=execute_db,
+    extract=extract_db,
+    validate=validate_db,
+    validate_config=validate_db_config,
+))
 ```
 
 ---

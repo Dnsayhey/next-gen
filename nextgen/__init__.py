@@ -1,5 +1,9 @@
 """nextgen public API"""
 
+from nextgen.bootstrap import load_builtin_actions
+from nextgen.core.actions import ActionSpec, register_action
 from nextgen.core.hooks import register_hook
 
-__all__ = ["register_hook"]
+load_builtin_actions()
+
+__all__ = ["ActionSpec", "register_action", "register_hook"]

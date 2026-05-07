@@ -1,10 +1,9 @@
 """JSON 报告生成器"""
 
 import json
-from dataclasses import asdict
 from typing import Any
 
-from nextgen.core.model import StepStatus, TestResult
+from nextgen.core.model import StepStatus, TestResult, TestStatus
 
 
 def to_json(result: TestResult, indent: int = 2) -> str:
@@ -13,18 +12,23 @@ def to_json(result: TestResult, indent: int = 2) -> str:
     def serialize(obj: Any) -> Any:
         if isinstance(obj, StepStatus):
             return obj.value
+        if isinstance(obj, TestStatus):
+            return obj.value
         return obj
 
     data = {
         "testcase": result.testcase,
+        "status": result.status.value if result.status else None,
         "total_duration_ms": result.total_duration_ms,
         "summary": result.summary,
+        "errors": result.errors,
         "steps": [
             {
                 "name": s.name,
                 "status": s.status.value,
                 "duration_ms": s.duration_ms,
                 "request": s.request_summary,
+                "response_status": s.response_status,
                 "error": s.error,
             }
             for s in result.steps
