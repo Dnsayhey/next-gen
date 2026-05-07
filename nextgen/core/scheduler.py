@@ -15,6 +15,7 @@ from nextgen.core.model import (
     TestCase,
     TestResult,
 )
+from nextgen.core.planner import build_graph
 from nextgen.executors.http import execute_request, extract_variables, validate_response
 from nextgen.executors.db import execute_query, extract_variables as db_extract, validate_result
 
@@ -95,6 +96,7 @@ class Scheduler:
         self.testcase = testcase
         self.context = Context(testcase.vars)
         self.semaphore = asyncio.Semaphore(max_concurrency)
+        self.graph = build_graph(testcase)
 
         self.steps: dict[str, StepRuntime] = {
             name: StepRuntime(node)
@@ -107,7 +109,7 @@ class Scheduler:
             step.status == StepStatus.PENDING
             and all(
                 self.steps[d].status == StepStatus.SUCCESS
-                for d in step.node.depends_on
+                for d in self.graph[step.node.name]
             )
         )
 
@@ -115,7 +117,7 @@ class Scheduler:
         """判断步骤是否应跳过"""
         return any(
             self.steps[d].status in (StepStatus.FAILED, StepStatus.SKIPPED)
-            for d in step.node.depends_on
+            for d in self.graph[step.node.name]
         )
 
     async def _execute_step_logic(self, step: StepRuntime) -> None:
@@ -125,6 +127,12 @@ class Scheduler:
             for key, value in step.node.set_vars.items():
                 rendered = self.context.render(value)
                 self.context.set(key, rendered)
+
+        # 条件执行（可使用当前步骤的 set_vars）
+        if not evaluate_condition(step.node.when, self.context):
+            step.status = StepStatus.SKIPPED
+            logger.info(f"条件不满足，跳过步骤: {step.node.name}")
+            return
 
         action_type = step.node.action_type
 
@@ -152,47 +160,30 @@ class Scheduler:
 
         step.status = StepStatus.SUCCESS
 
-    async def run_step(self, step: StepRuntime) -> None:
-        """执行单个步骤（支持超时）"""
-        async with self.semaphore:
+    async def _run_step_with_retry(self, step: StepRuntime) -> None:
+        """执行单个步骤，重试和跳过都在一个生命周期内完成"""
+        max_retry = step.node.config.get("retry", 0)
+
+        while True:
             step.status = StepStatus.RUNNING
-            step.start_time = time.time()
 
             try:
-                # 获取步骤级超时配置
-                step_timeout = step.node.config.get("timeout")
-
-                if step_timeout:
-                    # 使用 asyncio.wait_for 实现超时
-                    await asyncio.wait_for(
-                        self._execute_step_logic(step),
-                        timeout=step_timeout,
-                    )
-                else:
-                    await self._execute_step_logic(step)
-
-            except asyncio.TimeoutError:
-                step.error = f"步骤执行超时（{step.node.config.get('timeout')}秒）"
-                step.status = StepStatus.FAILED
-                logger.error(f"步骤 {step.node.name} 超时")
+                await self._execute_step_logic(step)
+                return
 
             except Exception as e:
                 step.error = str(e)
 
-                # 重试逻辑
-                max_retry = step.node.config.get("retry", 0)
                 if step.retry_count < max_retry:
                     step.retry_count += 1
                     step.status = StepStatus.RETRYING
 
                     # 计算重试延迟
                     if step.node.config.get("retry_backoff"):
-                        # 指数退避
                         base_delay = step.node.config.get("retry_delay", 1)
                         max_delay = step.node.config.get("retry_max_delay", 60)
                         delay = min(base_delay * (2 ** (step.retry_count - 1)), max_delay)
                     else:
-                        # 固定间隔
                         delay = step.node.config.get("retry_delay", 1)
 
                     logger.warning(
@@ -201,10 +192,32 @@ class Scheduler:
                         f"等待 {delay}秒"
                     )
                     await asyncio.sleep(delay)
-                    return await self.run_step(step)
+                    continue
 
                 step.status = StepStatus.FAILED
                 logger.error(f"步骤 {step.node.name} 失败: {e}")
+                return
+
+    async def run_step(self, step: StepRuntime) -> None:
+        """执行单个步骤（步骤级超时覆盖全部重试）"""
+        async with self.semaphore:
+            step.start_time = time.time()
+
+            try:
+                step_timeout = step.node.config.get("timeout")
+
+                if step_timeout:
+                    await asyncio.wait_for(
+                        self._run_step_with_retry(step),
+                        timeout=step_timeout,
+                    )
+                else:
+                    await self._run_step_with_retry(step)
+
+            except asyncio.TimeoutError:
+                step.error = f"步骤执行超时（{step.node.config.get('timeout')}秒）"
+                step.status = StepStatus.FAILED
+                logger.error(f"步骤 {step.node.name} 超时")
 
             finally:
                 step.end_time = time.time()
@@ -228,12 +241,6 @@ class Scheduler:
                 if self.should_skip(s):
                     s.status = StepStatus.SKIPPED
                     logger.info(f"跳过步骤: {s.node.name}")
-
-            # 检查条件执行
-            for s in pending:
-                if s.status == StepStatus.PENDING and not evaluate_condition(s.node.when, self.context):
-                    s.status = StepStatus.SKIPPED
-                    logger.info(f"条件不满足，跳过步骤: {s.node.name}")
 
             # 找出可执行的步骤
             runnable = [s for s in pending if self.is_runnable(s)]
