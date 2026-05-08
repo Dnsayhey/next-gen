@@ -101,6 +101,46 @@ uv run nextgen examples/hook_demo.yaml --verbose
 
 `examples/hook_demo.yaml` 会自动加载同目录下的 [examples/hooks.py](/Users/yanlei/Projects/python/next-gen/examples/hooks.py:1)，用来演示自定义 hook 的发现与注册。
 
+## 执行结果（JSON）
+
+CLI 会将结果以 JSON 输出到 stdout。每个步骤包含：
+
+- `response_status`：HTTP 状态码（若有）
+- `action_input`：执行器收到的已渲染输入（便于排查变量替换与参数问题）
+- `action_output`：执行器输出快照（HTTP 为 `status_code/headers/body`，DB 为 `row_count/columns/rows`）
+
+失败定位语义：
+
+- 请求/连接阶段失败：`action_input` 有值，`action_output` 通常为 `null`
+- 收到响应后断言失败：`action_input` 和 `action_output` 都有值
+
+示例（节选）：
+
+```json
+{
+  "name": "verify_file_uploaded",
+  "status": "failed",
+  "action": "GET https://fs.example.com/fs",
+  "response_status": 200,
+  "action_input": {
+    "type": "http",
+    "method": "GET",
+    "url": "https://fs.example.com/fs",
+    "headers": { "Authorization": "Bearer xxx" },
+    "params": { "path": "/" },
+    "body_type": null,
+    "body": null,
+    "timeout": null
+  },
+  "action_output": {
+    "status_code": 200,
+    "headers": { "content-type": "application/json" },
+    "body": { "code": 0, "infos": [] }
+  },
+  "error": "contains 断言失败: ..."
+}
+```
+
 ## 支持的请求体类型
 
 ```yaml
@@ -131,6 +171,7 @@ nextgen/
 ├── cli.py              # CLI 入口
 ├── core/
 │   ├── model.py        # AST 模型
+│   ├── errors.py       # 通用执行错误（ActionExecutionError）
 │   ├── context.py      # 变量系统
 │   ├── planner.py      # DAG 规划
 │   └── scheduler.py    # 调度器

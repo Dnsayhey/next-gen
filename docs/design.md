@@ -30,7 +30,7 @@
 
 * **变量作用域**：`set_vars` 和大部分 step hook 默认只在当前步骤内可见，`extract` 声明的变量会回写全局上下文
 * **断言操作符**：基础比较（eq / ne / gt / lt / gte / lte）+ contains
-* **报告格式**：JSON 输出到 stdout
+* **报告格式**：JSON 输出到 stdout，步骤报告包含 `action_input / action_output`
 * **DSL 格式**：支持 YAML 和 JSON 两种格式
 * **Executor / Hook 架构**：注册表模式，支持扩展 action 和自定义 hook
 
@@ -590,6 +590,18 @@ class Action(Protocol):
     def summarize(self, config: Any) -> str: ...
 ```
 
+`execute` 返回值支持以下通用字段（可选）：
+
+```python
+{
+    "action_input": {...},   # 执行器输入快照（已渲染）
+    "action_output": {...},  # 执行器输出快照（可用于失败定位）
+}
+```
+
+当执行器在拿到业务结果前失败（如网络/连接异常）时，建议抛出 `ActionExecutionError(message, action_input)`，
+调度器会将 `action_input` 带入步骤报告，便于排查。
+
 ### 6.7 DB 执行器
 
 支持 PostgreSQL、MySQL、SQLite 三种数据库。
@@ -617,6 +629,17 @@ steps:
     "rows": [{"id": 1, "name": "Alice"}, ...],
     "row_count": 1,
     "columns": ["id", "name"],
+    "action_input": {
+        "type": "db",
+        "url": "postgres://user:pass@localhost:5432/mydb",
+        "query": "SELECT * FROM users WHERE id = $1",
+        "params": [1],
+    },
+    "action_output": {
+        "row_count": 1,
+        "columns": ["id", "name"],
+        "rows": [{"id": 1, "name": "Alice"}],
+    },
 }
 ```
 
