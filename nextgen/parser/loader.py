@@ -10,6 +10,7 @@ import yaml
 from loguru import logger
 
 from nextgen.core.actions import list_actions, get_action
+from nextgen.core.hooks import parse_hook_params
 from nextgen.core.model import (
     ActionNode,
     AssertionNode,
@@ -108,20 +109,7 @@ def parse_hook_action(data: dict[str, Any]) -> HookAction:
     hook_type = list(data.keys())[0]
     raw_params = data[hook_type]
 
-    if isinstance(raw_params, dict):
-        params = raw_params
-    elif hook_type == "sleep":
-        params = {"seconds": raw_params}
-    elif hook_type == "log":
-        params = {"message": raw_params}
-    elif hook_type in {"getTimestamp", "getTimeStr", "getRandomStr"}:
-        params = {"var": raw_params}
-    elif raw_params is None:
-        params = {}
-    else:
-        params = {"value": raw_params}
-
-    return HookAction(type=hook_type, params=params)
+    return HookAction(type=hook_type, params=parse_hook_params(hook_type, raw_params))
 
 
 def expand_step_matrix(name: str, data: dict[str, Any]) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:

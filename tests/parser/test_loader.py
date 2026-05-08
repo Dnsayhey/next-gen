@@ -141,6 +141,14 @@ class TestParseHookAction:
         action = parse_hook_action({"getRandomStr": {"var": "rid", "length": 12}})
         assert action.params == {"var": "rid", "length": 12}
 
+    def test_parse_unknown_scalar_hook_uses_value_param(self):
+        action = parse_hook_action({"customHook": "raw"})
+        assert action.params == {"value": "raw"}
+
+    def test_parse_none_params_as_empty_dict(self):
+        action = parse_hook_action({"customHook": None})
+        assert action.params == {}
+
     def test_invalid_hook_format(self):
         with pytest.raises(ValueError, match="hook 格式错误"):
             parse_hook_action({"a": 1, "b": 2})

@@ -12,8 +12,10 @@ from loguru import logger
 from nextgen.core.context import Context
 
 HookHandler = Callable[[Context, dict], Awaitable[None]]
+HookParamParser = Callable[[object], dict]
 
 HOOK_REGISTRY: dict[str, HookHandler] = {}
+HOOK_PARAM_PARSERS: dict[str, HookParamParser] = {}
 _LOG_LEVELS = {"trace", "debug", "info", "success", "warning", "error", "critical"}
 
 
@@ -27,9 +29,31 @@ def register_hook(name: str):
     return decorator
 
 
+def register_hook_param_parser(name: str):
+    """注册 hook 参数简写解析函数"""
+
+    def decorator(func: HookParamParser) -> HookParamParser:
+        HOOK_PARAM_PARSERS[name] = func
+        return func
+
+    return decorator
+
+
 def get_hook(name: str) -> HookHandler | None:
     """获取已注册的 hook"""
     return HOOK_REGISTRY.get(name)
+
+
+def parse_hook_params(name: str, raw_params: object) -> dict:
+    """解析 hook 参数，优先使用 hook 自己注册的简写规则。"""
+    if isinstance(raw_params, dict):
+        return raw_params
+    parser = HOOK_PARAM_PARSERS.get(name)
+    if parser is not None:
+        return parser(raw_params)
+    if raw_params is None:
+        return {}
+    return {"value": raw_params}
 
 
 async def _hook_sleep(ctx: Context, params: dict) -> None:
@@ -85,6 +109,23 @@ def _required_var(params: dict) -> str:
     if not var_name:
         raise ValueError("hook 参数必须包含 var")
     return str(var_name)
+
+
+@register_hook_param_parser("sleep")
+def _parse_sleep_params(raw_params: object) -> dict:
+    return {"seconds": raw_params}
+
+
+@register_hook_param_parser("log")
+def _parse_log_params(raw_params: object) -> dict:
+    return {"message": raw_params}
+
+
+@register_hook_param_parser("getTimestamp")
+@register_hook_param_parser("getTimeStr")
+@register_hook_param_parser("getRandomStr")
+def _parse_var_params(raw_params: object) -> dict:
+    return {"var": raw_params}
 
 
 def discover_hooks(testcase_path: str | Path, cwd: str | Path) -> list[Path]:
