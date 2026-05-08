@@ -21,6 +21,8 @@ steps:
     validate:
       - eq: [$.args.name, test]
       - eq: [$.args.age, "25"]
+      - in: [$.args.name, [test, demo]]
+      - len_eq: [$.args.name, 4]
 
   # 2. JSON POST 请求 + 变量提取
   post_json:
@@ -34,6 +36,10 @@ steps:
       request_body: $.json
     validate:
       - eq: [$.json.username, admin]
+      - starts_with: [$.json.username, ad]
+      - ends_with: [$.json.password, "456"]
+      - matches: [$.json.username, "^adm"]
+      - not_contains: [$.json.username, guest]
 
   # 3. Form 表单提交
   post_form:

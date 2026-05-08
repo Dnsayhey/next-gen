@@ -222,8 +222,26 @@ validate:
   - lte: [$.count, 100]        # 小于等于
 
   # 字符串
-  - contains: [$.message, success]  # 包含
+  - contains: [$.message, success]      # 包含
+  - not_contains: [$.message, error]    # 不包含
+  - starts_with: [$.name, user_]        # 以前缀开头
+  - ends_with: [$.file, .json]          # 以后缀结尾
+  - matches: [$.email, "^[^@]+@[^@]+$"] # 正则匹配
+
+  # 集合
+  - in: [$.status, [active, pending]]   # 在候选列表中
+  - not_in: [$.role, [banned]]          # 不在候选列表中
+
+  # 长度
+  - len_eq: [$.items, 3]
+  - len_ne: [$.items, 0]
+  - len_gt: [$.items, 0]
+  - len_lt: [$.items, 10]
+  - len_gte: [$.items, 1]
+  - len_lte: [$.items, 100]
 ```
+
+`matches` 使用 Python 标准库 `re.search` 语义；如果需要整串匹配，请在正则中显式使用 `^` / `$`。
 
 ### 4.5 执行配置
 
