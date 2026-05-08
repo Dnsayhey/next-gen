@@ -7,6 +7,7 @@ import time
 import pytest
 
 from nextgen.core.actions import ActionSpec, register_action, restore_actions, snapshot_actions
+from nextgen.core.errors import ActionExecutionError
 from nextgen.core.model import ActionNode, HookAction, StepNode, StepStatus, TestCase as CaseModel
 from nextgen.core.scheduler import Scheduler
 from nextgen.core.hooks import register_hook
@@ -201,6 +202,64 @@ class TestScheduler:
         assert result.steps[0].status == StepStatus.SUCCESS
         assert scheduler_executor_registry == ["execute:flaky", "execute:flaky"]
         assert scheduler.steps["flaky"].retry_count == 1
+
+    @pytest.mark.asyncio
+    async def test_failed_action_can_attach_request_snapshot(self):
+        actions = snapshot_actions()
+
+        async def execute(config, ctx):
+            raise ActionExecutionError(
+                "connection failed",
+                {
+                    "type": "http",
+                    "method": "GET",
+                    "url": "https://example.com/api",
+                    "headers": {"Authorization": "Bearer token"},
+                    "params": {"q": "test"},
+                    "body_type": None,
+                    "body": None,
+                    "timeout": None,
+                },
+            )
+
+        register_action(ActionSpec(
+            name="snapshot_failure",
+            parse_config=lambda config: config,
+            execute=execute,
+            extract=lambda result, config, ctx: {},
+            validate=lambda result, assertions: [],
+            summarize=lambda config: "GET https://example.com/api",
+        ))
+
+        try:
+            testcase = CaseModel(
+                version=1,
+                mode="parallel",
+                steps={
+                    "failing": StepNode(
+                        name="failing",
+                        action=ActionNode(type="snapshot_failure", config={}),
+                    ),
+                },
+            )
+
+            scheduler = Scheduler(testcase)
+            result = await scheduler.run()
+        finally:
+            restore_actions(actions)
+
+        assert result.steps[0].status == StepStatus.FAILED
+        assert result.steps[0].action_input == {
+            "type": "http",
+            "method": "GET",
+            "url": "https://example.com/api",
+            "headers": {"Authorization": "Bearer token"},
+            "params": {"q": "test"},
+            "body_type": None,
+            "body": None,
+            "timeout": None,
+        }
+        assert result.steps[0].action_output is None
 
     @pytest.mark.asyncio
     async def test_testcase_and_step_hooks_run_in_expected_order(

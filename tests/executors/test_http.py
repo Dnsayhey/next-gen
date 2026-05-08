@@ -5,6 +5,7 @@ import pytest
 from nextgen.core.context import Context
 from nextgen.core.model import AssertionNode
 from nextgen.executors.http.config import parse_request_config, summarize_request
+from nextgen.executors.http.client import execute_request
 from nextgen.executors.http.extract import extract_variables
 from nextgen.executors.http.model import RequestConfig
 from nextgen.executors.http.utils import load_file_content, resolve_case_path
@@ -51,6 +52,67 @@ class TestRequestConfig:
         config = parse_request_config({"method": "get", "url": "http://test.com"})
         assert config == RequestConfig(method="GET", url="http://test.com")
         assert summarize_request(config) == "GET http://test.com"
+
+    @pytest.mark.asyncio
+    async def test_execute_request_includes_rendered_request_snapshot(self, monkeypatch):
+        captured = {}
+
+        class FakeResponse:
+            status_code = 200
+            headers = {"content-type": "application/json"}
+
+            def json(self):
+                return {"code": 0}
+
+        class FakeClient:
+            def __init__(self, timeout=None):
+                self.timeout = timeout
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return None
+
+            async def request(self, **kwargs):
+                captured.update(kwargs)
+                return FakeResponse()
+
+        monkeypatch.setattr("nextgen.executors.http.client.httpx.AsyncClient", FakeClient)
+
+        request = RequestConfig(
+            method="POST",
+            url="${base_url}/login",
+            headers={"Authorization": "Bearer ${token}"},
+            params={"mobile": "${mobile}"},
+            json={"password": "${password}"},
+            timeout=3,
+        )
+        ctx = Context({
+            "base_url": "https://example.com",
+            "token": "abc123",
+            "mobile": "13100000000",
+            "password": "secret",
+        })
+
+        result = await execute_request(request, ctx)
+
+        assert captured["url"] == "https://example.com/login"
+        assert result["action_input"] == {
+            "type": "http",
+            "method": "POST",
+            "url": "https://example.com/login",
+            "headers": {"Authorization": "Bearer abc123"},
+            "params": {"mobile": "13100000000"},
+            "body_type": "json",
+            "body": {"password": "secret"},
+            "timeout": 3,
+        }
+        assert result["action_output"] == {
+            "status_code": 200,
+            "headers": {"content-type": "application/json"},
+            "body": {"code": 0},
+        }
 
 
 class TestExtractVariables:

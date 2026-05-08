@@ -94,6 +94,8 @@ class StepResult:
     duration_ms: int
     action_summary: str  # e.g. "POST /login" / "sqlite: SELECT ..."
     response_status: int | None = None
+    action_input: dict[str, Any] | None = None
+    action_output: dict[str, Any] | None = None
     error: str | None = None
     extracted: dict[str, Any] = field(default_factory=dict)
 

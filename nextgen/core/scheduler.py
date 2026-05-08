@@ -122,6 +122,8 @@ class Scheduler:
                 duration_ms=runtime.duration_ms,
                 action_summary=runtime.action_summary,
                 response_status=runtime.result.get("status_code") if runtime.result else None,
+                action_input=runtime.result.get("action_input") if runtime.result else None,
+                action_output=runtime.result.get("action_output") if runtime.result else None,
                 error=runtime.error,
             ))
 
@@ -244,6 +246,9 @@ class Scheduler:
                         return
 
                     except Exception as e:
+                        action_input = getattr(e, "action_input", None)
+                        if action_input is not None:
+                            step.result = {"action_input": action_input}
                         step.error = str(e)
 
                         if step.retry_count < max_retry:

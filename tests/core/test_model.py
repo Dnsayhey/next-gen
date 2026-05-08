@@ -105,6 +105,8 @@ class TestStepResult:
         assert result.status == StepStatus.SUCCESS
         assert result.duration_ms == 100
         assert result.response_status is None
+        assert result.action_input is None
+        assert result.action_output is None
         assert result.error is None
 
 

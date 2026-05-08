@@ -3,7 +3,9 @@
 import pytest
 
 from nextgen.core.context import Context
+from nextgen.core.errors import ActionExecutionError
 from nextgen.core.model import AssertionNode
+from nextgen.executors.db.client import execute_query
 from nextgen.executors.db.config import parse_db_config, summarize_db
 from nextgen.executors.db.extract import extract_variables
 from nextgen.executors.db.model import DbConfig
@@ -35,6 +37,72 @@ class TestDbConfig:
     def test_missing_query(self):
         with pytest.raises(ValueError, match="query"):
             parse_db_config({"url": "sqlite:///tmp/test.db"})
+
+    @pytest.mark.asyncio
+    async def test_execute_query_includes_rendered_action_input_and_output(self, monkeypatch):
+        async def fake_execute(url, query, params):
+            assert url == "sqlite:///tmp/test.db"
+            assert query == "SELECT * FROM users WHERE id=7"
+            assert params == ["7", 1]
+            return {
+                "rows": [{"id": 7, "name": "Alice"}],
+                "row_count": 1,
+                "columns": ["id", "name"],
+            }
+
+        class FakeDriver:
+            execute = staticmethod(fake_execute)
+
+        monkeypatch.setattr("nextgen.executors.db.client.get_driver", lambda url: FakeDriver)
+
+        config = DbConfig(
+            url="${db_url}",
+            query="SELECT * FROM users WHERE id=${uid}",
+            params=["${uid}", 1],
+        )
+        ctx = Context({"db_url": "sqlite:///tmp/test.db", "uid": "7"})
+
+        result = await execute_query(config, ctx)
+
+        assert result["action_input"] == {
+            "type": "db",
+            "url": "sqlite:///tmp/test.db",
+            "query": "SELECT * FROM users WHERE id=7",
+            "params": ["7", 1],
+        }
+        assert result["action_output"] == {
+            "row_count": 1,
+            "columns": ["id", "name"],
+            "rows": [{"id": 7, "name": "Alice"}],
+        }
+
+    @pytest.mark.asyncio
+    async def test_execute_query_raises_action_execution_error_with_action_input(self, monkeypatch):
+        async def fake_execute(url, query, params):
+            raise RuntimeError("db unavailable")
+
+        class FakeDriver:
+            execute = staticmethod(fake_execute)
+
+        monkeypatch.setattr("nextgen.executors.db.client.get_driver", lambda url: FakeDriver)
+
+        config = DbConfig(
+            url="sqlite:///tmp/test.db",
+            query="SELECT 1",
+            params=[],
+        )
+        ctx = Context()
+
+        with pytest.raises(ActionExecutionError) as exc_info:
+            await execute_query(config, ctx)
+
+        assert str(exc_info.value) == "db unavailable"
+        assert exc_info.value.action_input == {
+            "type": "db",
+            "url": "sqlite:///tmp/test.db",
+            "query": "SELECT 1",
+            "params": [],
+        }
 
 
 class TestGetDriver:
