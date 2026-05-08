@@ -274,6 +274,105 @@ class TestParseTestcase:
         assert len(testcase.steps) == 1
         assert testcase.vars["base_url"] == "http://test.com"
 
+    def test_matrix_expands_steps_and_dependencies(self):
+        data = {
+            "version": 1,
+            "steps": {
+                "login": {
+                    "matrix": {
+                        "user": ["admin", "user1"],
+                    },
+                    "request": {
+                        "method": "POST",
+                        "url": "http://test.com/login",
+                        "json": {"username": "${user}"},
+                    },
+                },
+                "profile": {
+                    "depends_on": ["login"],
+                    "request": {
+                        "method": "GET",
+                        "url": "http://test.com/profile",
+                    },
+                },
+            },
+        }
+
+        testcase = parse_testcase(data)
+
+        assert list(testcase.steps.keys()) == [
+            "login[user=admin]",
+            "login[user=user1]",
+            "profile",
+        ]
+        assert testcase.steps["login[user=admin]"].set_vars["user"] == "admin"
+        assert testcase.steps["login[user=user1]"].set_vars["user"] == "user1"
+        assert testcase.steps["profile"].depends_on == [
+            "login[user=admin]",
+            "login[user=user1]",
+        ]
+
+    def test_matrix_cartesian_product(self):
+        data = {
+            "version": 1,
+            "steps": {
+                "combo": {
+                    "matrix": {
+                        "user": ["admin", "user1"],
+                        "env": ["dev", "prod"],
+                    },
+                    "request": {
+                        "method": "GET",
+                        "url": "http://test.com",
+                    },
+                }
+            },
+        }
+
+        testcase = parse_testcase(data)
+
+        assert list(testcase.steps.keys()) == [
+            "combo[user=admin,env=dev]",
+            "combo[user=admin,env=prod]",
+            "combo[user=user1,env=dev]",
+            "combo[user=user1,env=prod]",
+        ]
+        assert testcase.steps["combo[user=admin,env=dev]"].set_vars == {
+            "user": "admin",
+            "env": "dev",
+        }
+
+    def test_matrix_rejects_empty_definition(self):
+        data = {
+            "version": 1,
+            "steps": {
+                "login": {
+                    "matrix": {},
+                    "request": {"method": "GET", "url": "http://test.com"},
+                }
+            },
+        }
+        with pytest.raises(ValueError, match="matrix 格式错误"):
+            parse_testcase(data)
+
+    def test_matrix_rejects_set_vars_conflict(self):
+        data = {
+            "version": 1,
+            "steps": {
+                "login": {
+                    "matrix": {
+                        "user": ["admin"],
+                    },
+                    "set_vars": {
+                        "user": "guest",
+                    },
+                    "request": {"method": "GET", "url": "http://test.com"},
+                }
+            },
+        }
+        with pytest.raises(ValueError, match="matrix 变量与 set_vars 重名"):
+            parse_testcase(data)
+
     def test_missing_version(self):
         data = {"steps": {"test": {"request": {"method": "GET", "url": "http://test.com"}}}}
         with pytest.raises(ValueError, match="version"):
@@ -353,3 +452,28 @@ class TestLoadTestcase:
         assert len(testcase.steps) == 1
         assert testcase.source_path == str(file.resolve())
         assert testcase.base_dir == str(tmp_path.resolve())
+
+    def test_load_yaml_with_matrix(self, tmp_path):
+        data = {
+            "version": 1,
+            "steps": {
+                "login": {
+                    "matrix": {
+                        "user": ["admin", "user1"],
+                    },
+                    "request": {
+                        "method": "POST",
+                        "url": "http://test.com/login",
+                        "json": {"username": "${user}"},
+                    },
+                },
+            },
+        }
+        file = tmp_path / "matrix.yaml"
+        file.write_text(yaml.dump(data))
+        testcase = load_testcase(file)
+
+        assert list(testcase.steps.keys()) == [
+            "login[user=admin]",
+            "login[user=user1]",
+        ]

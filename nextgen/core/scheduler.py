@@ -12,6 +12,7 @@ from nextgen.core.condition import evaluate_condition
 from nextgen.core.context import Context
 from nextgen.core.hooks import get_hook, load_discovered_hooks
 from nextgen.core.model import (
+    AssertionNode,
     HookAction,
     StepNode,
     StepResult,
@@ -182,7 +183,15 @@ class Scheduler:
         step.result = result
 
         # 验证
-        errors = action.validate(result, step.node.validate)
+        assertions = [
+            AssertionNode(
+                op=assertion.op,
+                left=assertion.left,
+                right=step_ctx.render(assertion.right),
+            )
+            for assertion in step.node.validate
+        ]
+        errors = action.validate(result, assertions)
         if errors:
             raise AssertionError("; ".join(errors))
 

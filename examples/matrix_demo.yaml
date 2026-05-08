@@ -1,0 +1,32 @@
+version: 1
+
+vars:
+  base_url: https://httpbin.org
+
+steps:
+  # 单维 matrix：展开为 login[user=admin] / login[user=user1]
+  login:
+    matrix:
+      user: [admin, user1]
+    request:
+      method: POST
+      url: ${base_url}/post
+      json:
+        username: ${user}
+    validate:
+      - eq: [$.json.username, "${user}"]
+
+  # 多维 matrix：默认按笛卡尔积展开，生成 2 x 2 = 4 个步骤
+  search:
+    matrix:
+      keyword: [book, laptop]
+      region: [us, eu]
+    request:
+      method: GET
+      url: ${base_url}/get
+      params:
+        q: ${keyword}
+        region: ${region}
+    validate:
+      - eq: [$.args.q, "${keyword}"]
+      - eq: [$.args.region, "${region}"]

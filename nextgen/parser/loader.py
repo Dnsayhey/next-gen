@@ -1,5 +1,7 @@
 """DSL 解析器 - 支持 YAML 和 JSON 格式"""
 
+from copy import deepcopy
+from itertools import product
 import json
 from pathlib import Path
 from typing import Any
@@ -122,6 +124,36 @@ def parse_hook_action(data: dict[str, Any]) -> HookAction:
     return HookAction(type=hook_type, params=params)
 
 
+def expand_step_matrix(name: str, data: dict[str, Any]) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:
+    """展开 step matrix 模板"""
+    matrix = data.get("matrix")
+    if matrix is None:
+        return [(name, deepcopy(data), {})]
+
+    if not isinstance(matrix, dict) or not matrix:
+        raise ValueError(f"step '{name}' 的 matrix 格式错误: 期望非空 dict")
+
+    keys = list(matrix.keys())
+    value_lists: list[list[Any]] = []
+    for key in keys:
+        values = matrix[key]
+        if not isinstance(values, list) or not values:
+            raise ValueError(f"step '{name}' 的 matrix 变量 '{key}' 必须是非空 list")
+        value_lists.append(values)
+
+    base_data = deepcopy(data)
+    base_data.pop("matrix", None)
+
+    variants: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
+    for values in product(*value_lists):
+        matrix_vars = dict(zip(keys, values))
+        suffix = ",".join(f"{key}={value}" for key, value in matrix_vars.items())
+        instance_name = f"{name}[{suffix}]"
+        variants.append((instance_name, deepcopy(base_data), matrix_vars))
+
+    return variants
+
+
 def parse_step_hooks(data: dict[str, Any] | None) -> StepHooks:
     """解析步骤级 hooks"""
     if data is None:
@@ -148,6 +180,16 @@ def parse_testcase_hooks(data: dict[str, Any] | None) -> TestCaseHooks:
         before_each=[parse_hook_action(item) for item in data.get("before_each", [])],
         after_each=[parse_hook_action(item) for item in data.get("after_each", [])],
     )
+
+
+def resolve_depends_on(depends_on: list[str], matrix_map: dict[str, list[str]]) -> list[str]:
+    """将模板依赖展开为具体步骤依赖"""
+    resolved: list[str] = []
+    for dep in depends_on:
+        if dep not in matrix_map:
+            raise ValueError(f"依赖的步骤不存在: {dep}")
+        resolved.extend(matrix_map[dep])
+    return resolved
 
 
 def parse_step(name: str, data: dict[str, Any]) -> StepNode:
@@ -199,9 +241,31 @@ def parse_testcase(data: dict[str, Any]) -> TestCase:
     if mode not in ("sequential", "parallel"):
         raise ValueError(f"不支持的执行模式: {mode}，支持: sequential, parallel")
 
-    steps = {}
+    steps: dict[str, StepNode] = {}
+    matrix_map: dict[str, list[str]] = {}
+
     for name, raw in data["steps"].items():
-        steps[name] = parse_step(name, raw)
+        variants = expand_step_matrix(name, raw)
+        matrix_map[name] = [variant_name for variant_name, _, _ in variants]
+
+        for variant_name, variant_data, matrix_vars in variants:
+            step = parse_step(variant_name, variant_data)
+
+            if matrix_vars:
+                conflict = set(matrix_vars) & set(step.set_vars)
+                if conflict:
+                    raise ValueError(
+                        f"step '{name}' 的 matrix 变量与 set_vars 重名: {sorted(conflict)}"
+                    )
+                step.set_vars = {**matrix_vars, **step.set_vars}
+
+            if step.name in steps:
+                raise ValueError(f"步骤名称重复: {step.name}")
+
+            steps[step.name] = step
+
+    for step in steps.values():
+        step.depends_on = resolve_depends_on(step.depends_on, matrix_map)
 
     return TestCase(
         version=data["version"],

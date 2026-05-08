@@ -51,6 +51,15 @@ steps:
         key: value
     validate:
       - eq: [$.json.key, value]
+
+  login_matrix:
+    matrix:
+      user: [admin, user1, user2]
+    request:
+      method: POST
+      url: ${base_url}/post
+      json:
+        username: ${user}
 ```
 
 运行测试：
@@ -77,6 +86,7 @@ uv run python -m nextgen.cli demo.yaml
 - `examples/full_demo.json`：JSON 版完整示例
 - `examples/conditional_demo.yaml`：`when` 条件执行示例
 - `examples/set_vars_demo.yaml`：`set_vars` 与 `extract` 的作用域示例
+- `examples/matrix_demo.yaml`：`matrix` 参数化示例，包含单维展开和笛卡尔积展开
 - `examples/hook_demo.yaml`：`before_all / after_all / before_each / after_each / before / after` 与自定义 hook 示例
 - `examples/retry_demo.yaml`：固定间隔和指数退避重试示例
 - `examples/timeout_demo.yaml`：请求级和步骤级超时示例
