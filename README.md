@@ -183,7 +183,7 @@ nextgen/
 ├── cli.py              # CLI 入口
 ├── core/
 │   ├── model.py        # AST 模型
-│   ├── errors.py       # 通用执行错误（ActionExecutionError）
+│   ├── errors.py       # 通用错误层级
 │   ├── context.py      # 变量系统
 │   ├── planner.py      # DAG 规划
 │   └── scheduler.py    # 调度器

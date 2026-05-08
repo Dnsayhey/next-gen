@@ -47,7 +47,7 @@ class TestRequestConfig:
         node = RequestConfig(method="GET", url="http://test.com")
         assert node.body_type() is None
 
-    def test_parse_request_config(self):
+    def test_request_config_from_dict(self):
         config = RequestConfig.from_dict({"method": "get", "url": "http://test.com"})
         assert config == RequestConfig(method="GET", url="http://test.com")
         assert config.summary() == "GET http://test.com"

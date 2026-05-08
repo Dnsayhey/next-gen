@@ -16,7 +16,7 @@ from nextgen.actions.db.drivers.sqlite import resolve_db_path
 class TestDbConfig:
     """测试 DbConfig"""
 
-    def test_parse_db_config(self):
+    def test_db_config_from_dict(self):
         config = DbConfig.from_dict({
             "url": "sqlite:///tmp/test.db",
             "query": "SELECT 1",
