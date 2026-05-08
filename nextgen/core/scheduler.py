@@ -2,6 +2,7 @@
 
 import asyncio
 import time
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
@@ -130,7 +131,7 @@ class Scheduler:
         )
 
         return TestResult(
-            testcase="",  # TODO: 从文件路径获取
+            testcase=Path(self.testcase.source_path).name if self.testcase.source_path else "",
             total_duration_ms=total_ms,
             steps=results,
             status=status,

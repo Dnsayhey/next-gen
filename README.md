@@ -123,7 +123,6 @@ nextgen/
 │   ├── model.py        # AST 模型
 │   ├── context.py      # 变量系统
 │   ├── planner.py      # DAG 规划
-│   ├── protocol.py     # 协议定义
 │   └── scheduler.py    # 调度器
 ├── parser/
 │   └── loader.py       # YAML/JSON 解析
