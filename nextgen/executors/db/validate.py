@@ -2,22 +2,12 @@
 
 from typing import Any
 
-from jsonpath_ng.ext import parse as jsonpath_parse
-
-from nextgen.core.assertion import BaseValidator
+from nextgen.core.extract import jsonpath_value
 from nextgen.core.model import AssertionNode
+from nextgen.core.operators import evaluate_operator
 
 
-def _jsonpath_value(data: Any, expr: str) -> Any:
-    matches = jsonpath_parse(expr).find(data)
-    if not matches:
-        return None
-    if len(matches) == 1:
-        return matches[0].value
-    return [match.value for match in matches]
-
-
-class DbValidator(BaseValidator):
+class DbValidator:
     """DB 结果断言器"""
 
     def validate(
@@ -38,11 +28,11 @@ class DbValidator(BaseValidator):
             try:
                 left_expr = assertion.left
 
-                actual = _jsonpath_value(result, left_expr)
+                actual = jsonpath_value(result, left_expr)
 
                 expected = assertion.right
 
-                passed = self._assert(assertion.op, actual, expected)
+                passed = evaluate_operator(assertion.op, actual, expected)
                 if not passed:
                     errors.append(
                         f"{assertion.op} 断言失败: {assertion.left} "

@@ -2,22 +2,12 @@
 
 from typing import Any
 
-from jsonpath_ng.ext import parse as jsonpath_parse
-
-from nextgen.core.assertion import BaseValidator
+from nextgen.core.extract import jsonpath_value
 from nextgen.core.model import AssertionNode
+from nextgen.core.operators import evaluate_operator
 
 
-def _jsonpath_value(data: Any, expr: str) -> Any:
-    matches = jsonpath_parse(expr).find(data)
-    if not matches:
-        return None
-    if len(matches) == 1:
-        return matches[0].value
-    return [match.value for match in matches]
-
-
-class HttpValidator(BaseValidator):
+class HttpValidator:
     """HTTP 响应断言器"""
 
     def validate(
@@ -34,28 +24,21 @@ class HttpValidator(BaseValidator):
         - $.body.xxx → 从 body 命名空间提取
         """
         errors = []
-        body = result.get("body", {})
-        headers = result.get("headers", {})
+        source = _response_source(result)
 
         for assertion in assertions:
             try:
                 left_expr = assertion.left
 
-                if left_expr == "$.status_code":
-                    actual = result.get("status_code")
-                elif left_expr.startswith("$.headers."):
-                    header_name = left_expr[10:]
-                    actual = _header_value(headers, header_name)
-                elif left_expr.startswith("$.body."):
-                    actual = _jsonpath_value(body, "$." + left_expr[7:])
-                elif left_expr.startswith("$."):
-                    actual = _jsonpath_value(body, left_expr)
-                else:
-                    actual = _jsonpath_value(body, left_expr)
+                if left_expr.startswith("$.headers."):
+                    left_expr = "$.headers." + left_expr[10:].lower()
+                actual = jsonpath_value(source, left_expr)
+                if actual is None and _is_legacy_body_path(left_expr):
+                    actual = jsonpath_value(source["body"], left_expr)
 
                 expected = assertion.right
 
-                passed = self._assert(assertion.op, actual, expected)
+                passed = evaluate_operator(assertion.op, actual, expected)
                 if not passed:
                     errors.append(
                         f"{assertion.op} 断言失败: {assertion.left} "
@@ -78,13 +61,25 @@ def validate_response(
     return _validator.validate(result, assertions)
 
 
-def _header_value(headers: Any, name: str) -> Any:
+def _response_source(result: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status_code": result.get("status_code"),
+        "headers": _case_insensitive_headers(result.get("headers", {})),
+        "body": result.get("body", {}),
+    }
+
+
+def _case_insensitive_headers(headers: Any) -> dict[str, Any]:
     if not isinstance(headers, dict):
-        return None
-    if name in headers:
-        return headers[name]
-    lower_name = name.lower()
-    for key, value in headers.items():
-        if str(key).lower() == lower_name:
-            return value
-    return None
+        return {}
+    return {str(key).lower(): value for key, value in headers.items()}
+
+
+def _is_legacy_body_path(expr: Any) -> bool:
+    return (
+        isinstance(expr, str)
+        and expr.startswith("$.")
+        and not expr.startswith("$.body.")
+        and not expr.startswith("$.headers.")
+        and expr != "$.status_code"
+    )

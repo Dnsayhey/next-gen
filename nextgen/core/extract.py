@@ -59,7 +59,7 @@ def extract_value(source: Any, raw_rule: str | dict[str, Any]) -> Any:
 
     try:
         if rule.method == "jsonpath":
-            value = _extract_jsonpath(source, rule.expr)
+            value = jsonpath_value(source, rule.expr)
         elif rule.method == "regex":
             value = _extract_regex(source, rule.expr, rule.group)
         else:
@@ -74,7 +74,8 @@ def extract_value(source: Any, raw_rule: str | dict[str, Any]) -> Any:
     return value
 
 
-def _extract_jsonpath(source: Any, expr: str) -> Any:
+def jsonpath_value(source: Any, expr: str) -> Any:
+    """Return the JSONPath match value, or all values when multiple paths match."""
     matches = jsonpath_parse(expr).find(source)
     if not matches:
         return None

@@ -61,7 +61,7 @@ async def execute_request(
     """执行 HTTP 请求
 
     Returns:
-        dict: {"status_code": int, "body": Any, "headers": dict, "response": httpx.Response}
+        dict: {"status_code": int, "body": Any, "headers": dict}
     """
     base_dir = ctx.metadata.get("base_dir")
 
@@ -178,5 +178,4 @@ async def execute_request(
             "headers": dict(response.headers),
             "body": body,
         },
-        "response": response,
     }
