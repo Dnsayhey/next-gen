@@ -2,6 +2,9 @@
 
 from pathlib import Path
 
+import pytest
+
+from nextgen.core.context import Context
 from nextgen.core.hooks import HOOK_REGISTRY, discover_hooks
 
 
@@ -36,6 +39,16 @@ class TestDiscoverHooks:
         found = discover_hooks(case_file, tmp_path / "project")
         assert found == []
 
+    def test_discover_hooks_returns_empty_when_no_hook_files_exist(self, tmp_path):
+        cases = tmp_path / "testcases" / "api"
+        cases.mkdir(parents=True)
+        case_file = cases / "login.yaml"
+        case_file.write_text("version: 1\nsteps: {}\n", encoding="utf-8")
+
+        found = discover_hooks(case_file, tmp_path)
+
+        assert found == []
+
 
 class TestBuiltinHooks:
     """测试内置 hook 注册"""
@@ -43,3 +56,22 @@ class TestBuiltinHooks:
     def test_builtin_hooks_are_registered(self):
         for name in ["sleep", "log", "getTimestamp", "getTimeStr", "getRandomStr"]:
             assert name in HOOK_REGISTRY
+
+    @pytest.mark.asyncio
+    async def test_log_rejects_unknown_level(self):
+        with pytest.raises(ValueError, match="不支持的日志级别"):
+            await HOOK_REGISTRY["log"](Context(), {"level": "__dict__", "message": "hello"})
+
+    @pytest.mark.asyncio
+    async def test_var_hooks_require_var_param(self):
+        with pytest.raises(ValueError, match="必须包含 var"):
+            await HOOK_REGISTRY["getTimestamp"](Context(), {})
+
+    @pytest.mark.asyncio
+    async def test_get_time_str_sets_formatted_value(self):
+        ctx = Context()
+
+        await HOOK_REGISTRY["getTimeStr"](ctx, {"var": "today", "format": "%Y"})
+
+        assert len(ctx.get("today")) == 4
+        assert ctx.get("today").isdigit()

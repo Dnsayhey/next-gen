@@ -17,6 +17,8 @@ from nextgen.parser.loader import (
     load_testcase,
     parse_hook_action,
     parse_assertions,
+    parse_step_hooks,
+    parse_testcase_hooks,
     parse_step,
     parse_testcase,
 )
@@ -143,6 +145,14 @@ class TestParseHookAction:
         with pytest.raises(ValueError, match="hook 格式错误"):
             parse_hook_action({"a": 1, "b": 2})
 
+    def test_parse_step_hooks_rejects_non_dict(self):
+        with pytest.raises(ValueError, match="step hooks 格式错误"):
+            parse_step_hooks([])
+
+    def test_parse_testcase_hooks_rejects_non_dict(self):
+        with pytest.raises(ValueError, match="testcase hooks 格式错误"):
+            parse_testcase_hooks([])
+
 
 class TestParseStep:
     """测试 parse_step"""
@@ -164,6 +174,14 @@ class TestParseStep:
     def test_missing_action(self):
         with pytest.raises(ValueError, match="缺少 action 字段"):
             parse_step("test", {"depends_on": ["a"]})
+
+    def test_rejects_multiple_actions_in_one_step(self):
+        data = {
+            "request": {"method": "GET", "url": "http://test.com"},
+            "db": {"url": "sqlite:///tmp/test.db", "query": "SELECT 1"},
+        }
+        with pytest.raises(ValueError, match="包含多个 action"):
+            parse_step("test", data)
 
     def test_step_with_when_list(self):
         data = {

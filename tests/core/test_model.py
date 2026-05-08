@@ -1,5 +1,7 @@
 """model.py 单元测试"""
 
+import pytest
+
 from nextgen.core.model import (
     ActionNode,
     AssertionNode,
@@ -25,6 +27,10 @@ class TestStepStatus:
         assert StepStatus.FAILED == "failed"
         assert StepStatus.SKIPPED == "skipped"
         assert StepStatus.RETRYING == "retrying"
+
+    def test_invalid_status_value(self):
+        with pytest.raises(ValueError, match="unknown"):
+            StepStatus("unknown")
 
 
 class TestAssertionNode:

@@ -52,6 +52,8 @@ def get_execution_order(graph: dict[str, list[str]]) -> list[list[str]]:
     """获取执行顺序（拓扑排序）
 
     返回分层列表，同一层的步骤可并行执行
+    这是 planner 的辅助能力，供 dry-run、可视化和调试使用；
+    当前 scheduler 使用运行时动态调度，不直接依赖该函数。
     """
     # 计算入度
     in_degree = {node: 0 for node in graph}
