@@ -788,9 +788,6 @@ class DbConfig:
 
 
 # 1. 实现 action 函数
-def parse_db_config(raw: dict[str, Any]) -> DbConfig:
-    ...
-
 async def execute_db(config: DbConfig, ctx: Context) -> ActionResult:
     ...
 
@@ -800,19 +797,16 @@ def extract_db(result: dict, config: dict, ctx: Context) -> dict:
 def validate_db(result: dict, assertions: list) -> list[str]:
     ...
 
-def summarize_db(config: DbConfig) -> str:
-    ...
-
 # 2. 注册
 from nextgen import ActionSpec, register_action
 
 register_action(ActionSpec(
     name="db",
-    parse_config=parse_db_config,
+    parse_config=DbConfig.from_dict,
     execute=execute_db,
     extract=extract_db,
     validate=validate_db,
-    summarize=summarize_db,
+    summarize=lambda config: config.summary(),
 ))
 ```
 

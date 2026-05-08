@@ -10,7 +10,6 @@ import yaml
 from nextgen.bootstrap import load_builtin_actions
 from nextgen.core.errors import ParseError
 from nextgen.core.model import AndCondition, ExprCondition, OrCondition, StepNode, TestCase as CaseModel
-from nextgen.executors.http.config import parse_request_config
 from nextgen.executors.http.model import RequestConfig
 from nextgen.parser.loader import (
     find_action_type,
@@ -75,18 +74,18 @@ class TestParseRequest:
 
     def test_valid_request(self):
         config = {"method": "GET", "url": "http://test.com"}
-        parsed = parse_request_config(config)
+        parsed = RequestConfig.from_dict(config)
         assert parsed == RequestConfig(method="GET", url="http://test.com")
 
     def test_missing_method(self):
         config = {"url": "http://test.com"}
         with pytest.raises(ParseError, match="method"):
-            parse_request_config(config)
+            RequestConfig.from_dict(config)
 
     def test_missing_url(self):
         config = {"method": "GET"}
         with pytest.raises(ValueError, match="url"):
-            parse_request_config(config)
+            RequestConfig.from_dict(config)
 
     def test_mutual_exclusion(self):
         config = {
@@ -96,7 +95,7 @@ class TestParseRequest:
             "form": {"key": "value"},
         }
         with pytest.raises(ValueError, match="不能同时出现"):
-            parse_request_config(config)
+            RequestConfig.from_dict(config)
 
 
 class TestParseAssertions:

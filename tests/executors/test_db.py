@@ -6,7 +6,6 @@ from nextgen.core.context import Context
 from nextgen.core.errors import ActionExecutionError
 from nextgen.core.model import AssertionNode
 from nextgen.executors.db.client import execute_query
-from nextgen.executors.db.config import parse_db_config, summarize_db
 from nextgen.executors.db.extract import extract_variables
 from nextgen.executors.db.model import DbConfig
 from nextgen.executors.db.validate import validate_result
@@ -18,7 +17,7 @@ class TestDbConfig:
     """测试 DbConfig"""
 
     def test_parse_db_config(self):
-        config = parse_db_config({
+        config = DbConfig.from_dict({
             "url": "sqlite:///tmp/test.db",
             "query": "SELECT 1",
             "params": ["x"],
@@ -29,19 +28,19 @@ class TestDbConfig:
             query="SELECT 1",
             params=["x"],
         )
-        assert summarize_db(config) == "sqlite: SELECT 1"
+        assert config.summary() == "sqlite: SELECT 1"
 
     def test_missing_url(self):
         with pytest.raises(ValueError, match="url"):
-            parse_db_config({"query": "SELECT 1"})
+            DbConfig.from_dict({"query": "SELECT 1"})
 
     def test_missing_query(self):
         with pytest.raises(ValueError, match="query"):
-            parse_db_config({"url": "sqlite:///tmp/test.db"})
+            DbConfig.from_dict({"url": "sqlite:///tmp/test.db"})
 
     def test_params_must_be_list(self):
         with pytest.raises(ValueError, match="db.params 必须是 list"):
-            parse_db_config({
+            DbConfig.from_dict({
                 "url": "sqlite:///tmp/test.db",
                 "query": "SELECT 1",
                 "params": {"id": 1},

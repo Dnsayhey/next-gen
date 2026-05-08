@@ -5,7 +5,6 @@ import pytest
 from nextgen.core.context import Context
 from nextgen.core.files import load_file_content, resolve_case_path
 from nextgen.core.model import AssertionNode
-from nextgen.executors.http.config import parse_request_config, summarize_request
 from nextgen.executors.http.client import execute_request
 from nextgen.executors.http.extract import extract_variables
 from nextgen.executors.http.model import RequestConfig
@@ -49,9 +48,9 @@ class TestRequestConfig:
         assert node.body_type() is None
 
     def test_parse_request_config(self):
-        config = parse_request_config({"method": "get", "url": "http://test.com"})
+        config = RequestConfig.from_dict({"method": "get", "url": "http://test.com"})
         assert config == RequestConfig(method="GET", url="http://test.com")
-        assert summarize_request(config) == "GET http://test.com"
+        assert config.summary() == "GET http://test.com"
 
     @pytest.mark.asyncio
     async def test_execute_request_includes_rendered_request_snapshot(self, monkeypatch):
