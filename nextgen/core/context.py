@@ -1,9 +1,13 @@
 """变量上下文 - 管理测试执行过程中的变量"""
 
+import re
 from copy import deepcopy
 from typing import Any
 
 from loguru import logger
+
+_VAR_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+_MAX_RENDER_DEPTH = 10
 
 
 class Context:
@@ -54,10 +58,21 @@ class Context:
             return value
 
         result = value
-        for k, v in self.vars.items():
-            placeholder = f"${{{k}}}"
-            if placeholder in result:
-                result = result.replace(placeholder, str(v))
+        for _ in range(_MAX_RENDER_DEPTH):
+            changed = False
+
+            def replace(match: re.Match[str]) -> str:
+                nonlocal changed
+                key = match.group(1)
+                if key not in self.vars:
+                    return match.group(0)
+                changed = True
+                return str(self.vars[key])
+
+            next_result = _VAR_PATTERN.sub(replace, result)
+            result = next_result
+            if not changed:
+                break
 
         return result
 

@@ -2,9 +2,22 @@
 
 from typing import Any
 from urllib.parse import urlparse
+from pathlib import Path
 
 import aiosqlite
 from loguru import logger
+
+
+def resolve_db_path(url: str) -> str:
+    """解析 SQLite URL 路径。
+
+    - sqlite:///tmp/test.db -> /tmp/test.db
+    - sqlite://./examples/test.db -> ./examples/test.db
+    """
+    parsed = urlparse(url)
+    if parsed.netloc == ".":
+        return str(Path("." + parsed.path))
+    return parsed.path
 
 
 async def execute(url: str, query: str, params: list[Any] | None = None) -> dict[str, Any]:
@@ -18,8 +31,7 @@ async def execute(url: str, query: str, params: list[Any] | None = None) -> dict
     Returns:
         {"rows": [...], "row_count": int, "columns": [...]}
     """
-    # 解析路径：sqlite:///path/to/db → /path/to/db
-    db_path = urlparse(url).path
+    db_path = resolve_db_path(url)
 
     logger.debug(f"连接 SQLite: {db_path}")
 

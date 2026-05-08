@@ -39,5 +39,6 @@ def extract_variables(
         except Exception as e:
             logger.warning(f"提取变量失败: {var_name} ({rule}): {e}")
             extracted[var_name] = None
+            ctx.set(var_name, None)
 
     return extracted

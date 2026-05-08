@@ -11,11 +11,14 @@ def parse_db_config(config: dict[str, Any]) -> DbConfig:
         raise ValueError("db 必须包含 url 字段")
     if "query" not in config:
         raise ValueError("db 必须包含 query 字段")
+    params = config.get("params", [])
+    if not isinstance(params, list):
+        raise ValueError("db.params 必须是 list")
 
     return DbConfig(
         url=config["url"],
         query=config["query"],
-        params=config.get("params", []),
+        params=params,
     )
 
 

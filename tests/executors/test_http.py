@@ -144,13 +144,50 @@ class TestExtractVariables:
     def test_extract_from_body_headers(self):
         result = {
             "status_code": 200,
-            "body": {"headers": {"X-Custom": "value"}},
-            "headers": {},
+            "body": {"headers": {"X-Custom": "body-value"}},
+            "headers": {"X-Custom": "header-value"},
         }
         ctx = Context()
         config = {"custom": "$.headers.X-Custom"}
         extracted = extract_variables(result, config, ctx)
-        assert extracted["custom"] == "value"
+        assert extracted["custom"] == "header-value"
+
+    def test_extract_status_code_prefers_response_metadata_over_body(self):
+        result = {
+            "status_code": 200,
+            "body": {"status_code": 500},
+            "headers": {},
+        }
+        ctx = Context()
+        config = {"status": "$.status_code"}
+        extracted = extract_variables(result, config, ctx)
+        assert extracted["status"] == 200
+
+    def test_extract_can_use_explicit_body_namespace_for_conflicting_keys(self):
+        result = {
+            "status_code": 200,
+            "body": {"status_code": 500, "headers": {"X-Custom": "body-value"}},
+            "headers": {"X-Custom": "header-value"},
+        }
+        ctx = Context()
+        config = {
+            "body_status": "$.body.status_code",
+            "body_header": "$.body.headers.X-Custom",
+        }
+        extracted = extract_variables(result, config, ctx)
+        assert extracted["body_status"] == 500
+        assert extracted["body_header"] == "body-value"
+
+    def test_extract_multiple_jsonpath_matches(self):
+        result = {
+            "status_code": 200,
+            "body": {"users": [{"name": "Alice"}, {"name": "Bob"}]},
+            "headers": {},
+        }
+        ctx = Context()
+        config = {"names": "$.users[*].name"}
+        extracted = extract_variables(result, config, ctx)
+        assert extracted["names"] == ["Alice", "Bob"]
 
     def test_extract_missing_path(self):
         result = {
@@ -201,6 +238,18 @@ class TestExtractVariables:
         }
         extracted = extract_variables(result, config, ctx)
         assert extracted["csrf"] == ""
+
+    def test_extract_failure_sets_none_consistent_with_db(self):
+        result = {
+            "status_code": 200,
+            "body": "not json",
+            "headers": {},
+        }
+        ctx = Context()
+        config = {"bad": {"regex": r"(", "group": 1}}
+        extracted = extract_variables(result, config, ctx)
+        assert extracted["bad"] is None
+        assert ctx.get("bad") is None
 
 
 class TestValidateResponse:
@@ -278,6 +327,88 @@ class TestHttpFileUtils:
             "headers": {},
         }
         assertions = [AssertionNode(op="eq", left="$.status_code", right=200)]
+        errors = validate_response(result, assertions)
+        assert errors == []
+
+    def test_status_code_prefers_response_metadata_over_body(self):
+        result = {
+            "status_code": 200,
+            "body": {"status_code": 500},
+            "headers": {},
+        }
+        assertions = [AssertionNode(op="eq", left="$.status_code", right=200)]
+        errors = validate_response(result, assertions)
+        assert errors == []
+
+    def test_headers_use_response_headers_not_body_headers(self):
+        result = {
+            "status_code": 200,
+            "body": {"headers": {"X-Custom": "body-value"}},
+            "headers": {"X-Custom": "header-value"},
+        }
+        assertions = [AssertionNode(op="eq", left="$.headers.X-Custom", right="header-value")]
+        errors = validate_response(result, assertions)
+        assert errors == []
+
+    def test_header_lookup_is_case_insensitive(self):
+        result = {
+            "status_code": 200,
+            "body": {},
+            "headers": {"content-type": "application/json"},
+        }
+        assertions = [AssertionNode(op="eq", left="$.headers.Content-Type", right="application/json")]
+        errors = validate_response(result, assertions)
+        assert errors == []
+
+    def test_explicit_body_namespace_can_validate_conflicting_keys(self):
+        result = {
+            "status_code": 200,
+            "body": {"status_code": 500},
+            "headers": {},
+        }
+        assertions = [AssertionNode(op="eq", left="$.body.status_code", right=500)]
+        errors = validate_response(result, assertions)
+        assert errors == []
+
+    @pytest.mark.parametrize(
+        ("op", "left", "right"),
+        [
+            ("ne", "$.code", 1),
+            ("gt", "$.count", 1),
+            ("lt", "$.count", 3),
+            ("gte", "$.count", 2),
+            ("lte", "$.count", 2),
+            ("not_contains", "$.message", "error"),
+            ("starts_with", "$.name", "user_"),
+            ("ends_with", "$.file", ".json"),
+            ("in", "$.status", ["active", "pending"]),
+            ("not_in", "$.role", ["banned"]),
+            ("matches", "$.email", r"^[^@]+@[^@]+$"),
+            ("len_eq", "$.items", 3),
+            ("len_ne", "$.items", 0),
+            ("len_gt", "$.items", 2),
+            ("len_lt", "$.items", 4),
+            ("len_gte", "$.items", 3),
+            ("len_lte", "$.items", 3),
+        ],
+    )
+    def test_extended_operators_through_http_validator(self, op, left, right):
+        result = {
+            "status_code": 200,
+            "body": {
+                "code": 0,
+                "count": 2,
+                "message": "success",
+                "name": "user_admin",
+                "file": "report.json",
+                "status": "active",
+                "role": "admin",
+                "email": "user@example.com",
+                "items": [1, 2, 3],
+            },
+            "headers": {},
+        }
+        assertions = [AssertionNode(op=op, left=left, right=right)]
         errors = validate_response(result, assertions)
         assert errors == []
 

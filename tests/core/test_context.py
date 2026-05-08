@@ -26,6 +26,21 @@ class TestContext:
         result = ctx.render("http://${host}:${port}/api")
         assert result == "http://api.com:8080/api"
 
+    def test_render_nested_vars(self):
+        ctx = Context({"host": "api.com", "base_url": "https://${host}"})
+        result = ctx.render("${base_url}/api")
+        assert result == "https://api.com/api"
+
+    def test_render_vars_with_prefix_names(self):
+        ctx = Context({"user": "alice", "user_name": "Alice Smith"})
+        result = ctx.render("${user}:${user_name}")
+        assert result == "alice:Alice Smith"
+
+    def test_render_stops_on_cycles(self):
+        ctx = Context({"a": "${b}", "b": "${a}"})
+        result = ctx.render("${a}")
+        assert result in {"${a}", "${b}"}
+
     def test_render_no_vars(self):
         ctx = Context()
         result = ctx.render("hello world")
@@ -57,3 +72,29 @@ class TestContext:
         ctx = Context({"key": "old"})
         ctx.set("key", "new")
         assert ctx.get("key") == "new"
+
+    def test_snapshot_returns_deepcopy(self):
+        ctx = Context({"nested": {"name": "Alice"}})
+        snapshot = ctx.snapshot()
+
+        snapshot["nested"]["name"] = "Bob"
+
+        assert ctx.get("nested") == {"name": "Alice"}
+
+    def test_derive_creates_isolated_child_with_shared_metadata(self):
+        ctx = Context({"token": "root"}, metadata={"base_dir": "/case"})
+        child = ctx.derive({"token": "child", "local": "value"})
+
+        child.set("token", "updated")
+
+        assert ctx.get("token") == "root"
+        assert child.get("token") == "updated"
+        assert child.get("local") == "value"
+        assert child.metadata is ctx.metadata
+
+    def test_merge_sets_each_update(self):
+        ctx = Context({"a": 1})
+
+        ctx.merge({"b": 2, "a": 3})
+
+        assert ctx.snapshot() == {"a": 3, "b": 2}

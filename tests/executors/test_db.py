@@ -11,6 +11,7 @@ from nextgen.executors.db.extract import extract_variables
 from nextgen.executors.db.model import DbConfig
 from nextgen.executors.db.validate import validate_result
 from nextgen.executors.db.drivers import get_driver
+from nextgen.executors.db.drivers.sqlite import resolve_db_path
 
 
 class TestDbConfig:
@@ -37,6 +38,14 @@ class TestDbConfig:
     def test_missing_query(self):
         with pytest.raises(ValueError, match="query"):
             parse_db_config({"url": "sqlite:///tmp/test.db"})
+
+    def test_params_must_be_list(self):
+        with pytest.raises(ValueError, match="db.params 必须是 list"):
+            parse_db_config({
+                "url": "sqlite:///tmp/test.db",
+                "query": "SELECT 1",
+                "params": {"id": 1},
+            })
 
     @pytest.mark.asyncio
     async def test_execute_query_includes_rendered_action_input_and_output(self, monkeypatch):
@@ -129,6 +138,16 @@ class TestGetDriver:
             get_driver("mongodb://localhost/test")
 
 
+class TestSqliteDriver:
+    """测试 SQLite URL 路径解析"""
+
+    def test_resolve_absolute_path(self):
+        assert resolve_db_path("sqlite:///tmp/test.db") == "/tmp/test.db"
+
+    def test_resolve_relative_path(self):
+        assert resolve_db_path("sqlite://./examples/test.db") == "examples/test.db"
+
+
 class TestExtractVariables:
     """测试 extract_variables"""
 
@@ -165,6 +184,18 @@ class TestExtractVariables:
         config = {"value": "$.rows[0].name"}
         extracted = extract_variables(result, config, ctx)
         assert extracted["value"] is None
+
+    def test_extract_failure_sets_none_and_clears_old_context_value(self):
+        result = {
+            "rows": [{"id": 1}],
+            "row_count": 1,
+            "columns": ["id"],
+        }
+        ctx = Context({"value": "old"})
+        config = {"value": {"regex": r"(", "group": 1}}
+        extracted = extract_variables(result, config, ctx)
+        assert extracted["value"] is None
+        assert ctx.get("value") is None
 
     def test_extract_with_jsonpath_object_rule(self):
         result = {

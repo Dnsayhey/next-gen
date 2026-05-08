@@ -76,7 +76,11 @@ def extract_value(source: Any, raw_rule: str | dict[str, Any]) -> Any:
 
 def _extract_jsonpath(source: Any, expr: str) -> Any:
     matches = jsonpath_parse(expr).find(source)
-    return matches[0].value if matches else None
+    if not matches:
+        return None
+    if len(matches) == 1:
+        return matches[0].value
+    return [match.value for match in matches]
 
 
 def _extract_regex(source: Any, pattern: str, group: int | str | None) -> Any:

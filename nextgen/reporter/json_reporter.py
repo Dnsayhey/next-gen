@@ -1,20 +1,12 @@
 """JSON 报告生成器"""
 
 import json
-from typing import Any
 
-from nextgen.core.model import StepStatus, TestResult, TestStatus
+from nextgen.core.model import TestResult
 
 
 def to_json(result: TestResult, indent: int = 2) -> str:
     """将测试结果转换为 JSON 字符串"""
-
-    def serialize(obj: Any) -> Any:
-        if isinstance(obj, StepStatus):
-            return obj.value
-        if isinstance(obj, TestStatus):
-            return obj.value
-        return obj
 
     data = {
         "testcase": result.testcase,
@@ -32,6 +24,7 @@ def to_json(result: TestResult, indent: int = 2) -> str:
                 "action_input": s.action_input,
                 "action_output": s.action_output,
                 "error": s.error,
+                "extracted": s.extracted,
             }
             for s in result.steps
         ],

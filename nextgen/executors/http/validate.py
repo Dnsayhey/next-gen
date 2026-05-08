@@ -30,10 +30,12 @@ class HttpValidator(BaseValidator):
         支持 JSONPath 语法：
         - $.code → 从 body 提取
         - $.status_code → 状态码
-        - $.headers.xxx → 从 body 中的 headers 字段提取
+        - $.headers.xxx → 从 HTTP 响应头提取
+        - $.body.xxx → 从 body 命名空间提取
         """
         errors = []
         body = result.get("body", {})
+        headers = result.get("headers", {})
 
         for assertion in assertions:
             try:
@@ -43,10 +45,9 @@ class HttpValidator(BaseValidator):
                     actual = result.get("status_code")
                 elif left_expr.startswith("$.headers."):
                     header_name = left_expr[10:]
-                    if isinstance(body, dict) and "headers" in body:
-                        actual = body["headers"].get(header_name)
-                    else:
-                        actual = None
+                    actual = _header_value(headers, header_name)
+                elif left_expr.startswith("$.body."):
+                    actual = _jsonpath_value(body, "$." + left_expr[7:])
                 elif left_expr.startswith("$."):
                     actual = _jsonpath_value(body, left_expr)
                 else:
@@ -75,3 +76,15 @@ def validate_response(
     assertions: list[AssertionNode],
 ) -> list[str]:
     return _validator.validate(result, assertions)
+
+
+def _header_value(headers: Any, name: str) -> Any:
+    if not isinstance(headers, dict):
+        return None
+    if name in headers:
+        return headers[name]
+    lower_name = name.lower()
+    for key, value in headers.items():
+        if str(key).lower() == lower_name:
+            return value
+    return None

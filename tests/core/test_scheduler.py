@@ -8,7 +8,14 @@ import pytest
 
 from nextgen.core.actions import ActionSpec, register_action, restore_actions, snapshot_actions
 from nextgen.core.errors import ActionExecutionError
-from nextgen.core.model import ActionNode, HookAction, StepNode, StepStatus, TestCase as CaseModel
+from nextgen.core.model import (
+    ActionNode,
+    AssertionNode,
+    HookAction,
+    StepNode,
+    StepStatus,
+    TestCase as CaseModel,
+)
 from nextgen.core.scheduler import Scheduler
 from nextgen.core.hooks import register_hook
 
@@ -295,6 +302,62 @@ class TestScheduler:
         assert scheduler.steps["flaky"].retry_count == 1
 
     @pytest.mark.asyncio
+    async def test_retry_backoff_uses_exponential_delay(self, monkeypatch, scheduler_executor_registry):
+        delays = []
+
+        async def fake_sleep(delay):
+            delays.append(delay)
+
+        monkeypatch.setattr("nextgen.core.scheduler.asyncio.sleep", fake_sleep)
+
+        testcase = CaseModel(
+            version=1,
+            mode="parallel",
+            fail_fast=False,
+            steps={
+                "boom": make_step(
+                    "boom",
+                    config={
+                        "retry": 3,
+                        "retry_delay": 2,
+                        "retry_backoff": True,
+                        "retry_max_delay": 5,
+                    },
+                ),
+            },
+        )
+
+        scheduler = Scheduler(testcase)
+        result = await scheduler.run()
+
+        assert result.steps[0].status == StepStatus.FAILED
+        assert delays == [2, 4, 5]
+
+    @pytest.mark.asyncio
+    async def test_parallel_mode_runs_independent_steps_concurrently(self, scheduler_executor_registry):
+        testcase = CaseModel(
+            version=1,
+            mode="parallel",
+            steps={
+                "sleepy_a": make_step("sleepy_a"),
+                "sleepy_b": make_step("sleepy_b"),
+            },
+        )
+        testcase.steps["sleepy_a"].action.config["name"] = "sleepy"
+        testcase.steps["sleepy_b"].action.config["name"] = "sleepy"
+
+        scheduler = Scheduler(testcase, max_concurrency=2)
+        start = time.perf_counter()
+        result = await scheduler.run()
+        elapsed = time.perf_counter() - start
+
+        assert [step.status for step in result.steps] == [
+            StepStatus.SUCCESS,
+            StepStatus.SUCCESS,
+        ]
+        assert elapsed < 0.11
+
+    @pytest.mark.asyncio
     async def test_failed_action_can_attach_request_snapshot(self):
         actions = snapshot_actions()
 
@@ -351,6 +414,58 @@ class TestScheduler:
             "timeout": None,
         }
         assert result.steps[0].action_output is None
+
+    @pytest.mark.asyncio
+    async def test_validation_failure_preserves_action_output(self):
+        actions = snapshot_actions()
+
+        async def execute(config, ctx):
+            return {
+                "status_code": 500,
+                "body": {"error": "boom"},
+                "headers": {"x-request-id": "req-1"},
+                "action_input": {"type": "snapshot_output"},
+                "action_output": {
+                    "status_code": 500,
+                    "body": {"error": "boom"},
+                    "headers": {"x-request-id": "req-1"},
+                },
+            }
+
+        register_action(ActionSpec(
+            name="snapshot_output",
+            parse_config=lambda config: config,
+            execute=execute,
+            extract=lambda result, config, ctx: {},
+            validate=lambda result, assertions: ["forced failure"],
+            summarize=lambda config: "snapshot output",
+        ))
+
+        try:
+            testcase = CaseModel(
+                version=1,
+                mode="parallel",
+                steps={
+                    "failing": StepNode(
+                        name="failing",
+                        action=ActionNode(type="snapshot_output", config={}),
+                        validate=[AssertionNode(op="eq", left="$.status_code", right=200)],
+                    ),
+                },
+            )
+
+            scheduler = Scheduler(testcase)
+            result = await scheduler.run()
+        finally:
+            restore_actions(actions)
+
+        assert result.steps[0].status == StepStatus.FAILED
+        assert result.steps[0].action_input == {"type": "snapshot_output"}
+        assert result.steps[0].action_output == {
+            "status_code": 500,
+            "body": {"error": "boom"},
+            "headers": {"x-request-id": "req-1"},
+        }
 
     @pytest.mark.asyncio
     async def test_testcase_and_step_hooks_run_in_expected_order(
@@ -528,6 +643,7 @@ class TestScheduler:
             os.chdir(previous_cwd)
 
         assert result.steps[0].status == StepStatus.SUCCESS
+        assert result.steps[0].extracted == {"token": "one"}
         assert scheduler.context.get("token") == "one"
         assert trace_file.read_text(encoding="utf-8").splitlines() == ["one"]
 

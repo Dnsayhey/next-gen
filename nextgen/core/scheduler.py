@@ -129,6 +129,7 @@ class Scheduler:
                 action_input=runtime.result.get("action_input") if runtime.result else None,
                 action_output=runtime.result.get("action_output") if runtime.result else None,
                 error=runtime.error,
+                extracted=runtime.pending_extracts,
             ))
 
         status = (
@@ -252,7 +253,9 @@ class Scheduler:
                     except Exception as e:
                         action_input = getattr(e, "action_input", None)
                         if action_input is not None:
-                            step.result = {"action_input": action_input}
+                            if step.result is None:
+                                step.result = {}
+                            step.result["action_input"] = action_input
                         step.error = str(e)
 
                         if step.retry_count < max_retry:
@@ -378,7 +381,7 @@ class Scheduler:
             # 找出可执行的步骤
             runnable = [s for s in pending if self.is_runnable(s)]
             if self.testcase.mode == "sequential" and runnable:
-                runnable = [next(s for s in self.steps.values() if s in runnable)]
+                runnable = [runnable[0]]
 
             if not runnable:
                 # 检查是否还有正在运行或重试的步骤

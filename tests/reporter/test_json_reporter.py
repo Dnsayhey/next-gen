@@ -40,6 +40,7 @@ def test_to_json_includes_testcase_status_errors_and_response_status():
                     "body": {"code": 1, "message": "boom"},
                 },
                 error="boom",
+                extracted={"token": "abc123"},
             )
         ],
     )
@@ -54,3 +55,33 @@ def test_to_json_includes_testcase_status_errors_and_response_status():
     assert data["steps"][0]["action_input"]["body"]["password"] == "secret"
     assert data["steps"][0]["action_output"]["status_code"] == 500
     assert data["steps"][0]["action_output"]["body"]["message"] == "boom"
+    assert data["steps"][0]["extracted"] == {"token": "abc123"}
+
+
+def test_to_json_serializes_success_result_with_summary():
+    result = CaseRunResult(
+        testcase="case.yaml",
+        total_duration_ms=10,
+        status=CaseRunStatus.SUCCESS,
+        steps=[
+            StepResult(
+                name="health",
+                status=StepStatus.SUCCESS,
+                duration_ms=10,
+                action_summary="GET /health",
+                response_status=200,
+            )
+        ],
+    )
+
+    data = json.loads(to_json(result))
+
+    assert data["status"] == "success"
+    assert data["summary"] == {
+        "total": 1,
+        "success": 1,
+        "failed": 0,
+        "skipped": 0,
+    }
+    assert data["steps"][0]["status"] == "success"
+    assert data["steps"][0]["error"] is None

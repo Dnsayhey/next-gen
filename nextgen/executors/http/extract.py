@@ -18,7 +18,8 @@ def extract_variables(
     支持 JSONPath 语法：
     - $.data.token → 从 body 提取
     - $.status_code → 状态码
-    - $.headers.xxx → 从 body 中的 headers 字段提取
+    - $.headers.xxx → 从 HTTP 响应头提取
+    - $.body.xxx → 从 body 命名空间提取
     """
     extracted = {}
     source = {
@@ -26,13 +27,13 @@ def extract_variables(
         "headers": result.get("headers", {}),
         "body": result.get("body", {}),
     }
-    body = result.get("body", {})
-    if isinstance(body, dict):
-        source.update(body)
 
     for var_name, rule in config.items():
         try:
             value = extract_value(source, rule)
+
+            if value is None and _is_legacy_body_path(rule):
+                value = extract_value(result.get("body", {}), rule)
 
             ctx.set(var_name, value)
             extracted[var_name] = value
@@ -40,5 +41,19 @@ def extract_variables(
 
         except Exception as e:
             logger.error(f"提取变量失败: {var_name} = {rule}, 错误: {e}")
+            extracted[var_name] = None
+            ctx.set(var_name, None)
 
     return extracted
+
+
+def _is_legacy_body_path(rule: Any) -> bool:
+    """兼容旧写法：$.data.token 等未显式加 $.body 的路径仍从 body 读取。"""
+    expr = rule.get("jsonpath") if isinstance(rule, dict) else rule
+    return (
+        isinstance(expr, str)
+        and expr.startswith("$.")
+        and not expr.startswith("$.body.")
+        and not expr.startswith("$.headers.")
+        and expr != "$.status_code"
+    )
