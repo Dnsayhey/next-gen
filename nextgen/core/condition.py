@@ -80,28 +80,9 @@ def _eval_expr(expr: dict, ctx: Context) -> bool:
 
     left_expr, right_expr = args
 
-    left = _resolve_value(left_expr, ctx)
-    right = _resolve_value(right_expr, ctx)
+    left = ctx.render(left_expr)
+    right = ctx.render(right_expr)
 
     result = evaluate_operator(op, left, right)
     logger.debug(f"条件评估: {left_expr} {op} {right_expr} → {result}")
     return result
-
-
-def _resolve_value(expr: Any, ctx: Context) -> Any:
-    """解析值，支持变量引用
-
-    - 纯变量引用 ${var}：返回原始值（保留类型）
-    - 混合字符串如 "prefix_${var}_suffix"：返回渲染后的字符串
-    - 非字符串：直接返回
-    """
-    if not isinstance(expr, str):
-        return expr
-
-    # 纯变量引用
-    if expr.startswith("${") and expr.endswith("}") and "${" not in expr[2:-1]:
-        var_name = expr[2:-1]
-        return ctx.get(var_name)
-
-    # 混合字符串
-    return ctx.render(expr)

@@ -31,6 +31,18 @@ class TestContext:
         result = ctx.render("${base_url}/api")
         assert result == "https://api.com/api"
 
+    def test_render_pure_var_preserves_original_type(self):
+        ctx = Context({"count": 3, "items": [1, 2], "payload": {"ok": True}})
+
+        assert ctx.render("${count}") == 3
+        assert ctx.render("${items}") == [1, 2]
+        assert ctx.render("${payload}") == {"ok": True}
+
+    def test_render_nested_pure_string_var(self):
+        ctx = Context({"host": "api.com", "base_url": "https://${host}"})
+
+        assert ctx.render("${base_url}") == "https://api.com"
+
     def test_render_vars_with_prefix_names(self):
         ctx = Context({"user": "alice", "user_name": "Alice Smith"})
         result = ctx.render("${user}:${user_name}")
@@ -67,6 +79,27 @@ class TestContext:
         data = {"items": ["${name}1", "${name}2"]}
         result = ctx.render_dict(data)
         assert result["items"] == ["test1", "test2"]
+
+    def test_render_dict_recurses_into_dicts_inside_lists(self):
+        ctx = Context({"key": "Authorization", "token": "abc", "count": 3})
+        data = {
+            "params": [
+                {"key": "${key}", "value": "Bearer ${token}"},
+                {"key": "count", "value": "${count}"},
+            ]
+        }
+
+        result = ctx.render_dict(data)
+
+        assert result["params"] == [
+            {"key": "Authorization", "value": "Bearer abc"},
+            {"key": "count", "value": 3},
+        ]
+
+    def test_render_value_recurses_lists_and_dicts(self):
+        ctx = Context({"name": "Alice"})
+
+        assert ctx.render_value([{"name": "${name}"}]) == [{"name": "Alice"}]
 
     def test_override_var(self):
         ctx = Context({"key": "old"})

@@ -37,6 +37,11 @@ class TestEvaluateCondition:
         condition = [{"gt": ["${count}", 5]}]
         assert evaluate_condition(condition, ctx) is True
 
+    def test_condition_uses_context_render_to_preserve_pure_var_type(self):
+        ctx = Context({"payload": {"code": 0}, "expected": {"code": 0}})
+        condition = [{"eq": ["${payload}", "${expected}"]}]
+        assert evaluate_condition(condition, ctx) is True
+
     def test_simple_contains(self):
         ctx = Context({"message": "hello world"})
         condition = [{"contains": ["${message}", "world"]}]

@@ -7,6 +7,7 @@ from typing import Any
 from loguru import logger
 
 _VAR_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+_PURE_VAR_PATTERN = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$")
 _MAX_RENDER_DEPTH = 10
 
 
@@ -49,13 +50,24 @@ class Context:
         for key, value in updates.items():
             self.set(key, value)
 
-    def render(self, value: Any) -> Any:
+    def render(self, value: Any, _depth: int = 0) -> Any:
         """渲染变量替换
 
         支持 ${var_name} 语法
         """
         if not isinstance(value, str):
             return value
+
+        pure_match = _PURE_VAR_PATTERN.fullmatch(value)
+        if pure_match:
+            key = pure_match.group(1)
+            if key in self.vars:
+                resolved = self.vars[key]
+                if isinstance(resolved, str) and resolved != value:
+                    if _depth >= _MAX_RENDER_DEPTH:
+                        return resolved
+                    return self.render(resolved, _depth + 1)
+                return resolved
 
         result = value
         for _ in range(_MAX_RENDER_DEPTH):
@@ -76,14 +88,14 @@ class Context:
 
         return result
 
+    def render_value(self, value: Any) -> Any:
+        """递归渲染任意 JSON-like 值。"""
+        if isinstance(value, dict):
+            return {k: self.render_value(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [self.render_value(item) for item in value]
+        return self.render(value)
+
     def render_dict(self, data: dict[str, Any]) -> dict[str, Any]:
         """递归渲染字典中的变量"""
-        rendered = {}
-        for k, v in data.items():
-            if isinstance(v, dict):
-                rendered[k] = self.render_dict(v)
-            elif isinstance(v, list):
-                rendered[k] = [self.render(item) for item in v]
-            else:
-                rendered[k] = self.render(v)
-        return rendered
+        return self.render_value(data)
