@@ -1,4 +1,4 @@
-"""HTTP 执行器工具函数"""
+"""HTTP action 工具函数"""
 
 from pathlib import Path
 

@@ -18,7 +18,7 @@ class ActionNode:
 class AssertionNode:
     """断言节点"""
     op: str  # eq / ne / gt / lt / gte / lte / contains / not_contains / starts_with / ends_with / in / not_in / matches / len_*
-    left: str  # 表达式（由 executor 解释）
+    left: str  # 表达式（由 action 实现解释）
     right: Any  # 期望值
 
 

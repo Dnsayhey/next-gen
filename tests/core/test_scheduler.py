@@ -40,7 +40,7 @@ def make_step(
 
 
 @pytest.fixture
-def scheduler_executor_registry():
+def scheduler_action_registry():
     """注册测试用 action"""
     actions = snapshot_actions()
     events: list[str] = []
@@ -99,7 +99,7 @@ class TestScheduler:
     """测试 Scheduler 运行时语义"""
 
     @pytest.mark.asyncio
-    async def test_sequential_mode_runs_one_runnable_step_at_a_time(self, scheduler_executor_registry):
+    async def test_sequential_mode_runs_one_runnable_step_at_a_time(self, scheduler_action_registry):
         testcase = CaseModel(
             version=1,
             mode="sequential",
@@ -118,14 +118,14 @@ class TestScheduler:
             StepStatus.SUCCESS,
             StepStatus.SUCCESS,
         ]
-        assert scheduler_executor_registry == [
+        assert scheduler_action_registry == [
             "execute:a",
             "execute:b",
             "execute:c",
         ]
 
     @pytest.mark.asyncio
-    async def test_fail_fast_defaults_to_true(self, scheduler_executor_registry):
+    async def test_fail_fast_defaults_to_true(self, scheduler_action_registry):
         testcase = CaseModel(
             version=1,
             mode="sequential",
@@ -142,10 +142,10 @@ class TestScheduler:
             StepStatus.FAILED,
             StepStatus.SKIPPED,
         ]
-        assert scheduler_executor_registry == ["execute:boom"]
+        assert scheduler_action_registry == ["execute:boom"]
 
     @pytest.mark.asyncio
-    async def test_fail_fast_false_continues_independent_steps(self, scheduler_executor_registry):
+    async def test_fail_fast_false_continues_independent_steps(self, scheduler_action_registry):
         testcase = CaseModel(
             version=1,
             mode="sequential",
@@ -163,10 +163,10 @@ class TestScheduler:
             StepStatus.FAILED,
             StepStatus.SUCCESS,
         ]
-        assert scheduler_executor_registry == ["execute:boom", "execute:after"]
+        assert scheduler_action_registry == ["execute:boom", "execute:after"]
 
     @pytest.mark.asyncio
-    async def test_failed_dependency_is_skipped_even_when_fail_fast_disabled(self, scheduler_executor_registry):
+    async def test_failed_dependency_is_skipped_even_when_fail_fast_disabled(self, scheduler_action_registry):
         testcase = CaseModel(
             version=1,
             mode="parallel",
@@ -184,12 +184,12 @@ class TestScheduler:
             StepStatus.FAILED,
             StepStatus.SKIPPED,
         ]
-        assert scheduler_executor_registry == ["execute:boom"]
+        assert scheduler_action_registry == ["execute:boom"]
 
     @pytest.mark.asyncio
     async def test_fail_fast_skips_parallel_steps_waiting_for_concurrency_slot(
         self,
-        scheduler_executor_registry,
+        scheduler_action_registry,
     ):
         testcase = CaseModel(
             version=1,
@@ -210,10 +210,10 @@ class TestScheduler:
             StepStatus.SKIPPED,
             StepStatus.SKIPPED,
         ]
-        assert scheduler_executor_registry == ["execute:boom"]
+        assert scheduler_action_registry == ["execute:boom"]
 
     @pytest.mark.asyncio
-    async def test_set_vars_is_visible_to_when(self, scheduler_executor_registry):
+    async def test_set_vars_is_visible_to_when(self, scheduler_action_registry):
         testcase = CaseModel(
             version=1,
             mode="parallel",
@@ -230,11 +230,11 @@ class TestScheduler:
         result = await scheduler.run()
 
         assert result.steps[0].status == StepStatus.SUCCESS
-        assert scheduler_executor_registry == ["execute:allowed"]
+        assert scheduler_action_registry == ["execute:allowed"]
         assert scheduler.context.get("env") is None
 
     @pytest.mark.asyncio
-    async def test_when_can_skip_step_after_set_vars(self, scheduler_executor_registry):
+    async def test_when_can_skip_step_after_set_vars(self, scheduler_action_registry):
         testcase = CaseModel(
             version=1,
             mode="parallel",
@@ -251,10 +251,10 @@ class TestScheduler:
         result = await scheduler.run()
 
         assert result.steps[0].status == StepStatus.SKIPPED
-        assert scheduler_executor_registry == []
+        assert scheduler_action_registry == []
 
     @pytest.mark.asyncio
-    async def test_step_timeout_covers_retry_and_wait(self, scheduler_executor_registry):
+    async def test_step_timeout_covers_retry_and_wait(self, scheduler_action_registry):
         testcase = CaseModel(
             version=1,
             mode="parallel",
@@ -277,11 +277,11 @@ class TestScheduler:
 
         assert result.steps[0].status == StepStatus.FAILED
         assert "超时" in (result.steps[0].error or "")
-        assert scheduler_executor_registry == ["execute:flaky"]
+        assert scheduler_action_registry == ["execute:flaky"]
         assert elapsed < 0.09
 
     @pytest.mark.asyncio
-    async def test_retry_can_succeed_within_total_timeout(self, scheduler_executor_registry):
+    async def test_retry_can_succeed_within_total_timeout(self, scheduler_action_registry):
         testcase = CaseModel(
             version=1,
             mode="parallel",
@@ -301,11 +301,11 @@ class TestScheduler:
         result = await scheduler.run()
 
         assert result.steps[0].status == StepStatus.SUCCESS
-        assert scheduler_executor_registry == ["execute:flaky", "execute:flaky"]
+        assert scheduler_action_registry == ["execute:flaky", "execute:flaky"]
         assert scheduler.steps["flaky"].retry_count == 1
 
     @pytest.mark.asyncio
-    async def test_retry_backoff_uses_exponential_delay(self, monkeypatch, scheduler_executor_registry):
+    async def test_retry_backoff_uses_exponential_delay(self, monkeypatch, scheduler_action_registry):
         delays = []
 
         async def fake_sleep(delay):
@@ -337,7 +337,7 @@ class TestScheduler:
         assert delays == [2, 4, 5]
 
     @pytest.mark.asyncio
-    async def test_parallel_mode_runs_independent_steps_concurrently(self, scheduler_executor_registry):
+    async def test_parallel_mode_runs_independent_steps_concurrently(self, scheduler_action_registry):
         testcase = CaseModel(
             version=1,
             mode="parallel",
@@ -478,7 +478,7 @@ class TestScheduler:
     async def test_testcase_and_step_hooks_run_in_expected_order(
         self,
         tmp_path,
-        scheduler_executor_registry,
+        scheduler_action_registry,
     ):
         trace_file = tmp_path / "trace.log"
         hook_file = tmp_path / "hooks.py"
@@ -548,7 +548,7 @@ class TestScheduler:
     async def test_before_each_and_after_each_run_once_across_retry(
         self,
         tmp_path,
-        scheduler_executor_registry,
+        scheduler_action_registry,
     ):
         trace_file = tmp_path / "retry_trace.log"
         hook_file = tmp_path / "hooks.py"
@@ -610,7 +610,7 @@ class TestScheduler:
     async def test_after_hook_can_see_extracted_variables(
         self,
         tmp_path,
-        scheduler_executor_registry,
+        scheduler_action_registry,
     ):
         trace_file = tmp_path / "after_trace.log"
         hook_file = tmp_path / "hooks.py"
@@ -655,7 +655,7 @@ class TestScheduler:
         assert trace_file.read_text(encoding="utf-8").splitlines() == ["one"]
 
     @pytest.mark.asyncio
-    async def test_before_all_failure_aborts_execution(self, tmp_path, scheduler_executor_registry):
+    async def test_before_all_failure_aborts_execution(self, tmp_path, scheduler_action_registry):
         hook_file = tmp_path / "hooks.py"
         hook_file.write_text(
             "\n".join(
@@ -687,13 +687,13 @@ class TestScheduler:
         finally:
             os.chdir(previous_cwd)
 
-        assert scheduler_executor_registry == []
+        assert scheduler_action_registry == []
         assert result.steps[0].status == StepStatus.FAILED
         assert result.summary["failed"] == 1
         assert "before_all" in (result.steps[0].error or "")
 
     @pytest.mark.asyncio
-    async def test_after_all_failure_marks_result_failed(self, scheduler_executor_registry):
+    async def test_after_all_failure_marks_result_failed(self, scheduler_action_registry):
         @register_hook("boomAfterAllForResult")
         async def boom_after_all(ctx, params):
             raise RuntimeError("after all exploded")
@@ -708,7 +708,7 @@ class TestScheduler:
         scheduler = Scheduler(testcase)
         result = await scheduler.run()
 
-        assert scheduler_executor_registry == ["execute:one"]
+        assert scheduler_action_registry == ["execute:one"]
         assert result.steps[0].status == StepStatus.FAILED
         assert result.summary["failed"] == 1
         assert "after_all" in (result.steps[0].error or "")
@@ -716,7 +716,7 @@ class TestScheduler:
     @pytest.mark.asyncio
     async def test_before_each_failure_marks_current_step_failed(
         self,
-        scheduler_executor_registry,
+        scheduler_action_registry,
     ):
         @register_hook("boomBeforeEachForResult")
         async def boom_before_each(ctx, params):
@@ -732,7 +732,7 @@ class TestScheduler:
         scheduler = Scheduler(testcase)
         result = await scheduler.run()
 
-        assert scheduler_executor_registry == []
+        assert scheduler_action_registry == []
         assert result.steps[0].status == StepStatus.FAILED
         assert result.summary["failed"] == 1
         assert "before_each" in (result.steps[0].error or "")
@@ -741,7 +741,7 @@ class TestScheduler:
     async def test_after_each_runs_when_before_each_fails(
         self,
         tmp_path,
-        scheduler_executor_registry,
+        scheduler_action_registry,
     ):
         trace_file = tmp_path / "before_each_failure.log"
 
@@ -771,7 +771,7 @@ class TestScheduler:
         scheduler = Scheduler(testcase)
         result = await scheduler.run()
 
-        assert scheduler_executor_registry == []
+        assert scheduler_action_registry == []
         assert result.steps[0].status == StepStatus.FAILED
         assert trace_file.read_text(encoding="utf-8").splitlines() == [
             "before_each",
@@ -781,7 +781,7 @@ class TestScheduler:
     @pytest.mark.asyncio
     async def test_after_hook_failure_does_not_publish_extracted_variables(
         self,
-        scheduler_executor_registry,
+        scheduler_action_registry,
     ):
         @register_hook("boomAfterForPublish")
         async def boom_after(ctx, params):
@@ -798,14 +798,14 @@ class TestScheduler:
         scheduler = Scheduler(testcase)
         result = await scheduler.run()
 
-        assert scheduler_executor_registry == ["execute:one"]
+        assert scheduler_action_registry == ["execute:one"]
         assert result.steps[0].status == StepStatus.FAILED
         assert scheduler.context.get("token") is None
 
     @pytest.mark.asyncio
     async def test_after_each_failure_does_not_publish_extracted_variables(
         self,
-        scheduler_executor_registry,
+        scheduler_action_registry,
     ):
         @register_hook("boomAfterEachForPublish")
         async def boom_after_each(ctx, params):
@@ -822,7 +822,7 @@ class TestScheduler:
         scheduler = Scheduler(testcase)
         result = await scheduler.run()
 
-        assert scheduler_executor_registry == ["execute:one"]
+        assert scheduler_action_registry == ["execute:one"]
         assert result.steps[0].status == StepStatus.FAILED
         assert scheduler.context.get("token") is None
 
@@ -830,7 +830,7 @@ class TestScheduler:
     async def test_retry_attempt_does_not_reuse_step_local_context(
         self,
         tmp_path,
-        scheduler_executor_registry,
+        scheduler_action_registry,
     ):
         @register_hook("dirtyAttemptContext")
         async def dirty_attempt_context(ctx, params):
@@ -860,5 +860,5 @@ class TestScheduler:
         lines = trace_file.read_text(encoding="utf-8").splitlines()
 
         assert result.steps[0].status == StepStatus.SUCCESS
-        assert scheduler_executor_registry == ["execute:flaky", "execute:flaky"]
+        assert scheduler_action_registry == ["execute:flaky", "execute:flaky"]
         assert lines == ["None", "None"]

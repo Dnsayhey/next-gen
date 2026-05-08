@@ -1,4 +1,4 @@
-"""HTTP 客户端 - 发送请求"""
+"""HTTP action 客户端 - 发送请求"""
 
 from pathlib import Path
 from typing import Any

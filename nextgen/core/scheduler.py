@@ -180,7 +180,7 @@ class Scheduler:
 
         action_type = step.node.action.type
 
-        # 检查 executor 是否存在
+        # 检查 action 是否存在
         action = get_action(action_type)
         if action is None:
             raise ValueError(f"未注册的 action 类型: {action_type}")

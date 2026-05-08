@@ -8,7 +8,7 @@
 * DAG（依赖图）执行模型
 * 变量系统（Context）
 * 异步并发执行（asyncio）
-* 插件化执行器（HTTP / DB / 自定义）
+* 插件化 action（HTTP / DB / 自定义）
 * 状态机驱动调度器（支持 retry）
 
 > ❗ 本项目聚焦"执行引擎"，不做重平台（UI/权限系统）
@@ -32,7 +32,7 @@
 * **断言操作符**：基础比较、字符串、集合、正则、长度等通用操作符，`validate` 和 `when` 共用同一套语义
 * **报告格式**：JSON 输出到 stdout，步骤报告包含 `action_input / action_output`
 * **DSL 格式**：支持 YAML 和 JSON 两种格式
-* **Executor / Hook 架构**：注册表模式，支持扩展 action 和自定义 hook
+* **Action / Hook 架构**：注册表模式，支持扩展 action 和自定义 hook
 
 ---
 
@@ -49,7 +49,7 @@ Planner（构建 DAG + 循环检测）
    ↓
 Scheduler（调度器 + 状态机）
    ↓
-Executor（执行器：HTTP / DB / ...）
+Action（HTTP / DB / ...）
    ↓
 Reporter（结果输出）
 ```
@@ -506,7 +506,7 @@ class StepNode:
 @dataclass
 class AssertionNode:
     op: str      # eq / ne / gt / lt / gte / lte / contains / not_contains / starts_with / ends_with / in / not_in / matches / len_*
-    left: str    # 表达式（由 executor 解释）
+    left: str    # 表达式（由 action 实现解释）
     right: Any   # 期望值
 ```
 
@@ -619,7 +619,7 @@ def get_execution_order(graph: dict[str, list[str]]) -> list[list[str]]: ...
 - hook 生命周期调度
 - 自动发现并加载 `hooks.py`
 
-Scheduler 从 Action 注册表读取 `execute / extract / validate / summarize`，不再维护独立执行器注册表。
+Scheduler 从 Action 注册表读取 `execute / extract / validate / summarize`，不再维护独立 action 实现注册表。
 
 ### 6.5 Hooks（hook 注册表）
 
@@ -632,9 +632,9 @@ def discover_hooks(testcase_path: str | Path, cwd: str | Path) -> list[Path]: ..
 def load_discovered_hooks(testcase_path: str | Path, cwd: str | Path) -> list[Path]: ...
 ```
 
-### 6.6 Action（执行器）
+### 6.6 Action
 
-执行器通过 `ActionSpec` 注册到 action 注册表：
+action 实现通过 `ActionSpec` 注册到 action 注册表：
 ```python
 @dataclass(frozen=True)
 class ActionSpec:
@@ -652,16 +652,16 @@ class ActionSpec:
 ```python
 ActionResult(
     data={...},
-    action_input={...},    # 执行器输入快照（已渲染）
-    action_output={...},   # 执行器输出快照（可用于失败定位）
+    action_input={...},    # action 输入快照（已渲染）
+    action_output={...},   # action 输出快照（可用于失败定位）
     summary_status=200,    # 报告中的主要状态/指标
 )
 ```
 
-当执行器在拿到业务结果前失败（如网络/连接异常）时，建议抛出 `ActionExecutionError(message, action_input)`，
+当 action 在拿到业务结果前失败（如网络/连接异常）时，建议抛出 `ActionExecutionError(message, action_input)`，
 调度器会将 `action_input` 带入步骤报告，便于排查。
 
-### 6.7 DB 执行器
+### 6.7 DB Action
 
 支持 PostgreSQL、MySQL、SQLite 三种数据库。
 
@@ -751,14 +751,14 @@ nextgen/
 ├── parser/
 │   └── loader.py       # YAML/JSON 解析（action 注册表）
 ├── executors/
-│   ├── http/           # HTTP 执行器
+│   ├── http/           # 内置 HTTP action 实现
 │   │   ├── __init__.py
 │   │   ├── client.py   # 请求发送
 │   │   ├── model.py    # HTTP action 内部模型
 │   │   ├── extract.py  # 变量提取
 │   │   ├── validate.py # 断言验证
 │   │   └── utils.py    # 工具函数
-│   └── db/             # DB 执行器
+│   └── db/             # 内置 DB action 实现
 │       ├── __init__.py
 │       ├── client.py   # 查询执行（路由）
 │       ├── extract.py  # 变量提取
@@ -849,8 +849,8 @@ uv run nextgen demo.yaml
 * [x] DSL 解析（YAML/JSON）
 * [x] AST 模型
 * [x] DAG 调度
-* [x] HTTP 执行器
-* [x] DB 执行器
+* [x] HTTP action
+* [x] DB action
 * [x] 变量系统
 * [x] 断言系统
 * [x] 重试机制
@@ -875,6 +875,6 @@ uv run nextgen demo.yaml
 
 * **DSL ≠ 执行逻辑**：DSL 只描述"做什么"，不描述"怎么做"
 * **AST ≠ Runtime**：AST 是静态描述，Runtime 是动态执行
-* **Scheduler ≠ Executor**：Scheduler 负责调度，Executor 负责执行
+* **Scheduler ≠ Action**：Scheduler 负责调度，Action 负责执行
 * **一切围绕 DAG**：依赖关系是核心，驱动执行顺序
 * **开闭原则**：新增 Action 类型不需要修改现有代码

@@ -1,4 +1,4 @@
-"""DB 执行器 - 统一入口"""
+"""DB action - 统一入口"""
 
 from loguru import logger
 

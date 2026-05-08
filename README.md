@@ -8,7 +8,7 @@
 - DAG（依赖图）执行模型
 - 变量系统（Context）
 - 异步并发执行（asyncio）
-- 插件化执行器（HTTP / DB / 自定义）
+- 插件化 action（HTTP / DB / 自定义）
 - 状态机驱动调度器（支持 retry）
 
 ## 安装
@@ -116,8 +116,8 @@ uv run nextgen examples/hook_demo.yaml --verbose
 CLI 会将结果以 JSON 输出到 stdout。每个步骤包含：
 
 - `response_status`：HTTP 状态码（若有）
-- `action_input`：执行器收到的已渲染输入（便于排查变量替换与参数问题）
-- `action_output`：执行器输出快照（HTTP 为 `status_code/headers/body`，DB 为 `row_count/columns/rows`）
+- `action_input`：action 收到的已渲染输入（便于排查变量替换与参数问题）
+- `action_output`：action 输出快照（HTTP 为 `status_code/headers/body`，DB 为 `row_count/columns/rows`）
 
 失败定位语义：
 
@@ -190,8 +190,8 @@ nextgen/
 ├── parser/
 │   └── loader.py       # YAML/JSON 解析
 ├── executors/
-│   ├── http/           # HTTP 执行器
-│   └── db/             # DB 执行器
+│   ├── http/           # 内置 HTTP action 实现
+│   └── db/             # 内置 DB action 实现
 └── reporter/
     └── json_reporter.py
 ```
