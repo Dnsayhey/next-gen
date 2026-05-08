@@ -10,6 +10,7 @@ import yaml
 from loguru import logger
 
 from nextgen.core.actions import list_actions, get_action
+from nextgen.core.errors import ParseError
 from nextgen.core.hooks import parse_hook_params
 from nextgen.core.model import (
     ActionNode,
@@ -32,7 +33,7 @@ def load_file(path: str | Path) -> dict[str, Any]:
 
     ext = path.suffix.lower()
     if ext not in SUPPORTED_EXTENSIONS:
-        raise ValueError(f"不支持的文件格式: {ext}，支持: {SUPPORTED_EXTENSIONS}")
+        raise ParseError(f"不支持的文件格式: {ext}，支持: {SUPPORTED_EXTENSIONS}")
 
     with open(path, "r", encoding="utf-8") as f:
         if ext == ".json":
@@ -41,7 +42,7 @@ def load_file(path: str | Path) -> dict[str, Any]:
             data = yaml.safe_load(f)
 
     if not isinstance(data, dict):
-        raise ValueError(f"文件格式错误，期望 dict，得到 {type(data).__name__}")
+        raise ParseError(f"文件格式错误，期望 dict，得到 {type(data).__name__}")
 
     logger.debug(f"加载文件: {path}")
     return data
@@ -64,13 +65,13 @@ def parse_assertions(data: list[dict[str, Any]]) -> list[AssertionNode]:
 
     for item in data:
         if not isinstance(item, dict) or len(item) != 1:
-            raise ValueError(f"断言格式错误: {item}")
+            raise ParseError(f"断言格式错误: {item}")
 
         op = list(item.keys())[0]
         args = item[op]
 
         if not isinstance(args, list) or len(args) != 2:
-            raise ValueError(f"断言参数错误: {op} 需要两个参数 [left, right]")
+            raise ParseError(f"断言参数错误: {op} 需要两个参数 [left, right]")
 
         assertions.append(AssertionNode(op=op, left=args[0], right=args[1]))
 
@@ -96,15 +97,15 @@ def parse_when(data: list | dict | None) -> list | dict | None:
             return {"and": data["and"]}
         if "or" in data:
             return {"or": data["or"]}
-        raise ValueError(f"when 格式错误: dict 必须包含 and 或 or 键，得到 {list(data.keys())}")
+        raise ParseError(f"when 格式错误: dict 必须包含 and 或 or 键，得到 {list(data.keys())}")
 
-    raise ValueError(f"when 格式错误: 期望 list 或 dict，得到 {type(data).__name__}")
+    raise ParseError(f"when 格式错误: 期望 list 或 dict，得到 {type(data).__name__}")
 
 
 def parse_hook_action(data: dict[str, Any]) -> HookAction:
     """解析单个 hook 动作"""
     if not isinstance(data, dict) or len(data) != 1:
-        raise ValueError(f"hook 格式错误: {data}")
+        raise ParseError(f"hook 格式错误: {data}")
 
     hook_type = list(data.keys())[0]
     raw_params = data[hook_type]
@@ -119,14 +120,14 @@ def expand_step_matrix(name: str, data: dict[str, Any]) -> list[tuple[str, dict[
         return [(name, deepcopy(data), {})]
 
     if not isinstance(matrix, dict) or not matrix:
-        raise ValueError(f"step '{name}' 的 matrix 格式错误: 期望非空 dict")
+        raise ParseError(f"step '{name}' 的 matrix 格式错误: 期望非空 dict")
 
     keys = list(matrix.keys())
     value_lists: list[list[Any]] = []
     for key in keys:
         values = matrix[key]
         if not isinstance(values, list) or not values:
-            raise ValueError(f"step '{name}' 的 matrix 变量 '{key}' 必须是非空 list")
+            raise ParseError(f"step '{name}' 的 matrix 变量 '{key}' 必须是非空 list")
         value_lists.append(values)
 
     base_data = deepcopy(data)
@@ -147,7 +148,7 @@ def parse_step_hooks(data: dict[str, Any] | None) -> StepHooks:
     if data is None:
         return StepHooks()
     if not isinstance(data, dict):
-        raise ValueError(f"step hooks 格式错误: 期望 dict，得到 {type(data).__name__}")
+        raise ParseError(f"step hooks 格式错误: 期望 dict，得到 {type(data).__name__}")
 
     return StepHooks(
         before=[parse_hook_action(item) for item in data.get("before", [])],
@@ -160,7 +161,7 @@ def parse_testcase_hooks(data: dict[str, Any] | None) -> TestCaseHooks:
     if data is None:
         return TestCaseHooks()
     if not isinstance(data, dict):
-        raise ValueError(f"testcase hooks 格式错误: 期望 dict，得到 {type(data).__name__}")
+        raise ParseError(f"testcase hooks 格式错误: 期望 dict，得到 {type(data).__name__}")
 
     return TestCaseHooks(
         before_all=[parse_hook_action(item) for item in data.get("before_all", [])],
@@ -175,7 +176,7 @@ def resolve_depends_on(depends_on: list[str], matrix_map: dict[str, list[str]]) 
     resolved: list[str] = []
     for dep in depends_on:
         if dep not in matrix_map:
-            raise ValueError(f"依赖的步骤不存在: {dep}")
+            raise ParseError(f"依赖的步骤不存在: {dep}")
         resolved.extend(matrix_map[dep])
     return resolved
 
@@ -186,7 +187,7 @@ def parse_step(name: str, data: dict[str, Any]) -> StepNode:
     action_type = find_action_type(data)
 
     if not action_type:
-        raise ValueError(
+        raise ParseError(
             f"step '{name}' 缺少 action 字段，"
             f"支持的 action 类型: {list_actions()}"
         )
@@ -194,13 +195,13 @@ def parse_step(name: str, data: dict[str, Any]) -> StepNode:
     # 检查是否有多个 action
     found_actions = [a for a in list_actions() if a in data]
     if len(found_actions) > 1:
-        raise ValueError(
+        raise ParseError(
             f"step '{name}' 包含多个 action: {found_actions}，只能有一个"
         )
 
     action = get_action(action_type)
     if action is None:
-        raise ValueError(f"未注册的 action 类型: {action_type}")
+        raise ParseError(f"未注册的 action 类型: {action_type}")
 
     parsed_config = action.parse_config(data[action_type])
 
@@ -220,18 +221,18 @@ def parse_step(name: str, data: dict[str, Any]) -> StepNode:
 def parse_testcase(data: dict[str, Any]) -> TestCase:
     """解析整个测试用例"""
     if "version" not in data:
-        raise ValueError("缺少 version 字段")
+        raise ParseError("缺少 version 字段")
 
     if "steps" not in data or not data["steps"]:
-        raise ValueError("缺少 steps 字段或 steps 为空")
+        raise ParseError("缺少 steps 字段或 steps 为空")
 
     mode = data.get("mode", "sequential")
     if mode not in ("sequential", "parallel"):
-        raise ValueError(f"不支持的执行模式: {mode}，支持: sequential, parallel")
+        raise ParseError(f"不支持的执行模式: {mode}，支持: sequential, parallel")
 
     fail_fast = data.get("fail_fast", True)
     if not isinstance(fail_fast, bool):
-        raise ValueError(f"fail_fast 格式错误: 期望 bool，得到 {type(fail_fast).__name__}")
+        raise ParseError(f"fail_fast 格式错误: 期望 bool，得到 {type(fail_fast).__name__}")
 
     steps: dict[str, StepNode] = {}
     matrix_map: dict[str, list[str]] = {}
@@ -246,13 +247,13 @@ def parse_testcase(data: dict[str, Any]) -> TestCase:
             if matrix_vars:
                 conflict = set(matrix_vars) & set(step.set_vars)
                 if conflict:
-                    raise ValueError(
+                    raise ParseError(
                         f"step '{name}' 的 matrix 变量与 set_vars 重名: {sorted(conflict)}"
                     )
                 step.set_vars = {**matrix_vars, **step.set_vars}
 
             if step.name in steps:
-                raise ValueError(f"步骤名称重复: {step.name}")
+                raise ParseError(f"步骤名称重复: {step.name}")
 
             steps[step.name] = step
 

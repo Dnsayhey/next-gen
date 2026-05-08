@@ -4,6 +4,7 @@ import pytest
 
 from nextgen.core.condition import evaluate_condition
 from nextgen.core.context import Context
+from nextgen.core.errors import ParseError
 
 
 class TestEvaluateCondition:
@@ -142,7 +143,7 @@ class TestEvaluateCondition:
     def test_invalid_dict_key(self):
         ctx = Context()
         condition = {"invalid": []}
-        with pytest.raises(ValueError, match="未知的条件格式"):
+        with pytest.raises(ParseError, match="未知的条件格式"):
             evaluate_condition(condition, ctx)
 
     def test_invalid_expression_format(self):

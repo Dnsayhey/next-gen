@@ -8,6 +8,8 @@ from typing import Any
 
 from jsonpath_ng.ext import parse as jsonpath_parse
 
+from nextgen.core.errors import ParseError
+
 
 @dataclass(frozen=True)
 class ExtractRule:
@@ -26,7 +28,7 @@ def parse_extract_rule(raw: str | dict[str, Any]) -> ExtractRule:
         return ExtractRule(method="jsonpath", expr=raw)
 
     if not isinstance(raw, dict):
-        raise ValueError(f"extract 规则必须是字符串或 dict，得到 {type(raw).__name__}")
+        raise ParseError(f"extract 规则必须是字符串或 dict，得到 {type(raw).__name__}")
 
     has_default = "default" in raw
     default = raw.get("default")
@@ -41,7 +43,7 @@ def parse_extract_rule(raw: str | dict[str, Any]) -> ExtractRule:
 
     if "regex" in raw:
         if "group" not in raw:
-            raise ValueError("regex extract 必须包含 group 字段")
+            raise ParseError("regex extract 必须包含 group 字段")
         return ExtractRule(
             method="regex",
             expr=raw["regex"],
@@ -50,7 +52,7 @@ def parse_extract_rule(raw: str | dict[str, Any]) -> ExtractRule:
             has_default=has_default,
         )
 
-    raise ValueError("extract 规则必须包含 jsonpath 或 regex")
+    raise ParseError("extract 规则必须包含 jsonpath 或 regex")
 
 
 def extract_value(source: Any, raw_rule: str | dict[str, Any]) -> Any:
@@ -63,7 +65,7 @@ def extract_value(source: Any, raw_rule: str | dict[str, Any]) -> Any:
         elif rule.method == "regex":
             value = _extract_regex(source, rule.expr, rule.group)
         else:
-            raise ValueError(f"不支持的 extract 方法: {rule.method}")
+            raise ParseError(f"不支持的 extract 方法: {rule.method}")
     except Exception:
         if rule.has_default:
             return rule.default

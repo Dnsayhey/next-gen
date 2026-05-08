@@ -8,6 +8,7 @@ import pytest
 import yaml
 
 from nextgen.bootstrap import load_builtin_actions
+from nextgen.core.errors import ParseError
 from nextgen.core.model import StepNode, TestCase as CaseModel
 from nextgen.executors.http.config import parse_request_config
 from nextgen.executors.http.model import RequestConfig
@@ -79,7 +80,7 @@ class TestParseRequest:
 
     def test_missing_method(self):
         config = {"url": "http://test.com"}
-        with pytest.raises(ValueError, match="method"):
+        with pytest.raises(ParseError, match="method"):
             parse_request_config(config)
 
     def test_missing_url(self):

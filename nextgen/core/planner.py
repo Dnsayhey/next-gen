@@ -2,6 +2,7 @@
 
 from loguru import logger
 
+from nextgen.core.errors import ParseError
 from nextgen.core.model import TestCase
 
 
@@ -28,7 +29,7 @@ def detect_cycle(graph: dict[str, list[str]]) -> None:
 
     def visit(node: str) -> None:
         if node in stack:
-            raise ValueError(f"检测到循环依赖，涉及节点: {node}")
+            raise ParseError(f"检测到循环依赖，涉及节点: {node}")
         if node in visited:
             return
 
@@ -36,7 +37,7 @@ def detect_cycle(graph: dict[str, list[str]]) -> None:
 
         for dep in graph.get(node, []):
             if dep not in graph:
-                raise ValueError(f"依赖的步骤不存在: {node} -> {dep}")
+                raise ParseError(f"依赖的步骤不存在: {node} -> {dep}")
             visit(dep)
 
         stack.remove(node)
@@ -69,7 +70,7 @@ def get_execution_order(graph: dict[str, list[str]]) -> list[list[str]]:
         # 找出入度为 0 的节点
         layer = [n for n in remaining if in_degree[n] == 0]
         if not layer:
-            raise ValueError("无法确定执行顺序，可能存在循环")
+            raise ParseError("无法确定执行顺序，可能存在循环")
 
         layers.append(layer)
 

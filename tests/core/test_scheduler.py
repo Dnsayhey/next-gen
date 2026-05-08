@@ -7,6 +7,7 @@ import time
 import pytest
 
 from nextgen.core.actions import ActionSpec, register_action, restore_actions, snapshot_actions
+from nextgen.core.errors import ExecutionError, HookError, ValidationError
 from nextgen.core.errors import ActionExecutionError
 from nextgen.core.model import (
     ActionNode,
@@ -16,7 +17,7 @@ from nextgen.core.model import (
     TestCase as CaseModel,
 )
 from nextgen.core.result import ActionResult, StepStatus
-from nextgen.core.scheduler import Scheduler
+from nextgen.core.scheduler import Scheduler, StepRuntime
 from nextgen.core.hooks import register_hook
 
 
@@ -473,6 +474,52 @@ class TestScheduler:
             "body": {"error": "boom"},
             "headers": {"x-request-id": "req-1"},
         }
+
+    @pytest.mark.asyncio
+    async def test_step_logic_uses_validation_error_for_assertion_failures(self):
+        actions = snapshot_actions()
+
+        async def execute(config, ctx):
+            return ActionResult(data={}, action_input={}, action_output={})
+
+        register_action(ActionSpec(
+            name="validation_error_action",
+            parse_config=lambda config: config,
+            execute=execute,
+            extract=lambda result, config, ctx: {},
+            validate=lambda result, assertions: ["forced failure"],
+            summarize=lambda config: "validation error action",
+        ))
+
+        try:
+            step = StepRuntime(StepNode(
+                name="failing",
+                action=ActionNode(type="validation_error_action", config={}),
+            ))
+            scheduler = Scheduler(CaseModel(version=1, steps={"failing": step.node}))
+
+            with pytest.raises(ValidationError, match="forced failure"):
+                await scheduler._execute_step_logic(step, scheduler.context.derive())
+        finally:
+            restore_actions(actions)
+
+    @pytest.mark.asyncio
+    async def test_step_logic_uses_execution_error_for_missing_action(self):
+        step = StepRuntime(StepNode(
+            name="missing",
+            action=ActionNode(type="missing_action", config={}),
+        ))
+        scheduler = Scheduler(CaseModel(version=1, steps={"missing": step.node}))
+
+        with pytest.raises(ExecutionError, match="未注册的 action"):
+            await scheduler._execute_step_logic(step, scheduler.context.derive())
+
+    @pytest.mark.asyncio
+    async def test_execute_hooks_uses_hook_error_for_missing_hook(self):
+        scheduler = Scheduler(CaseModel(version=1, steps={"one": make_step("one")}))
+
+        with pytest.raises(HookError, match="未注册的 hook"):
+            await scheduler.execute_hooks([HookAction("missingHook", {})], scheduler.context, phase="test")
 
     @pytest.mark.asyncio
     async def test_testcase_and_step_hooks_run_in_expected_order(

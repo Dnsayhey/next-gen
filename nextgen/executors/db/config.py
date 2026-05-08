@@ -2,18 +2,19 @@
 
 from typing import Any
 
+from nextgen.core.errors import ParseError
 from nextgen.executors.db.model import DbConfig
 
 
 def parse_db_config(config: dict[str, Any]) -> DbConfig:
     """解析 db 配置"""
     if "url" not in config:
-        raise ValueError("db 必须包含 url 字段")
+        raise ParseError("db 必须包含 url 字段")
     if "query" not in config:
-        raise ValueError("db 必须包含 query 字段")
+        raise ParseError("db 必须包含 query 字段")
     params = config.get("params", [])
     if not isinstance(params, list):
-        raise ValueError("db.params 必须是 list")
+        raise ParseError("db.params 必须是 list")
 
     return DbConfig(
         url=config["url"],

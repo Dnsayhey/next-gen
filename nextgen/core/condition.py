@@ -5,6 +5,7 @@ from typing import Any
 from loguru import logger
 
 from nextgen.core.context import Context
+from nextgen.core.errors import ParseError
 from nextgen.core.operators import evaluate_operator
 
 
@@ -33,7 +34,7 @@ def evaluate_condition(condition: list | dict | None, ctx: Context) -> bool:
         if "or" in condition:
             return _eval_or(condition["or"], ctx)
 
-    raise ValueError(f"未知的条件格式: {condition}")
+    raise ParseError(f"未知的条件格式: {condition}")
 
 
 def _eval_and(expressions: list, ctx: Context) -> bool:
@@ -55,7 +56,7 @@ def _eval_or(expressions: list, ctx: Context) -> bool:
 def _eval_item(item: dict, ctx: Context) -> bool:
     """评估条件项（可能是嵌套条件或单个表达式）"""
     if not isinstance(item, dict):
-        raise ValueError(f"条件项格式错误: {item}")
+        raise ParseError(f"条件项格式错误: {item}")
 
     # 嵌套条件
     if "and" in item:
@@ -70,13 +71,13 @@ def _eval_item(item: dict, ctx: Context) -> bool:
 def _eval_expr(expr: dict, ctx: Context) -> bool:
     """评估单个表达式"""
     if not isinstance(expr, dict) or len(expr) != 1:
-        raise ValueError(f"表达式格式错误: {expr}")
+        raise ParseError(f"表达式格式错误: {expr}")
 
     op = list(expr.keys())[0]
     args = expr[op]
 
     if not isinstance(args, list) or len(args) != 2:
-        raise ValueError(f"表达式参数错误: {op} 需要两个参数 [left, right]")
+        raise ParseError(f"表达式参数错误: {op} 需要两个参数 [left, right]")
 
     left_expr, right_expr = args
 

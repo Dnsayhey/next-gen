@@ -2,6 +2,7 @@
 
 import pytest
 
+from nextgen.core.errors import ParseError
 from nextgen.core.model import ActionNode, StepNode, TestCase as CaseModel
 from nextgen.core.planner import build_graph, detect_cycle, get_execution_order
 
@@ -80,7 +81,7 @@ class TestDetectCycle:
 
     def test_simple_cycle(self):
         graph = {"a": ["b"], "b": ["a"]}
-        with pytest.raises(ValueError, match="循环依赖"):
+        with pytest.raises(ParseError, match="循环依赖"):
             detect_cycle(graph)
 
     def test_self_cycle(self):

@@ -10,6 +10,7 @@ from loguru import logger
 from nextgen.core.actions import get_action
 from nextgen.core.condition import evaluate_condition
 from nextgen.core.context import Context
+from nextgen.core.errors import ExecutionError, HookError, ValidationError
 from nextgen.core.hooks import get_hook, load_discovered_hooks
 from nextgen.core.model import (
     AssertionNode,
@@ -87,14 +88,14 @@ class Scheduler:
         for hook in hooks:
             handler = get_hook(hook.type)
             if handler is None:
-                raise ValueError(f"未注册的 hook: {hook.type}")
+                raise HookError(f"未注册的 hook: {hook.type}")
 
             params = ctx.render_dict(hook.params)
             try:
                 await handler(ctx, params)
             except Exception as exc:
                 target = step.node.name if step else "testcase"
-                raise RuntimeError(f"{phase} hook '{hook.type}' 执行失败 ({target}): {exc}") from exc
+                raise HookError(f"{phase} hook '{hook.type}' 执行失败 ({target}): {exc}") from exc
 
     def is_runnable(self, step: StepRuntime) -> bool:
         """判断步骤是否可执行"""
@@ -183,7 +184,7 @@ class Scheduler:
         # 检查 action 是否存在
         action = get_action(action_type)
         if action is None:
-            raise ValueError(f"未注册的 action 类型: {action_type}")
+            raise ExecutionError(f"未注册的 action 类型: {action_type}")
 
         # 执行
         result = await action.execute(
@@ -203,7 +204,7 @@ class Scheduler:
         ]
         errors = action.validate(result.data, assertions)
         if errors:
-            raise AssertionError("; ".join(errors))
+            raise ValidationError("; ".join(errors))
 
         # 提取变量
         if step.node.extract:
