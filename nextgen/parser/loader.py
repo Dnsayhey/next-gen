@@ -9,6 +9,7 @@ from loguru import logger
 
 from nextgen.core.actions import list_actions, get_action
 from nextgen.core.model import (
+    ActionNode,
     AssertionNode,
     HookAction,
     StepNode,
@@ -167,17 +168,15 @@ def parse_step(name: str, data: dict[str, Any]) -> StepNode:
             f"step '{name}' 包含多个 action: {found_actions}，只能有一个"
         )
 
-    action_config = data[action_type]
-
-    # 验证 action 配置
     action = get_action(action_type)
-    if action and action.validate_config:
-        action.validate_config(action_config)
+    if action is None:
+        raise ValueError(f"未注册的 action 类型: {action_type}")
+
+    parsed_config = action.parse_config(data[action_type])
 
     return StepNode(
         name=name,
-        action_type=action_type,
-        action_config=action_config,
+        action=ActionNode(type=action_type, config=parsed_config),
         depends_on=data.get("depends_on", []),
         extract=data.get("extract", {}),
         validate=parse_assertions(data.get("validate", [])),

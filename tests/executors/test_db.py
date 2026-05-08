@@ -4,9 +4,37 @@ import pytest
 
 from nextgen.core.context import Context
 from nextgen.core.model import AssertionNode
+from nextgen.executors.db.config import parse_db_config, summarize_db
 from nextgen.executors.db.extract import extract_variables
+from nextgen.executors.db.model import DbConfig
 from nextgen.executors.db.validate import validate_result
 from nextgen.executors.db.drivers import get_driver
+
+
+class TestDbConfig:
+    """测试 DbConfig"""
+
+    def test_parse_db_config(self):
+        config = parse_db_config({
+            "url": "sqlite:///tmp/test.db",
+            "query": "SELECT 1",
+            "params": ["x"],
+        })
+
+        assert config == DbConfig(
+            url="sqlite:///tmp/test.db",
+            query="SELECT 1",
+            params=["x"],
+        )
+        assert summarize_db(config) == "sqlite: SELECT 1"
+
+    def test_missing_url(self):
+        with pytest.raises(ValueError, match="url"):
+            parse_db_config({"query": "SELECT 1"})
+
+    def test_missing_query(self):
+        with pytest.raises(ValueError, match="query"):
+            parse_db_config({"url": "sqlite:///tmp/test.db"})
 
 
 class TestGetDriver:

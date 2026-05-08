@@ -4,7 +4,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from nextgen.core.model import RequestNode
+from nextgen.executors.http.model import RequestConfig
 
 
 def resolve_case_path(path_str: str, base_dir: str | Path | None = None) -> Path:
@@ -39,7 +39,7 @@ def load_file_content(path_str: str, base_dir: str | Path | None = None) -> byte
         return file_path.read_bytes()
 
 
-def check_content_type_conflict(request: RequestNode) -> None:
+def check_content_type_conflict(request: RequestConfig) -> None:
     """检查 content_type 与请求体类型是否冲突"""
     body_type = request.body_type()
     if not body_type or not request.content_type:

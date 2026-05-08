@@ -8,10 +8,11 @@ from typing import Any, Awaitable, Callable
 from nextgen.core.context import Context
 from nextgen.core.model import AssertionNode
 
-ActionExecute = Callable[[dict[str, Any], Context], Awaitable[dict[str, Any]]]
+ActionParseConfig = Callable[[dict[str, Any]], Any]
+ActionExecute = Callable[[Any, Context], Awaitable[dict[str, Any]]]
 ActionExtract = Callable[[dict[str, Any], dict[str, str], Context], dict[str, Any]]
 ActionValidate = Callable[[dict[str, Any], list[AssertionNode]], list[str]]
-ActionConfigValidator = Callable[[dict[str, Any]], None]
+ActionSummarize = Callable[[Any], str]
 
 
 @dataclass(frozen=True)
@@ -19,10 +20,11 @@ class ActionSpec:
     """完整 action 能力定义"""
 
     name: str
+    parse_config: ActionParseConfig
     execute: ActionExecute
     extract: ActionExtract
     validate: ActionValidate
-    validate_config: ActionConfigValidator | None = None
+    summarize: ActionSummarize
 
 
 ACTION_REGISTRY: dict[str, ActionSpec] = {}

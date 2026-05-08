@@ -138,19 +138,21 @@ nextgen/
 ```python
 from nextgen import ActionSpec, register_action
 
-# 1. 实现 executor 函数
-async def execute_db(action_config, ctx): ...
+# 1. 实现 action 函数
+def parse_db_config(raw): ...
+async def execute_db(config, ctx): ...
 def extract_db(result, config, ctx): ...
 def validate_db(result, assertions): ...
-def validate_db_config(config): ...
+def summarize_db(config): ...
 
 # 2. 注册
 register_action(ActionSpec(
     name="db",
+    parse_config=parse_db_config,
     execute=execute_db,
     extract=extract_db,
     validate=validate_db,
-    validate_config=validate_db_config,
+    summarize=summarize_db,
 ))
 ```
 

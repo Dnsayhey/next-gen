@@ -27,7 +27,7 @@ def to_json(result: TestResult, indent: int = 2) -> str:
                 "name": s.name,
                 "status": s.status.value,
                 "duration_ms": s.duration_ms,
-                "request": s.request_summary,
+                "action": s.action_summary,
                 "response_status": s.response_status,
                 "error": s.error,
             }

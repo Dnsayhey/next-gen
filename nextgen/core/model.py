@@ -22,31 +22,11 @@ class TestStatus(str, Enum):
 
 
 @dataclass
-class RequestNode:
-    """HTTP 请求节点"""
-    method: str
-    url: str
-    headers: dict[str, str] = field(default_factory=dict)
-    params: dict[str, str] = field(default_factory=dict)
-    # 请求体（互斥，同时出现会报错）
-    json: dict[str, Any] | None = None
-    form: dict[str, str] | None = None
-    multipart: dict[str, str] | None = None
-    body: str | None = None
-    content_type: str | None = None
-    timeout: float | None = None  # 请求超时（秒）
+class ActionNode:
+    """步骤中的 action 节点"""
 
-    def body_type(self) -> str | None:
-        """获取请求体类型"""
-        if self.json is not None:
-            return "json"
-        if self.form is not None:
-            return "form"
-        if self.multipart is not None:
-            return "multipart"
-        if self.body is not None:
-            return "raw"
-        return None
+    type: str
+    config: Any
 
 
 @dataclass
@@ -84,8 +64,7 @@ class StepHooks:
 class StepNode:
     """测试步骤节点"""
     name: str
-    action_type: str  # "request" / "db" / "python" 等
-    action_config: dict[str, Any]  # 原始 action 配置
+    action: ActionNode
     depends_on: list[str] = field(default_factory=list)
     extract: dict[str, str] = field(default_factory=dict)
     validate: list[AssertionNode] = field(default_factory=list)
@@ -113,7 +92,7 @@ class StepResult:
     name: str
     status: StepStatus
     duration_ms: int
-    request_summary: str  # e.g. "POST /login"
+    action_summary: str  # e.g. "POST /login" / "sqlite: SELECT ..."
     response_status: int | None = None
     error: str | None = None
     extracted: dict[str, Any] = field(default_factory=dict)

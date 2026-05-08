@@ -22,7 +22,7 @@ def test_to_json_includes_testcase_status_errors_and_response_status():
                 name="login",
                 status=StepStatus.FAILED,
                 duration_ms=12,
-                request_summary="POST /login",
+                action_summary="POST /login",
                 response_status=500,
                 error="boom",
             )
@@ -33,4 +33,5 @@ def test_to_json_includes_testcase_status_errors_and_response_status():
 
     assert data["status"] == "failed"
     assert data["errors"] == ["after_all failed"]
+    assert data["steps"][0]["action"] == "POST /login"
     assert data["steps"][0]["response_status"] == 500

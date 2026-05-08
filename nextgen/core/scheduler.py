@@ -42,21 +42,12 @@ class StepRuntime:
         return 0
 
     @property
-    def request_summary(self) -> str:
-        """获取请求摘要"""
-        if self.node.action_type == "request":
-            config = self.node.action_config
-            method = config.get("method", "").upper()
-            url = config.get("url", "")
-            return f"{method} {url}"
-        if self.node.action_type == "db":
-            config = self.node.action_config
-            url = config.get("url", "")
-            query = config.get("query", "")
-            # 显示数据库类型和查询前 50 字符
-            db_type = url.split("://")[0] if "://" in url else "db"
-            return f"{db_type}: {query[:50]}"
-        return f"{self.node.action_type}: {self.node.name}"
+    def action_summary(self) -> str:
+        """获取 action 摘要"""
+        action = get_action(self.node.action.type)
+        if action is None:
+            return f"{self.node.action.type}: {self.node.name}"
+        return action.summarize(self.node.action.config)
 
 
 class Scheduler:
@@ -127,7 +118,7 @@ class Scheduler:
                 name=name,
                 status=runtime.status,
                 duration_ms=runtime.duration_ms,
-                request_summary=runtime.request_summary,
+                action_summary=runtime.action_summary,
                 response_status=runtime.result.get("status_code") if runtime.result else None,
                 error=runtime.error,
             ))
@@ -175,7 +166,7 @@ class Scheduler:
             phase="before",
         )
 
-        action_type = step.node.action_type
+        action_type = step.node.action.type
 
         # 检查 executor 是否存在
         action = get_action(action_type)
@@ -184,7 +175,7 @@ class Scheduler:
 
         # 执行
         result = await action.execute(
-            step.node.action_config,
+            step.node.action.config,
             step_ctx,
         )
         step.result = result

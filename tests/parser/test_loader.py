@@ -9,7 +9,8 @@ import yaml
 
 from nextgen.bootstrap import load_builtin_actions
 from nextgen.core.model import StepNode, TestCase as CaseModel
-from nextgen.executors.http.config import validate_request_config
+from nextgen.executors.http.config import parse_request_config
+from nextgen.executors.http.model import RequestConfig
 from nextgen.parser.loader import (
     find_action_type,
     load_file,
@@ -71,17 +72,18 @@ class TestParseRequest:
 
     def test_valid_request(self):
         config = {"method": "GET", "url": "http://test.com"}
-        validate_request_config(config)  # 不应抛出异常
+        parsed = parse_request_config(config)
+        assert parsed == RequestConfig(method="GET", url="http://test.com")
 
     def test_missing_method(self):
         config = {"url": "http://test.com"}
         with pytest.raises(ValueError, match="method"):
-            validate_request_config(config)
+            parse_request_config(config)
 
     def test_missing_url(self):
         config = {"method": "GET"}
         with pytest.raises(ValueError, match="url"):
-            validate_request_config(config)
+            parse_request_config(config)
 
     def test_mutual_exclusion(self):
         config = {
@@ -91,7 +93,7 @@ class TestParseRequest:
             "form": {"key": "value"},
         }
         with pytest.raises(ValueError, match="不能同时出现"):
-            validate_request_config(config)
+            parse_request_config(config)
 
 
 class TestParseAssertions:
@@ -153,7 +155,9 @@ class TestParseStep:
         }
         step = parse_step("test", data)
         assert step.name == "test"
-        assert step.action_type == "request"
+        assert step.action.type == "request"
+        assert isinstance(step.action.config, RequestConfig)
+        assert step.action.config.method == "GET"
         assert step.extract == {"token": "$.data.token"}
         assert len(step.validate) == 1
 

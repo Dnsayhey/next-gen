@@ -7,7 +7,7 @@ import time
 import pytest
 
 from nextgen.core.actions import ActionSpec, register_action, restore_actions, snapshot_actions
-from nextgen.core.model import HookAction, StepNode, StepStatus, TestCase as CaseModel
+from nextgen.core.model import ActionNode, HookAction, StepNode, StepStatus, TestCase as CaseModel
 from nextgen.core.scheduler import Scheduler
 from nextgen.core.hooks import register_hook
 
@@ -23,8 +23,7 @@ def make_step(
     """创建测试用 StepNode"""
     return StepNode(
         name=name,
-        action_type="test_scheduler_action",
-        action_config={"name": name},
+        action=ActionNode(type="test_scheduler_action", config={"name": name}),
         depends_on=depends_on or [],
         when=when,
         set_vars=set_vars or {},
@@ -34,12 +33,12 @@ def make_step(
 
 @pytest.fixture
 def scheduler_executor_registry():
-    """注册测试用 executor"""
+    """注册测试用 action"""
     actions = snapshot_actions()
     events: list[str] = []
 
-    async def execute(action_config, ctx):
-        name = action_config["name"]
+    async def execute(config, ctx):
+        name = config["name"]
         events.append(f"execute:{name}")
 
         if name == "sleepy":
@@ -72,9 +71,11 @@ def scheduler_executor_registry():
 
     register_action(ActionSpec(
         name="test_scheduler_action",
+        parse_config=lambda config: config,
         execute=execute,
         extract=extract,
         validate=validate,
+        summarize=lambda config: f"test: {config['name']}",
     ))
     yield events
     restore_actions(actions)

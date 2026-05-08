@@ -7,29 +7,13 @@ import httpx
 from loguru import logger
 
 from nextgen.core.context import Context
-from nextgen.core.model import RequestNode
 
+from .model import RequestConfig
 from .utils import check_content_type_conflict, load_file_content, resolve_case_path
 
 
-def parse_request_config(config: dict[str, Any]) -> RequestNode:
-    """解析 request 配置为 RequestNode"""
-    return RequestNode(
-        method=config.get("method", "").upper(),
-        url=config.get("url", ""),
-        headers=config.get("headers", {}),
-        params=config.get("params", {}),
-        json=config.get("json"),
-        form=config.get("form"),
-        multipart=config.get("multipart"),
-        body=config.get("body"),
-        content_type=config.get("content_type"),
-        timeout=config.get("timeout"),
-    )
-
-
 async def execute_request(
-    action_config: dict[str, Any],
+    request: RequestConfig,
     ctx: Context,
 ) -> dict[str, Any]:
     """执行 HTTP 请求
@@ -37,7 +21,6 @@ async def execute_request(
     Returns:
         dict: {"status_code": int, "body": Any, "headers": dict, "response": httpx.Response}
     """
-    request = parse_request_config(action_config)
     base_dir = ctx.metadata.get("base_dir")
 
     # 渲染变量

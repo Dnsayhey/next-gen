@@ -2,7 +2,7 @@
 
 import pytest
 
-from nextgen.core.model import StepNode, TestCase as CaseModel
+from nextgen.core.model import ActionNode, StepNode, TestCase as CaseModel
 from nextgen.core.planner import build_graph, detect_cycle, get_execution_order
 
 
@@ -10,8 +10,10 @@ def make_step(name: str, depends_on: list[str] | None = None) -> StepNode:
     """创建测试用 StepNode"""
     return StepNode(
         name=name,
-        action_type="request",
-        action_config={"method": "GET", "url": "http://test.com"},
+        action=ActionNode(
+            type="request",
+            config={"method": "GET", "url": "http://test.com"},
+        ),
         depends_on=depends_on or [],
     )
 

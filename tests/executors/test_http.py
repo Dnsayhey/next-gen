@@ -4,9 +4,53 @@ import pytest
 
 from nextgen.core.context import Context
 from nextgen.core.model import AssertionNode
+from nextgen.executors.http.config import parse_request_config, summarize_request
 from nextgen.executors.http.extract import extract_variables
+from nextgen.executors.http.model import RequestConfig
 from nextgen.executors.http.utils import load_file_content, resolve_case_path
 from nextgen.executors.http.validate import validate_response
+
+
+class TestRequestConfig:
+    """测试 RequestConfig"""
+
+    def test_default_values(self):
+        node = RequestConfig(method="GET", url="http://test.com")
+        assert node.method == "GET"
+        assert node.url == "http://test.com"
+        assert node.headers == {}
+        assert node.params == {}
+        assert node.json is None
+        assert node.form is None
+        assert node.multipart is None
+        assert node.body is None
+        assert node.content_type is None
+        assert node.timeout is None
+
+    def test_body_type_json(self):
+        node = RequestConfig(method="POST", url="http://test.com", json={"key": "value"})
+        assert node.body_type() == "json"
+
+    def test_body_type_form(self):
+        node = RequestConfig(method="POST", url="http://test.com", form={"key": "value"})
+        assert node.body_type() == "form"
+
+    def test_body_type_multipart(self):
+        node = RequestConfig(method="POST", url="http://test.com", multipart={"file": "@./test.csv"})
+        assert node.body_type() == "multipart"
+
+    def test_body_type_raw(self):
+        node = RequestConfig(method="POST", url="http://test.com", body="<xml/>")
+        assert node.body_type() == "raw"
+
+    def test_body_type_none(self):
+        node = RequestConfig(method="GET", url="http://test.com")
+        assert node.body_type() is None
+
+    def test_parse_request_config(self):
+        config = parse_request_config({"method": "get", "url": "http://test.com"})
+        assert config == RequestConfig(method="GET", url="http://test.com")
+        assert summarize_request(config) == "GET http://test.com"
 
 
 class TestExtractVariables:

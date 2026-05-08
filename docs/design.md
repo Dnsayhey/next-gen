@@ -408,10 +408,15 @@ before_each -> set_vars -> when -> before -> action -> validate -> extract -> af
 
 ```python
 @dataclass
+class ActionNode:
+    type: str
+    config: Any
+
+
+@dataclass
 class StepNode:
     name: str
-    action_type: str              # "request" / "db" / "python" 等
-    action_config: dict[str, Any] # 原始 action 配置
+    action: ActionNode
     depends_on: list[str]
     extract: dict[str, str]
     validate: list[AssertionNode]
@@ -421,23 +426,7 @@ class StepNode:
     hooks: StepHooks
 ```
 
-### 5.2 RequestNode
-
-```python
-@dataclass
-class RequestNode:
-    method: str
-    url: str
-    headers: dict[str, str]
-    params: dict[str, str]
-    json: dict[str, Any] | None
-    form: dict[str, str] | None
-    multipart: dict[str, str] | None
-    body: str | None
-    content_type: str | None
-```
-
-### 5.3 AssertionNode
+### 5.2 AssertionNode
 
 ```python
 @dataclass
@@ -447,7 +436,7 @@ class AssertionNode:
     right: Any   # 期望值
 ```
 
-### 5.4 HookAction / Hooks
+### 5.3 HookAction / Hooks
 
 ```python
 @dataclass
@@ -470,7 +459,7 @@ class TestCaseHooks:
     after_each: list[HookAction]
 ```
 
-### 5.5 TestCase
+### 5.4 TestCase
 
 ```python
 @dataclass
@@ -492,17 +481,18 @@ class TestCase:
 **职责：**
 - 加载 YAML/JSON 文件
 - 校验 DSL 格式
-- 解析为 AST（StepNode, RequestNode 等）
+- 解析为通用 AST（StepNode, TestCase 等）
 
 **Action 注册表：**
 ```python
 @dataclass(frozen=True)
 class ActionSpec:
     name: str
+    parse_config: ActionParseConfig
     execute: ActionExecute
     extract: ActionExtract
     validate: ActionValidate
-    validate_config: ActionConfigValidator | None = None
+    summarize: ActionSummarize
 
 def register_action(spec: ActionSpec) -> None: ...
 def get_action(name: str) -> ActionSpec | None: ...
@@ -551,7 +541,7 @@ def get_execution_order(graph: dict[str, list[str]]) -> list[list[str]]: ...
 - hook 生命周期调度
 - 自动发现并加载 `hooks.py`
 
-Scheduler 从 Action 注册表读取 `execute / extract / validate`，不再维护独立 executor 注册表。
+Scheduler 从 Action 注册表读取 `execute / extract / validate / summarize`，不再维护独立执行器注册表。
 
 ### 6.5 Hooks（hook 注册表）
 
@@ -564,14 +554,16 @@ def discover_hooks(testcase_path: str | Path, cwd: str | Path) -> list[Path]: ..
 def load_discovered_hooks(testcase_path: str | Path, cwd: str | Path) -> list[Path]: ...
 ```
 
-### 6.6 Executor（执行器）
+### 6.6 Action（执行器）
 
 **Protocol 定义：**
 ```python
-class Executor(Protocol):
-    async def execute(self, action_config: dict, ctx: Context) -> dict: ...
+class Action(Protocol):
+    def parse_config(self, raw: dict[str, Any]) -> Any: ...
+    async def execute(self, config: Any, ctx: Context) -> dict: ...
     def extract(self, result: dict, config: dict, ctx: Context) -> dict: ...
     def validate(self, result: dict, assertions: list) -> list[str]: ...
+    def summarize(self, config: Any) -> str: ...
 ```
 
 ### 6.7 DB 执行器
@@ -643,18 +635,19 @@ class StepStatus(str, Enum):
 nextgen/
 ├── cli.py              # CLI 入口
 ├── core/
-│   ├── model.py        # AST 模型（StepNode, RequestNode 等）
+│   ├── model.py        # 通用 AST 模型（StepNode, TestCase 等）
 │   ├── context.py      # 变量系统
 │   ├── planner.py      # DAG 规划
 │   ├── condition.py    # 条件评估器
 │   ├── hooks.py        # hook 注册表与发现逻辑
-│   └── scheduler.py    # 调度器（executor 注册表）
+│   └── scheduler.py    # 调度器（action 注册表）
 ├── parser/
 │   └── loader.py       # YAML/JSON 解析（action 注册表）
 ├── executors/
 │   ├── http/           # HTTP 执行器
 │   │   ├── __init__.py
 │   │   ├── client.py   # 请求发送
+│   │   ├── model.py    # HTTP action 内部模型
 │   │   ├── extract.py  # 变量提取
 │   │   ├── validate.py # 断言验证
 │   │   └── utils.py    # 工具函数
@@ -676,8 +669,22 @@ nextgen/
 ## 9. 扩展新 Action 类型
 
 ```python
-# 1. 实现 executor 函数
-async def execute_db(action_config: dict, ctx: Context) -> dict:
+from dataclasses import dataclass, field
+from typing import Any
+
+
+@dataclass
+class DbConfig:
+    url: str
+    query: str
+    params: list[Any] = field(default_factory=list)
+
+
+# 1. 实现 action 函数
+def parse_db_config(raw: dict[str, Any]) -> DbConfig:
+    ...
+
+async def execute_db(config: DbConfig, ctx: Context) -> dict:
     ...
 
 def extract_db(result: dict, config: dict, ctx: Context) -> dict:
@@ -686,15 +693,19 @@ def extract_db(result: dict, config: dict, ctx: Context) -> dict:
 def validate_db(result: dict, assertions: list) -> list[str]:
     ...
 
+def summarize_db(config: DbConfig) -> str:
+    ...
+
 # 2. 注册
 from nextgen import ActionSpec, register_action
 
 register_action(ActionSpec(
     name="db",
+    parse_config=parse_db_config,
     execute=execute_db,
     extract=extract_db,
     validate=validate_db,
-    validate_config=validate_db_config,
+    summarize=summarize_db,
 ))
 ```
 
@@ -739,7 +750,7 @@ uv run nextgen demo.yaml
 * [x] 并发控制
 * [x] JSON 报告
 * [x] CLI 工具
-* [x] Executor 注册表架构
+* [x] Action 注册表架构
 * [x] Hook 系统（内置 + 自定义）
 * [x] 超时配置
 * [x] 指数退避重试

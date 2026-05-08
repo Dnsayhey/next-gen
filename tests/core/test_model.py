@@ -1,9 +1,9 @@
 """model.py 单元测试"""
 
 from nextgen.core.model import (
+    ActionNode,
     AssertionNode,
     HookAction,
-    RequestNode,
     StepNode,
     StepHooks,
     StepStatus,
@@ -27,43 +27,6 @@ class TestStepStatus:
         assert StepStatus.RETRYING == "retrying"
 
 
-class TestRequestNode:
-    """测试 RequestNode"""
-
-    def test_default_values(self):
-        node = RequestNode(method="GET", url="http://test.com")
-        assert node.method == "GET"
-        assert node.url == "http://test.com"
-        assert node.headers == {}
-        assert node.params == {}
-        assert node.json is None
-        assert node.form is None
-        assert node.multipart is None
-        assert node.body is None
-        assert node.content_type is None
-        assert node.timeout is None
-
-    def test_body_type_json(self):
-        node = RequestNode(method="POST", url="http://test.com", json={"key": "value"})
-        assert node.body_type() == "json"
-
-    def test_body_type_form(self):
-        node = RequestNode(method="POST", url="http://test.com", form={"key": "value"})
-        assert node.body_type() == "form"
-
-    def test_body_type_multipart(self):
-        node = RequestNode(method="POST", url="http://test.com", multipart={"file": "@./test.csv"})
-        assert node.body_type() == "multipart"
-
-    def test_body_type_raw(self):
-        node = RequestNode(method="POST", url="http://test.com", body="<xml/>")
-        assert node.body_type() == "raw"
-
-    def test_body_type_none(self):
-        node = RequestNode(method="GET", url="http://test.com")
-        assert node.body_type() is None
-
-
 class TestAssertionNode:
     """测试 AssertionNode"""
 
@@ -78,14 +41,16 @@ class TestStepNode:
     """测试 StepNode"""
 
     def test_step_creation(self):
-        request = RequestNode(method="GET", url="http://test.com")
         step = StepNode(
             name="test_step",
-            action_type="request",
-            action_config={"method": "GET", "url": "http://test.com"},
+            action=ActionNode(
+                type="request",
+                config={"method": "GET", "url": "http://test.com"},
+            ),
         )
         assert step.name == "test_step"
-        assert step.action_type == "request"
+        assert step.action.type == "request"
+        assert step.action.config == {"method": "GET", "url": "http://test.com"}
         assert step.depends_on == []
         assert step.extract == {}
         assert step.validate == []
@@ -99,8 +64,10 @@ class TestCaseModel:
     def test_testcase_creation(self):
         step = StepNode(
             name="test_step",
-            action_type="request",
-            action_config={"method": "GET", "url": "http://test.com"},
+            action=ActionNode(
+                type="request",
+                config={"method": "GET", "url": "http://test.com"},
+            ),
         )
         testcase = CaseModel(
             version=1,
@@ -132,7 +99,7 @@ class TestStepResult:
             name="test_step",
             status=StepStatus.SUCCESS,
             duration_ms=100,
-            request_summary="GET http://test.com",
+            action_summary="GET http://test.com",
         )
         assert result.name == "test_step"
         assert result.status == StepStatus.SUCCESS
@@ -146,9 +113,9 @@ class TestCaseResult:
 
     def test_summary(self):
         steps = [
-            StepResult(name="s1", status=StepStatus.SUCCESS, duration_ms=100, request_summary="GET /"),
-            StepResult(name="s2", status=StepStatus.FAILED, duration_ms=200, request_summary="POST /"),
-            StepResult(name="s3", status=StepStatus.SKIPPED, duration_ms=0, request_summary="GET /"),
+            StepResult(name="s1", status=StepStatus.SUCCESS, duration_ms=100, action_summary="GET /"),
+            StepResult(name="s2", status=StepStatus.FAILED, duration_ms=200, action_summary="POST /"),
+            StepResult(name="s3", status=StepStatus.SKIPPED, duration_ms=0, action_summary="GET /"),
         ]
         result = CaseRunResult(
             testcase="test.yaml",
