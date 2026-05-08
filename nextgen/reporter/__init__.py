@@ -1,7 +1,7 @@
 """报告器入口"""
 
 from nextgen.reporter.base import Reporter, get_reporter, list_reporters, register_reporter
-from nextgen.reporter.json_reporter import JsonReporter, to_json
+from nextgen.reporter.json_reporter import JsonReporter
 
 __all__ = [
     "JsonReporter",
@@ -9,5 +9,4 @@ __all__ = [
     "get_reporter",
     "list_reporters",
     "register_reporter",
-    "to_json",
 ]

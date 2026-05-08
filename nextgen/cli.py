@@ -11,7 +11,7 @@ from nextgen.core.planner import validate_testcase
 from nextgen.core.scheduler import Scheduler
 from nextgen.core.result import TestStatus
 from nextgen.parser.loader import load_testcase
-from nextgen.reporter.json_reporter import to_json
+from nextgen.reporter.json_reporter import JsonReporter
 
 app = typer.Typer(name="nextgen", help="Next-Gen API Test Engine")
 
@@ -42,7 +42,7 @@ def run(
         result.testcase = str(file)
 
         # 输出报告
-        print(to_json(result))
+        print(JsonReporter().render(result))
 
         # 退出码
         if result.status == TestStatus.FAILED:

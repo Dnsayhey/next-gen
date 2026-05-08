@@ -10,10 +10,9 @@ from nextgen.core.result import (
 )
 from nextgen.reporter import get_reporter, list_reporters
 from nextgen.reporter.json_reporter import JsonReporter
-from nextgen.reporter.json_reporter import to_json
 
 
-def test_to_json_includes_testcase_status_errors_and_response_status():
+def test_json_reporter_includes_testcase_status_errors_and_response_status():
     result = CaseRunResult(
         testcase="case.yaml",
         total_duration_ms=42,
@@ -47,7 +46,7 @@ def test_to_json_includes_testcase_status_errors_and_response_status():
         ],
     )
 
-    data = json.loads(to_json(result))
+    data = json.loads(JsonReporter().render(result))
 
     assert data["status"] == "failed"
     assert data["errors"] == ["after_all failed"]
@@ -60,7 +59,7 @@ def test_to_json_includes_testcase_status_errors_and_response_status():
     assert data["steps"][0]["extracted"] == {"token": "abc123"}
 
 
-def test_to_json_serializes_success_result_with_summary():
+def test_json_reporter_serializes_success_result_with_summary():
     result = CaseRunResult(
         testcase="case.yaml",
         total_duration_ms=10,
@@ -76,7 +75,7 @@ def test_to_json_serializes_success_result_with_summary():
         ],
     )
 
-    data = json.loads(to_json(result))
+    data = json.loads(JsonReporter().render(result))
 
     assert data["status"] == "success"
     assert data["summary"] == {

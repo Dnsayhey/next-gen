@@ -3,8 +3,6 @@
 from dataclasses import dataclass, field
 from typing import Any
 
-from nextgen.core.result import StepResult, StepStatus, TestResult, TestStatus
-
 
 @dataclass
 class ActionNode:
