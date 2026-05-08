@@ -5,12 +5,12 @@ import pytest
 from nextgen.core.context import Context
 from nextgen.core.errors import ActionExecutionError
 from nextgen.core.model import AssertionNode
-from nextgen.executors.db.client import execute_query
-from nextgen.executors.db.extract import extract_variables
-from nextgen.executors.db.model import DbConfig
-from nextgen.executors.db.validate import validate_result
-from nextgen.executors.db.drivers import get_driver
-from nextgen.executors.db.drivers.sqlite import resolve_db_path
+from nextgen.actions.db.client import execute_query
+from nextgen.actions.db.extract import extract_variables
+from nextgen.actions.db.model import DbConfig
+from nextgen.actions.db.validate import validate_result
+from nextgen.actions.db.drivers import get_driver
+from nextgen.actions.db.drivers.sqlite import resolve_db_path
 
 
 class TestDbConfig:
@@ -61,7 +61,7 @@ class TestDbConfig:
         class FakeDriver:
             execute = staticmethod(fake_execute)
 
-        monkeypatch.setattr("nextgen.executors.db.client.get_driver", lambda url: FakeDriver)
+        monkeypatch.setattr("nextgen.actions.db.client.get_driver", lambda url: FakeDriver)
 
         config = DbConfig(
             url="${db_url}",
@@ -98,7 +98,7 @@ class TestDbConfig:
         class FakeDriver:
             execute = staticmethod(fake_execute)
 
-        monkeypatch.setattr("nextgen.executors.db.client.get_driver", lambda url: FakeDriver)
+        monkeypatch.setattr("nextgen.actions.db.client.get_driver", lambda url: FakeDriver)
 
         config = DbConfig(
             url="sqlite:///tmp/test.db",
@@ -124,19 +124,19 @@ class TestGetDriver:
 
     def test_postgres(self):
         driver = get_driver("postgres://localhost/test")
-        assert driver.__name__ == "nextgen.executors.db.drivers.postgres"
+        assert driver.__name__ == "nextgen.actions.db.drivers.postgres"
 
     def test_postgresql(self):
         driver = get_driver("postgresql://localhost/test")
-        assert driver.__name__ == "nextgen.executors.db.drivers.postgres"
+        assert driver.__name__ == "nextgen.actions.db.drivers.postgres"
 
     def test_mysql(self):
         driver = get_driver("mysql://localhost/test")
-        assert driver.__name__ == "nextgen.executors.db.drivers.mysql"
+        assert driver.__name__ == "nextgen.actions.db.drivers.mysql"
 
     def test_sqlite(self):
         driver = get_driver("sqlite:///tmp/test.db")
-        assert driver.__name__ == "nextgen.executors.db.drivers.sqlite"
+        assert driver.__name__ == "nextgen.actions.db.drivers.sqlite"
 
     def test_unsupported(self):
         with pytest.raises(ValueError, match="不支持的数据库类型"):

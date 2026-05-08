@@ -2,10 +2,10 @@
 
 from nextgen.core.actions import ActionSpec, register_action
 
-from nextgen.executors.db.client import execute_query
-from nextgen.executors.db.extract import extract_variables
-from nextgen.executors.db.model import DbConfig
-from nextgen.executors.db.validate import validate_result
+from nextgen.actions.db.client import execute_query
+from nextgen.actions.db.extract import extract_variables
+from nextgen.actions.db.model import DbConfig
+from nextgen.actions.db.validate import validate_result
 
 register_action(ActionSpec(
     name="db",

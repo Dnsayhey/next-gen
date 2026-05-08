@@ -3,5 +3,5 @@
 
 def load_builtin_actions() -> None:
     """加载内置 action 插件"""
-    import nextgen.executors.db  # noqa: F401
-    import nextgen.executors.http  # noqa: F401
+    import nextgen.actions.db  # noqa: F401
+    import nextgen.actions.http  # noqa: F401

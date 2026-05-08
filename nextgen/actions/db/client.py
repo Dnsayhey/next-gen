@@ -5,8 +5,8 @@ from loguru import logger
 from nextgen.core.context import Context
 from nextgen.core.errors import ActionExecutionError
 from nextgen.core.result import ActionResult
-from nextgen.executors.db.drivers import get_driver
-from nextgen.executors.db.model import DbConfig
+from nextgen.actions.db.drivers import get_driver
+from nextgen.actions.db.model import DbConfig
 
 
 async def execute_query(config: DbConfig, ctx: Context) -> ActionResult:

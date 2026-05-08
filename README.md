@@ -189,7 +189,7 @@ nextgen/
 │   └── scheduler.py    # 调度器
 ├── parser/
 │   └── loader.py       # YAML/JSON 解析
-├── executors/
+├── actions/
 │   ├── http/           # 内置 HTTP action 实现
 │   └── db/             # 内置 DB action 实现
 └── reporter/

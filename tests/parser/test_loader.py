@@ -10,7 +10,7 @@ import yaml
 from nextgen.bootstrap import load_builtin_actions
 from nextgen.core.errors import ParseError
 from nextgen.core.model import AndCondition, ExprCondition, OrCondition, StepNode, TestCase as CaseModel
-from nextgen.executors.http.model import RequestConfig
+from nextgen.actions.http.model import RequestConfig
 from nextgen.parser.loader import (
     find_action_type,
     load_file,

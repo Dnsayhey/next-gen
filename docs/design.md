@@ -750,7 +750,7 @@ nextgen/
 │   └── scheduler.py    # 调度器（action 注册表）
 ├── parser/
 │   └── loader.py       # YAML/JSON 解析（action 注册表）
-├── executors/
+├── actions/
 │   ├── http/           # 内置 HTTP action 实现
 │   │   ├── __init__.py
 │   │   ├── client.py   # 请求发送

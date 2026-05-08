@@ -2,7 +2,7 @@
 
 from typing import Any, Awaitable, Callable, Protocol
 
-from nextgen.executors.db.drivers import postgres, mysql, sqlite
+from nextgen.actions.db.drivers import postgres, mysql, sqlite
 
 
 class DbDriver(Protocol):

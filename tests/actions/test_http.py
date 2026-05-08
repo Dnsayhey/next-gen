@@ -5,10 +5,10 @@ import pytest
 from nextgen.core.context import Context
 from nextgen.core.files import load_file_content, resolve_case_path
 from nextgen.core.model import AssertionNode
-from nextgen.executors.http.client import execute_request
-from nextgen.executors.http.extract import extract_variables
-from nextgen.executors.http.model import RequestConfig
-from nextgen.executors.http.validate import validate_response
+from nextgen.actions.http.client import execute_request
+from nextgen.actions.http.extract import extract_variables
+from nextgen.actions.http.model import RequestConfig
+from nextgen.actions.http.validate import validate_response
 
 
 class TestRequestConfig:
@@ -77,7 +77,7 @@ class TestRequestConfig:
                 captured.update(kwargs)
                 return FakeResponse()
 
-        monkeypatch.setattr("nextgen.executors.http.client.httpx.AsyncClient", FakeClient)
+        monkeypatch.setattr("nextgen.actions.http.client.httpx.AsyncClient", FakeClient)
 
         request = RequestConfig(
             method="POST",

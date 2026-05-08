@@ -2,7 +2,7 @@
 
 from loguru import logger
 
-from nextgen.executors.http.model import RequestConfig
+from nextgen.actions.http.model import RequestConfig
 
 
 def check_content_type_conflict(request: RequestConfig) -> None:
