@@ -18,6 +18,8 @@ steps:
         age: "25"
     extract:
       param_name: $.args.name
+      param_age:
+        jsonpath: $.args.age
     validate:
       - eq: [$.args.name, test]
       - eq: [$.args.age, "25"]
@@ -34,6 +36,9 @@ steps:
         password: "123456"
     extract:
       request_body: $.json
+      password_suffix:
+        regex: '"password":"([0-9]+)"'
+        group: 1
     validate:
       - eq: [$.json.username, admin]
       - starts_with: [$.json.username, ad]

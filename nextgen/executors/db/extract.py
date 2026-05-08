@@ -2,15 +2,15 @@
 
 from typing import Any
 
-from jsonpath_ng.ext import parse as jsonpath_parse
 from loguru import logger
 
 from nextgen.core.context import Context
+from nextgen.core.extract import extract_value
 
 
 def extract_variables(
     result: dict[str, Any],
-    config: dict[str, str],
+    config: dict[str, Any],
     ctx: Context,
 ) -> dict[str, Any]:
     """从查询结果中提取变量
@@ -30,15 +30,14 @@ def extract_variables(
     """
     extracted = {}
 
-    for var_name, path in config.items():
+    for var_name, rule in config.items():
         try:
-            matches = jsonpath_parse(path).find(result)
-            value = matches[0].value if matches else None
+            value = extract_value(result, rule)
             extracted[var_name] = value
             ctx.set(var_name, value)
             logger.debug(f"提取变量: {var_name} = {value}")
         except Exception as e:
-            logger.warning(f"提取变量失败: {var_name} ({path}): {e}")
+            logger.warning(f"提取变量失败: {var_name} ({rule}): {e}")
             extracted[var_name] = None
 
     return extracted

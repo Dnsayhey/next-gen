@@ -190,6 +190,9 @@ steps:
     request: ...
     extract:
       token: $.data.token  # 声明导出到全局上下文
+      csrf:
+        regex: 'csrf=([a-z0-9]+)'
+        group: 1
 
   use_token:
     request:
@@ -202,6 +205,9 @@ steps:
 - `$.data.token` — 从 response body 提取（JSONPath）
 - `$.status_code` — 提取状态码
 - `$.headers.xxx` — 从 response body 中的 headers 字段提取
+- `{jsonpath: "$.data.token"}` — JSONPath 显式写法
+- `{regex: "token=([a-z0-9]+)", group: 1}` — 正则提取，使用 Python `re.search`
+- `default` — 可选，未匹配或提取失败时使用默认值
 
 **作用域规则：**
 - `vars`、`before_all` 写入、历史步骤 `extract` 的结果存在于全局上下文
@@ -436,7 +442,7 @@ class StepNode:
     name: str
     action: ActionNode
     depends_on: list[str]
-    extract: dict[str, str]
+    extract: dict[str, Any]
     validate: list[AssertionNode]
     when: list | dict | None      # 条件执行（list=AND, dict=and/or）
     set_vars: dict[str, str]      # 设置变量

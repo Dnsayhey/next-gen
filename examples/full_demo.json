@@ -9,14 +9,21 @@
         "method": "GET",
         "url": "${base_url}/get",
         "params": {
-          "name": "test"
+          "name": "test",
+          "age": "25"
         }
       },
       "extract": {
-        "param_name": "$.args.name"
+        "param_name": "$.args.name",
+        "param_age": {
+          "jsonpath": "$.args.age"
+        }
       },
       "validate": [
-        { "eq": ["$.args.name", "test"] }
+        { "eq": ["$.args.name", "test"] },
+        { "eq": ["$.args.age", "25"] },
+        { "in": ["$.args.name", ["test", "demo"]] },
+        { "len_eq": ["$.args.name", 4] }
       ]
     },
     "post_json": {
@@ -28,8 +35,19 @@
           "password": "123456"
         }
       },
+      "extract": {
+        "request_body": "$.json",
+        "password_suffix": {
+          "regex": "\"password\":\"([0-9]+)\"",
+          "group": 1
+        }
+      },
       "validate": [
-        { "eq": ["$.json.username", "admin"] }
+        { "eq": ["$.json.username", "admin"] },
+        { "starts_with": ["$.json.username", "ad"] },
+        { "ends_with": ["$.json.password", "456"] },
+        { "matches": ["$.json.username", "^adm"] },
+        { "not_contains": ["$.json.username", "guest"] }
       ]
     },
     "post_form": {

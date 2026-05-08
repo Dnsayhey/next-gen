@@ -101,6 +101,45 @@ class TestExtractVariables:
         extracted = extract_variables(result, config, ctx)
         assert extracted["token"] is None
 
+    def test_extract_with_jsonpath_object_rule(self):
+        result = {
+            "status_code": 200,
+            "body": {"data": {"token": "abc123"}},
+            "headers": {},
+        }
+        ctx = Context()
+        config = {"token": {"jsonpath": "$.data.token"}}
+        extracted = extract_variables(result, config, ctx)
+        assert extracted["token"] == "abc123"
+
+    def test_extract_with_regex_rule(self):
+        result = {
+            "status_code": 200,
+            "body": "csrf=abc123; session=xyz",
+            "headers": {},
+        }
+        ctx = Context()
+        config = {"csrf": {"regex": r"csrf=([a-z0-9]+)", "group": 1}}
+        extracted = extract_variables(result, config, ctx)
+        assert extracted["csrf"] == "abc123"
+
+    def test_extract_with_regex_default(self):
+        result = {
+            "status_code": 200,
+            "body": "no token here",
+            "headers": {},
+        }
+        ctx = Context()
+        config = {
+            "csrf": {
+                "regex": r"csrf=([a-z0-9]+)",
+                "group": 1,
+                "default": "",
+            }
+        }
+        extracted = extract_variables(result, config, ctx)
+        assert extracted["csrf"] == ""
+
 
 class TestValidateResponse:
     """测试 validate_response"""

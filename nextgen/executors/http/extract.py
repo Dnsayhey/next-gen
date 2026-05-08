@@ -2,15 +2,15 @@
 
 from typing import Any
 
-from jsonpath_ng.ext import parse as jsonpath_parse
 from loguru import logger
 
 from nextgen.core.context import Context
+from nextgen.core.extract import extract_value
 
 
 def extract_variables(
     result: dict[str, Any],
-    config: dict[str, str],
+    config: dict[str, Any],
     ctx: Context,
 ) -> dict[str, Any]:
     """从 HTTP 响应中提取变量
@@ -21,33 +21,24 @@ def extract_variables(
     - $.headers.xxx → 从 body 中的 headers 字段提取
     """
     extracted = {}
+    source = {
+        "status_code": result.get("status_code"),
+        "headers": result.get("headers", {}),
+        "body": result.get("body", {}),
+    }
     body = result.get("body", {})
+    if isinstance(body, dict):
+        source.update(body)
 
-    for var_name, jsonpath_expr in config.items():
+    for var_name, rule in config.items():
         try:
-            if jsonpath_expr == "$.status_code":
-                value = result.get("status_code")
-            elif jsonpath_expr.startswith("$.headers."):
-                # 从 body 中的 headers 字段提取
-                header_name = jsonpath_expr[10:]
-                if isinstance(body, dict) and "headers" in body:
-                    value = body["headers"].get(header_name)
-                else:
-                    value = None
-            elif jsonpath_expr.startswith("$."):
-                # 从 body 提取
-                matches = jsonpath_parse(jsonpath_expr).find(body)
-                value = matches[0].value if matches else None
-            else:
-                # 直接从 body 提取
-                matches = jsonpath_parse(jsonpath_expr).find(body)
-                value = matches[0].value if matches else None
+            value = extract_value(source, rule)
 
             ctx.set(var_name, value)
             extracted[var_name] = value
             logger.debug(f"提取变量: {var_name} = {value}")
 
         except Exception as e:
-            logger.error(f"提取变量失败: {var_name} = {jsonpath_expr}, 错误: {e}")
+            logger.error(f"提取变量失败: {var_name} = {rule}, 错误: {e}")
 
     return extracted

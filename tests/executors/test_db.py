@@ -98,6 +98,28 @@ class TestExtractVariables:
         extracted = extract_variables(result, config, ctx)
         assert extracted["value"] is None
 
+    def test_extract_with_jsonpath_object_rule(self):
+        result = {
+            "rows": [{"id": 1, "name": "Alice"}],
+            "row_count": 1,
+            "columns": ["id", "name"],
+        }
+        ctx = Context()
+        config = {"username": {"jsonpath": "$.rows[0].name"}}
+        extracted = extract_variables(result, config, ctx)
+        assert extracted["username"] == "Alice"
+
+    def test_extract_with_regex_rule(self):
+        result = {
+            "rows": [{"id": 1, "name": "Alice"}],
+            "row_count": 1,
+            "columns": ["id", "name"],
+        }
+        ctx = Context()
+        config = {"username": {"regex": r"name': '([A-Za-z]+)'", "group": 1}}
+        extracted = extract_variables(result, config, ctx)
+        assert extracted["username"] == "Alice"
+
 
 class TestValidateResult:
     """测试 validate_result"""
