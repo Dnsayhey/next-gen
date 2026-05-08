@@ -8,6 +8,7 @@ from loguru import logger
 
 from nextgen.core.context import Context
 from nextgen.core.errors import ActionExecutionError
+from nextgen.core.result import ActionResult
 
 from .model import RequestConfig
 from .utils import check_content_type_conflict, load_file_content, resolve_case_path
@@ -57,11 +58,11 @@ def _build_action_input(
 async def execute_request(
     request: RequestConfig,
     ctx: Context,
-) -> dict[str, Any]:
+) -> ActionResult:
     """执行 HTTP 请求
 
     Returns:
-        dict: {"status_code": int, "body": Any, "headers": dict}
+        ActionResult with HTTP response data and reporting snapshots.
     """
     base_dir = ctx.metadata.get("base_dir")
 
@@ -168,14 +169,14 @@ async def execute_request(
     except Exception:
         body = response.text
 
-    return {
+    data = {
         "status_code": response.status_code,
         "body": body,
         "headers": dict(response.headers),
-        "action_input": action_input,
-        "action_output": {
-            "status_code": response.status_code,
-            "headers": dict(response.headers),
-            "body": body,
-        },
     }
+    return ActionResult(
+        data=data,
+        action_input=action_input,
+        action_output=data,
+        summary_status=response.status_code,
+    )

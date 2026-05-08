@@ -9,7 +9,7 @@ from loguru import logger
 from nextgen.bootstrap import load_builtin_actions
 from nextgen.core.planner import validate_testcase
 from nextgen.core.scheduler import Scheduler
-from nextgen.core.model import TestStatus
+from nextgen.core.result import TestStatus
 from nextgen.parser.loader import load_testcase
 from nextgen.reporter.json_reporter import to_json
 

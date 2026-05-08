@@ -2,7 +2,7 @@
 
 import json
 
-from nextgen.core.model import (
+from nextgen.core.result import (
     StepResult,
     StepStatus,
     TestResult as CaseRunResult,

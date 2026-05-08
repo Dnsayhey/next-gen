@@ -98,7 +98,12 @@ class TestRequestConfig:
         result = await execute_request(request, ctx)
 
         assert captured["url"] == "https://example.com/login"
-        assert result["action_input"] == {
+        assert result.data == {
+            "status_code": 200,
+            "headers": {"content-type": "application/json"},
+            "body": {"code": 0},
+        }
+        assert result.action_input == {
             "type": "http",
             "method": "POST",
             "url": "https://example.com/login",
@@ -108,11 +113,12 @@ class TestRequestConfig:
             "body": {"password": "secret"},
             "timeout": 3,
         }
-        assert result["action_output"] == {
+        assert result.action_output == {
             "status_code": 200,
             "headers": {"content-type": "application/json"},
             "body": {"code": 0},
         }
+        assert result.summary_status == 200
 
 
 class TestExtractVariables:

@@ -4,11 +4,12 @@ from loguru import logger
 
 from nextgen.core.context import Context
 from nextgen.core.errors import ActionExecutionError
+from nextgen.core.result import ActionResult
 from nextgen.executors.db.drivers import get_driver
 from nextgen.executors.db.model import DbConfig
 
 
-async def execute_query(config: DbConfig, ctx: Context) -> dict[str, object]:
+async def execute_query(config: DbConfig, ctx: Context) -> ActionResult:
     """执行数据库查询
 
     Args:
@@ -16,7 +17,7 @@ async def execute_query(config: DbConfig, ctx: Context) -> dict[str, object]:
         ctx: 变量上下文
 
     Returns:
-        {"rows": [...], "row_count": int, "columns": [...]}
+        ActionResult with DB result data and reporting snapshots.
     """
     # 渲染变量
     url = ctx.render(config.url)
@@ -41,12 +42,13 @@ async def execute_query(config: DbConfig, ctx: Context) -> dict[str, object]:
         raise ActionExecutionError(str(exc), action_input) from exc
 
     logger.info(f"查询完成: 返回 {result['row_count']} 行")
-    return {
-        **result,
-        "action_input": action_input,
-        "action_output": {
+    return ActionResult(
+        data=result,
+        action_input=action_input,
+        action_output={
             "row_count": result.get("row_count"),
             "columns": result.get("columns"),
             "rows": result.get("rows"),
         },
-    }
+        summary_status=result.get("row_count"),
+    )

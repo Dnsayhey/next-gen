@@ -8,12 +8,15 @@ from nextgen.core.model import (
     HookAction,
     StepNode,
     StepHooks,
-    StepStatus,
-    TestStatus as CaseRunStatus,
-    StepResult,
     TestCase as CaseModel,
     TestCaseHooks as CaseHookModel,
+)
+from nextgen.core.result import (
+    ActionResult,
+    StepResult,
+    StepStatus,
     TestResult as CaseRunResult,
+    TestStatus as CaseRunStatus,
 )
 
 
@@ -31,6 +34,23 @@ class TestStepStatus:
     def test_invalid_status_value(self):
         with pytest.raises(ValueError, match="unknown"):
             StepStatus("unknown")
+
+
+class TestActionResult:
+    """测试 ActionResult"""
+
+    def test_action_result_creation(self):
+        result = ActionResult(
+            data={"row_count": 2},
+            action_input={"type": "db"},
+            action_output={"row_count": 2},
+            summary_status=2,
+        )
+
+        assert result.data == {"row_count": 2}
+        assert result.action_input == {"type": "db"}
+        assert result.action_output == {"row_count": 2}
+        assert result.summary_status == 2
 
 
 class TestAssertionNode:

@@ -7,9 +7,10 @@ from typing import Any, Awaitable, Callable
 
 from nextgen.core.context import Context
 from nextgen.core.model import AssertionNode
+from nextgen.core.result import ActionResult
 
 ActionParseConfig = Callable[[dict[str, Any]], Any]
-ActionExecute = Callable[[Any, Context], Awaitable[dict[str, Any]]]
+ActionExecute = Callable[[Any, Context], Awaitable[ActionResult]]
 ActionExtract = Callable[[dict[str, Any], dict[str, Any], Context], dict[str, Any]]
 ActionValidate = Callable[[dict[str, Any], list[AssertionNode]], list[str]]
 ActionSummarize = Callable[[Any], str]

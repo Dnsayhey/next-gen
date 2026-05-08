@@ -13,9 +13,9 @@ from nextgen.core.model import (
     AssertionNode,
     HookAction,
     StepNode,
-    StepStatus,
     TestCase as CaseModel,
 )
+from nextgen.core.result import ActionResult, StepStatus
 from nextgen.core.scheduler import Scheduler
 from nextgen.core.hooks import register_hook
 
@@ -59,11 +59,14 @@ def scheduler_executor_registry():
             if events.count("execute:flaky") == 1:
                 raise RuntimeError("boom")
 
-        return {
-            "status_code": 200,
-            "body": {"name": name},
-            "headers": {},
-        }
+        return ActionResult(
+            data={
+                "status_code": 200,
+                "body": {"name": name},
+                "headers": {},
+            },
+            summary_status=200,
+        )
 
     def extract(result, config, ctx):
         extracted = {}
@@ -420,17 +423,21 @@ class TestScheduler:
         actions = snapshot_actions()
 
         async def execute(config, ctx):
-            return {
+            data = {
                 "status_code": 500,
                 "body": {"error": "boom"},
                 "headers": {"x-request-id": "req-1"},
-                "action_input": {"type": "snapshot_output"},
-                "action_output": {
+            }
+            return ActionResult(
+                data=data,
+                action_input={"type": "snapshot_output"},
+                action_output={
                     "status_code": 500,
                     "body": {"error": "boom"},
                     "headers": {"x-request-id": "req-1"},
                 },
-            }
+                summary_status=500,
+            )
 
         register_action(ActionSpec(
             name="snapshot_output",

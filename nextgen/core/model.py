@@ -1,24 +1,9 @@
 """AST 模型定义 - DSL 的 Python 表示"""
 
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any
 
-
-class StepStatus(str, Enum):
-    """步骤执行状态"""
-    PENDING = "pending"
-    RUNNING = "running"
-    SUCCESS = "success"
-    FAILED = "failed"
-    SKIPPED = "skipped"
-    RETRYING = "retrying"
-
-
-class TestStatus(str, Enum):
-    """测试用例执行状态"""
-    SUCCESS = "success"
-    FAILED = "failed"
+from nextgen.core.result import StepResult, StepStatus, TestResult, TestStatus
 
 
 @dataclass
@@ -85,36 +70,3 @@ class TestCase:
     hooks: TestCaseHooks = field(default_factory=TestCaseHooks)
     source_path: str | None = None
     base_dir: str | None = None
-
-
-@dataclass
-class StepResult:
-    """步骤执行结果"""
-    name: str
-    status: StepStatus
-    duration_ms: int
-    action_summary: str  # e.g. "POST /login" / "sqlite: SELECT ..."
-    response_status: int | None = None
-    action_input: dict[str, Any] | None = None
-    action_output: dict[str, Any] | None = None
-    error: str | None = None
-    extracted: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class TestResult:
-    """测试用例执行结果"""
-    testcase: str  # 文件名
-    total_duration_ms: int
-    steps: list[StepResult]
-    status: TestStatus
-    errors: list[str] = field(default_factory=list)
-
-    @property
-    def summary(self) -> dict[str, int]:
-        return {
-            "total": len(self.steps),
-            "success": sum(1 for s in self.steps if s.status == StepStatus.SUCCESS),
-            "failed": sum(1 for s in self.steps if s.status == StepStatus.FAILED),
-            "skipped": sum(1 for s in self.steps if s.status == StepStatus.SKIPPED),
-        }

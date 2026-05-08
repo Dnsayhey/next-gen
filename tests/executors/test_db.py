@@ -73,17 +73,23 @@ class TestDbConfig:
 
         result = await execute_query(config, ctx)
 
-        assert result["action_input"] == {
+        assert result.data == {
+            "rows": [{"id": 7, "name": "Alice"}],
+            "row_count": 1,
+            "columns": ["id", "name"],
+        }
+        assert result.action_input == {
             "type": "db",
             "url": "sqlite:///tmp/test.db",
             "query": "SELECT * FROM users WHERE id=7",
             "params": ["7", 1],
         }
-        assert result["action_output"] == {
+        assert result.action_output == {
             "row_count": 1,
             "columns": ["id", "name"],
             "rows": [{"id": 7, "name": "Alice"}],
         }
+        assert result.summary_status == 1
 
     @pytest.mark.asyncio
     async def test_execute_query_raises_action_execution_error_with_action_input(self, monkeypatch):

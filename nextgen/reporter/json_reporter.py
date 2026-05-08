@@ -2,7 +2,7 @@
 
 import json
 
-from nextgen.core.model import TestResult
+from nextgen.core.result import TestResult
 
 
 def to_json(result: TestResult, indent: int = 2) -> str:

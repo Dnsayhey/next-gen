@@ -640,19 +640,22 @@ def load_discovered_hooks(testcase_path: str | Path, cwd: str | Path) -> list[Pa
 class ActionSpec:
     name: str
     parse_config: Callable[[dict[str, Any]], Any]
-    execute: Callable[[Any, Context], Awaitable[dict[str, Any]]]
+    execute: Callable[[Any, Context], Awaitable[ActionResult]]
     extract: Callable[[dict[str, Any], dict[str, Any], Context], dict[str, Any]]
     validate: Callable[[dict[str, Any], list[AssertionNode]], list[str]]
     summarize: Callable[[Any], str]
 ```
 
-`execute` 返回值支持以下通用字段（可选）：
+`execute` 返回 `ActionResult`，其中 `data` 是传给 `extract / validate` 的业务结果，
+其余字段供报告与排错使用：
 
 ```python
-{
-    "action_input": {...},   # 执行器输入快照（已渲染）
-    "action_output": {...},  # 执行器输出快照（可用于失败定位）
-}
+ActionResult(
+    data={...},
+    action_input={...},    # 执行器输入快照（已渲染）
+    action_output={...},   # 执行器输出快照（可用于失败定位）
+    summary_status=200,    # 报告中的主要状态/指标
+)
 ```
 
 当执行器在拿到业务结果前失败（如网络/连接异常）时，建议抛出 `ActionExecutionError(message, action_input)`，
@@ -788,7 +791,7 @@ class DbConfig:
 def parse_db_config(raw: dict[str, Any]) -> DbConfig:
     ...
 
-async def execute_db(config: DbConfig, ctx: Context) -> dict:
+async def execute_db(config: DbConfig, ctx: Context) -> ActionResult:
     ...
 
 def extract_db(result: dict, config: dict, ctx: Context) -> dict:

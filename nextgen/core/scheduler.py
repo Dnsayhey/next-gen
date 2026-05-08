@@ -15,9 +15,12 @@ from nextgen.core.model import (
     AssertionNode,
     HookAction,
     StepNode,
+    TestCase,
+)
+from nextgen.core.result import (
+    ActionResult,
     StepResult,
     StepStatus,
-    TestCase,
     TestResult,
     TestStatus,
 )
@@ -34,7 +37,7 @@ class StepRuntime:
         self.error: str | None = None
         self.start_time: float | None = None
         self.end_time: float | None = None
-        self.result: dict[str, Any] | None = None
+        self.result: ActionResult | None = None
         self.pending_extracts: dict[str, Any] = {}
 
     @property
@@ -125,9 +128,9 @@ class Scheduler:
                 status=runtime.status,
                 duration_ms=runtime.duration_ms,
                 action_summary=runtime.action_summary,
-                response_status=runtime.result.get("status_code") if runtime.result else None,
-                action_input=runtime.result.get("action_input") if runtime.result else None,
-                action_output=runtime.result.get("action_output") if runtime.result else None,
+                response_status=runtime.result.summary_status if runtime.result else None,
+                action_input=runtime.result.action_input if runtime.result else None,
+                action_output=runtime.result.action_output if runtime.result else None,
                 error=runtime.error,
                 extracted=runtime.pending_extracts,
             ))
@@ -198,13 +201,13 @@ class Scheduler:
             )
             for assertion in step.node.validate
         ]
-        errors = action.validate(result, assertions)
+        errors = action.validate(result.data, assertions)
         if errors:
             raise AssertionError("; ".join(errors))
 
         # 提取变量
         if step.node.extract:
-            action.extract(result, step.node.extract, step_ctx)
+            action.extract(result.data, step.node.extract, step_ctx)
             step.pending_extracts = {key: step_ctx.get(key) for key in step.node.extract}
         else:
             step.pending_extracts = {}
@@ -254,8 +257,9 @@ class Scheduler:
                         action_input = getattr(e, "action_input", None)
                         if action_input is not None:
                             if step.result is None:
-                                step.result = {}
-                            step.result["action_input"] = action_input
+                                step.result = ActionResult(data={}, action_input=action_input)
+                            elif step.result.action_input is None:
+                                step.result.action_input = action_input
                         step.error = str(e)
 
                         if step.retry_count < max_retry:
