@@ -99,8 +99,8 @@
         }
       },
       "validate": [
-        { "contains": ["$.headers.X-Custom-Header", "my-value"] },
-        { "contains": ["$.headers.Authorization", "Bearer"] }
+        { "contains": ["$.body.headers.X-Custom-Header", "my-value"] },
+        { "contains": ["$.body.headers.Authorization", "Bearer"] }
       ]
     },
     "with_retry": {

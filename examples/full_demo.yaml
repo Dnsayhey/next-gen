@@ -106,7 +106,7 @@ steps:
         X-Custom-Header: my-value
         Authorization: Bearer token123
     validate:
-      - contains: [$.headers.X-Custom-Header, my-value]  # 验证请求头在响应中
+      - contains: [$.body.headers.X-Custom-Header, my-value]  # httpbin 在响应 body 中回显请求头
 
   # 8. 重试配置
   with_retry:
