@@ -363,6 +363,63 @@ class TestScheduler:
         assert elapsed < 0.11
 
     @pytest.mark.asyncio
+    async def test_parallel_mode_schedules_dependents_as_soon_as_parent_finishes(self):
+        actions = snapshot_actions()
+        events: list[tuple[str, float]] = []
+
+        async def execute(config, ctx):
+            events.append((f"start:{config['name']}", time.perf_counter()))
+            if config["name"] == "slow":
+                await asyncio.sleep(0.08)
+            if config["name"] == "fast":
+                await asyncio.sleep(0.01)
+            events.append((f"end:{config['name']}", time.perf_counter()))
+            return ActionResult(data={}, summary_status=200)
+
+        register_action(ActionSpec(
+            name="dynamic_schedule_action",
+            parse_config=lambda config: config,
+            execute=execute,
+            extract=lambda result, config, ctx: {},
+            validate=lambda result, assertions: [],
+            summarize=lambda config: config["name"],
+        ))
+
+        try:
+            testcase = CaseModel(
+                version=1,
+                mode="parallel",
+                steps={
+                    "slow": StepNode(
+                        name="slow",
+                        action=ActionNode(type="dynamic_schedule_action", config={"name": "slow"}),
+                    ),
+                    "fast": StepNode(
+                        name="fast",
+                        action=ActionNode(type="dynamic_schedule_action", config={"name": "fast"}),
+                    ),
+                    "after_fast": StepNode(
+                        name="after_fast",
+                        action=ActionNode(type="dynamic_schedule_action", config={"name": "after_fast"}),
+                        depends_on=["fast"],
+                    ),
+                },
+            )
+
+            scheduler = Scheduler(testcase, max_concurrency=2)
+            result = await scheduler.run()
+        finally:
+            restore_actions(actions)
+
+        times = dict(events)
+        assert [step.status for step in result.steps] == [
+            StepStatus.SUCCESS,
+            StepStatus.SUCCESS,
+            StepStatus.SUCCESS,
+        ]
+        assert times["start:after_fast"] < times["end:slow"]
+
+    @pytest.mark.asyncio
     async def test_failed_action_can_attach_request_snapshot(self):
         actions = snapshot_actions()
 

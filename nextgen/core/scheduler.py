@@ -67,7 +67,7 @@ class Scheduler:
         self.testcase = testcase
         metadata = {"base_dir": testcase.base_dir} if testcase.base_dir else {}
         self.context = Context(testcase.vars, metadata=metadata)
-        self.semaphore = asyncio.Semaphore(max_concurrency)
+        self.max_concurrency = max_concurrency
         self.graph = build_graph(testcase)
         self.loaded_hook_files: list[str] = []
 
@@ -308,32 +308,31 @@ class Scheduler:
 
     async def run_step(self, step: StepRuntime) -> None:
         """执行单个步骤（步骤级超时覆盖全部重试）"""
-        async with self.semaphore:
-            step.start_time = time.time()
+        step.start_time = time.time()
 
-            try:
-                if self.testcase.fail_fast and self.has_failure():
-                    step.status = StepStatus.SKIPPED
-                    logger.info(f"fail_fast 生效，跳过步骤: {step.node.name}")
-                    return
+        try:
+            if self.testcase.fail_fast and self.has_failure():
+                step.status = StepStatus.SKIPPED
+                logger.info(f"fail_fast 生效，跳过步骤: {step.node.name}")
+                return
 
-                step_timeout = step.node.config.get("timeout")
+            step_timeout = step.node.config.get("timeout")
 
-                if step_timeout:
-                    await asyncio.wait_for(
-                        self._run_step_with_retry(step),
-                        timeout=step_timeout,
-                    )
-                else:
-                    await self._run_step_with_retry(step)
+            if step_timeout:
+                await asyncio.wait_for(
+                    self._run_step_with_retry(step),
+                    timeout=step_timeout,
+                )
+            else:
+                await self._run_step_with_retry(step)
 
-            except asyncio.TimeoutError:
-                step.error = f"步骤执行超时（{step.node.config.get('timeout')}秒）"
-                step.status = StepStatus.FAILED
-                logger.error(f"步骤 {step.node.name} 超时")
+        except asyncio.TimeoutError:
+            step.error = f"步骤执行超时（{step.node.config.get('timeout')}秒）"
+            step.status = StepStatus.FAILED
+            logger.error(f"步骤 {step.node.name} 超时")
 
-            finally:
-                step.end_time = time.time()
+        finally:
+            step.end_time = time.time()
 
     async def run(self) -> TestResult:
         """执行测试用例"""
@@ -361,20 +360,27 @@ class Scheduler:
             self._mark_suite_failure(error)
             return self._build_result(start_time, [error])
 
+        active_tasks: dict[asyncio.Task[None], StepRuntime] = {}
+
+        def start_step(step: StepRuntime) -> None:
+            step.status = StepStatus.RUNNING
+            active_tasks[asyncio.create_task(self.run_step(step))] = step
+
         while True:
             if self.testcase.fail_fast and self.has_failure():
                 for s in self.steps.values():
                     if s.status == StepStatus.PENDING:
                         s.status = StepStatus.SKIPPED
                         logger.info(f"fail_fast 生效，跳过步骤: {s.node.name}")
-                break
+                if not active_tasks:
+                    break
 
             pending = [
                 s for s in self.steps.values()
                 if s.status == StepStatus.PENDING
             ]
 
-            if not pending:
+            if not pending and not active_tasks:
                 break
 
             # 标记应跳过的步骤
@@ -388,21 +394,23 @@ class Scheduler:
             if self.testcase.mode == "sequential" and runnable:
                 runnable = [runnable[0]]
 
-            if not runnable:
-                # 检查是否还有正在运行或重试的步骤
-                active = [
-                    s for s in self.steps.values()
-                    if s.status in (StepStatus.RUNNING, StepStatus.RETRYING)
-                ]
-                if not active:
-                    break
-                await asyncio.sleep(0.1)
+            capacity = self.max_concurrency - len(active_tasks)
+            for step in runnable[:capacity]:
+                start_step(step)
+
+            if active_tasks:
+                done, _ = await asyncio.wait(
+                    active_tasks,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                for task in done:
+                    active_tasks.pop(task)
+                    task.result()
                 continue
 
-            # 并发执行
-            await asyncio.gather(
-                *[self.run_step(s) for s in runnable]
-            )
+            if not any(s.status == StepStatus.PENDING for s in self.steps.values()):
+                break
+            break
 
         after_all_errors: list[str] = []
         try:
