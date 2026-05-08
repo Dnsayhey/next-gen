@@ -155,6 +155,16 @@ class TestValidateResult:
         errors = validate_result(result, assertions)
         assert errors == []
 
+    def test_contains_pass_with_multiple_jsonpath_matches(self):
+        result = {
+            "rows": [{"name": "Alice"}, {"name": "Bob"}],
+            "row_count": 2,
+            "columns": ["name"],
+        }
+        assertions = [AssertionNode(op="contains", left="$.rows[*].name", right="Bob")]
+        errors = validate_result(result, assertions)
+        assert errors == []
+
     def test_multiple_assertions(self):
         result = {
             "rows": [{"id": 1, "name": "Alice"}],

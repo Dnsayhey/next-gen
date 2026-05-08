@@ -188,6 +188,27 @@ class TestHttpFileUtils:
         errors = validate_response(result, assertions)
         assert errors == []
 
+    def test_contains_pass_with_multiple_jsonpath_matches(self):
+        result = {
+            "status_code": 200,
+            "body": {
+                "infos": [
+                    {"name": "rename_dir_EdRu2Gdk"},
+                    {"name": "new_EdRu2Gdk.sh"},
+                ]
+            },
+            "headers": {},
+        }
+        assertions = [
+            AssertionNode(
+                op="contains",
+                left="$.infos[*].name",
+                right="new_EdRu2Gdk.sh",
+            )
+        ]
+        errors = validate_response(result, assertions)
+        assert errors == []
+
     def test_status_code(self):
         result = {
             "status_code": 200,

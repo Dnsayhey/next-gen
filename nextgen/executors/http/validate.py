@@ -8,6 +8,15 @@ from nextgen.core.assertion import BaseValidator
 from nextgen.core.model import AssertionNode
 
 
+def _jsonpath_value(data: Any, expr: str) -> Any:
+    matches = jsonpath_parse(expr).find(data)
+    if not matches:
+        return None
+    if len(matches) == 1:
+        return matches[0].value
+    return [match.value for match in matches]
+
+
 class HttpValidator(BaseValidator):
     """HTTP 响应断言器"""
 
@@ -39,11 +48,9 @@ class HttpValidator(BaseValidator):
                     else:
                         actual = None
                 elif left_expr.startswith("$."):
-                    matches = jsonpath_parse(left_expr).find(body)
-                    actual = matches[0].value if matches else None
+                    actual = _jsonpath_value(body, left_expr)
                 else:
-                    matches = jsonpath_parse(left_expr).find(body)
-                    actual = matches[0].value if matches else None
+                    actual = _jsonpath_value(body, left_expr)
 
                 expected = assertion.right
 

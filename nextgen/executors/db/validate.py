@@ -8,6 +8,15 @@ from nextgen.core.assertion import BaseValidator
 from nextgen.core.model import AssertionNode
 
 
+def _jsonpath_value(data: Any, expr: str) -> Any:
+    matches = jsonpath_parse(expr).find(data)
+    if not matches:
+        return None
+    if len(matches) == 1:
+        return matches[0].value
+    return [match.value for match in matches]
+
+
 class DbValidator(BaseValidator):
     """DB 结果断言器"""
 
@@ -29,8 +38,7 @@ class DbValidator(BaseValidator):
             try:
                 left_expr = assertion.left
 
-                matches = jsonpath_parse(left_expr).find(result)
-                actual = matches[0].value if matches else None
+                actual = _jsonpath_value(result, left_expr)
 
                 expected = assertion.right
 
