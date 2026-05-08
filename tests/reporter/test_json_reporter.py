@@ -8,6 +8,8 @@ from nextgen.core.result import (
     TestResult as CaseRunResult,
     TestStatus as CaseRunStatus,
 )
+from nextgen.reporter import get_reporter, list_reporters
+from nextgen.reporter.json_reporter import JsonReporter
 from nextgen.reporter.json_reporter import to_json
 
 
@@ -85,3 +87,19 @@ def test_to_json_serializes_success_result_with_summary():
     }
     assert data["steps"][0]["status"] == "success"
     assert data["steps"][0]["error"] is None
+
+
+def test_json_reporter_implements_reporter_interface():
+    result = CaseRunResult(
+        testcase="case.yaml",
+        total_duration_ms=10,
+        status=CaseRunStatus.SUCCESS,
+        steps=[],
+    )
+
+    rendered = JsonReporter(indent=0).render(result)
+    data = json.loads(rendered)
+
+    assert data["testcase"] == "case.yaml"
+    assert "json" in list_reporters()
+    assert get_reporter("json") is not None

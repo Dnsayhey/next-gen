@@ -1,8 +1,10 @@
 """JSON 报告生成器"""
 
 import json
+from dataclasses import dataclass
 
 from nextgen.core.result import TestResult
+from nextgen.reporter.base import register_reporter
 
 
 def to_json(result: TestResult, indent: int = 2) -> str:
@@ -31,3 +33,17 @@ def to_json(result: TestResult, indent: int = 2) -> str:
     }
 
     return json.dumps(data, indent=indent, ensure_ascii=False)
+
+
+@dataclass(frozen=True)
+class JsonReporter:
+    """JSON 报告器"""
+
+    indent: int = 2
+    name: str = "json"
+
+    def render(self, result: TestResult) -> str:
+        return to_json(result, indent=self.indent)
+
+
+register_reporter(JsonReporter())
