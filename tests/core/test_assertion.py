@@ -6,12 +6,13 @@ from nextgen.core.assertion import BaseValidator
 
 
 class TestBaseValidator:
-    """测试 BaseValidator._assert 断言方法"""
+    """测试 BaseValidator 断言方法"""
 
     def setup_method(self):
         self.validator = BaseValidator()
 
     def test_eq(self):
+        assert self.validator.evaluate("eq", 0, 0) is True
         assert self.validator._assert("eq", 0, 0) is True
         assert self.validator._assert("eq", 0, 1) is False
 
@@ -79,5 +80,5 @@ class TestBaseValidator:
         assert self.validator._assert("len_eq", 1, 1) is False
 
     def test_unknown_op(self):
-        with pytest.raises(ValueError, match="不支持的断言操作"):
+        with pytest.raises(ValueError, match="不支持的操作符"):
             self.validator._assert("unknown", 1, 1)

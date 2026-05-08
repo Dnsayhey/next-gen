@@ -5,6 +5,7 @@ from typing import Any
 from loguru import logger
 
 from nextgen.core.context import Context
+from nextgen.core.operators import evaluate_operator
 
 
 def evaluate_condition(condition: list | dict | None, ctx: Context) -> bool:
@@ -82,7 +83,7 @@ def _eval_expr(expr: dict, ctx: Context) -> bool:
     left = _resolve_value(left_expr, ctx)
     right = _resolve_value(right_expr, ctx)
 
-    result = _compare(op, left, right)
+    result = evaluate_operator(op, left, right)
     logger.debug(f"条件评估: {left_expr} {op} {right_expr} → {result}")
     return result
 
@@ -104,23 +105,3 @@ def _resolve_value(expr: Any, ctx: Context) -> Any:
 
     # 混合字符串
     return ctx.render(expr)
-
-
-def _compare(op: str, left: Any, right: Any) -> bool:
-    """执行比较操作"""
-    if op == "eq":
-        return left == right
-    elif op == "ne":
-        return left != right
-    elif op == "gt":
-        return left > right
-    elif op == "lt":
-        return left < right
-    elif op == "gte":
-        return left >= right
-    elif op == "lte":
-        return left <= right
-    elif op == "contains":
-        return str(right) in str(left)
-    else:
-        raise ValueError(f"不支持的操作符: {op}")

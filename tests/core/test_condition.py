@@ -42,6 +42,27 @@ class TestEvaluateCondition:
         condition = [{"contains": ["${message}", "world"]}]
         assert evaluate_condition(condition, ctx) is True
 
+    @pytest.mark.parametrize(
+        ("condition", "vars"),
+        [
+            ([{"not_contains": ["${message}", "error"]}], {"message": "success"}),
+            ([{"starts_with": ["${name}", "user_"]}], {"name": "user_admin"}),
+            ([{"ends_with": ["${file}", ".json"]}], {"file": "report.json"}),
+            ([{"in": ["${status}", ["active", "pending"]]}], {"status": "active"}),
+            ([{"not_in": ["${role}", ["banned"]]}], {"role": "admin"}),
+            ([{"matches": ["${email}", r"^[^@]+@[^@]+$"]}], {"email": "u@example.com"}),
+            ([{"len_gt": ["${items}", 1]}], {"items": [1, 2]}),
+        ],
+    )
+    def test_extended_operators(self, condition, vars):
+        ctx = Context(vars)
+        assert evaluate_condition(condition, ctx) is True
+
+    def test_len_operator_with_value_without_length_returns_false(self):
+        ctx = Context({"count": 1})
+        condition = [{"len_gt": ["${count}", 0]}]
+        assert evaluate_condition(condition, ctx) is False
+
     def test_and_list_all_pass(self):
         ctx = Context({"a": 1, "b": 2})
         condition = [
@@ -129,3 +150,9 @@ class TestEvaluateCondition:
         ctx = Context()
         condition = [{"eq": ["${nonexistent}", "${nonexistent}"]}]
         assert evaluate_condition(condition, ctx) is True
+
+    def test_unknown_operator(self):
+        ctx = Context()
+        condition = [{"unknown": [1, 1]}]
+        with pytest.raises(ValueError, match="不支持的操作符"):
+            evaluate_condition(condition, ctx)
