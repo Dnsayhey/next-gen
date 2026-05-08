@@ -213,14 +213,17 @@ class Scheduler:
         else:
             step.pending_extracts = {}
 
-        await self.execute_hooks(
-            step.node.hooks.after,
-            step_ctx,
-            step=step,
-            phase="after",
-        )
-
         step.status = StepStatus.SUCCESS
+
+        try:
+            await self.execute_hooks(
+                step.node.hooks.after,
+                step_ctx,
+                step=step,
+                phase="after",
+            )
+        except HookError as exc:
+            logger.warning(str(exc))
 
     async def _run_step_with_retry(self, step: StepRuntime) -> None:
         """执行单个步骤，重试和跳过都在一个生命周期内完成"""

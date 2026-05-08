@@ -884,7 +884,7 @@ class TestScheduler:
         ]
 
     @pytest.mark.asyncio
-    async def test_after_hook_failure_does_not_publish_extracted_variables(
+    async def test_after_hook_failure_does_not_block_extracted_variables(
         self,
         scheduler_action_registry,
     ):
@@ -904,8 +904,9 @@ class TestScheduler:
         result = await scheduler.run()
 
         assert scheduler_action_registry == ["execute:one"]
-        assert result.steps[0].status == StepStatus.FAILED
-        assert scheduler.context.get("token") is None
+        assert result.steps[0].status == StepStatus.SUCCESS
+        assert result.steps[0].extracted == {"token": "one"}
+        assert scheduler.context.get("token") == "one"
 
     @pytest.mark.asyncio
     async def test_after_each_failure_does_not_publish_extracted_variables(
