@@ -3,7 +3,15 @@
 
 version: 1
 
-# mode: parallel
+# 执行模式，默认 sequential
+# - sequential：每轮按定义顺序只执行一个可运行步骤
+# - parallel：每轮可并发执行多个可运行步骤（受 --parallel 并发上限控制）
+mode: sequential
+
+# 失败后是否跳过尚未开始的步骤，默认 true
+# 已运行中的并发步骤不会被强制取消
+fail_fast: true
+
 vars:
   base_url: https://httpbin.org
 

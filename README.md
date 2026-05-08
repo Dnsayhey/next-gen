@@ -106,7 +106,7 @@ uv run nextgen examples/hook_demo.yaml --verbose
 - `depends_on` 是唯一依赖来源，默认不会自动给步骤补依赖
 - `mode: sequential`：每轮只执行一个可运行步骤（按定义顺序）
 - `mode: parallel`：每轮可并发执行多个可运行步骤
-- `fail_fast` 默认 `true`：出现失败后，剩余 `pending` 步骤会被标记为 `skipped`
+- `fail_fast` 默认 `true`：出现失败后，尚未开始的步骤会被标记为 `skipped`；已运行中的并发步骤不会被强制取消
 - `fail_fast: false`：继续执行其他可运行步骤（但依赖失败步骤的节点仍会被跳过）
 
 ## 执行结果（JSON）

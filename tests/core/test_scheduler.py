@@ -177,6 +177,32 @@ class TestScheduler:
         assert scheduler_executor_registry == ["execute:boom"]
 
     @pytest.mark.asyncio
+    async def test_fail_fast_skips_parallel_steps_waiting_for_concurrency_slot(
+        self,
+        scheduler_executor_registry,
+    ):
+        testcase = CaseModel(
+            version=1,
+            mode="parallel",
+            fail_fast=True,
+            steps={
+                "boom": make_step("boom"),
+                "after_a": make_step("after_a"),
+                "after_b": make_step("after_b"),
+            },
+        )
+
+        scheduler = Scheduler(testcase, max_concurrency=1)
+        result = await scheduler.run()
+
+        assert [step.status for step in result.steps] == [
+            StepStatus.FAILED,
+            StepStatus.SKIPPED,
+            StepStatus.SKIPPED,
+        ]
+        assert scheduler_executor_registry == ["execute:boom"]
+
+    @pytest.mark.asyncio
     async def test_set_vars_is_visible_to_when(self, scheduler_executor_registry):
         testcase = CaseModel(
             version=1,

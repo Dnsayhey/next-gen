@@ -96,7 +96,7 @@ steps:
 ```
 
 **`fail_fast` 语义：**
-- `true`（默认）：一旦任一步骤失败，后续仍为 `pending` 的步骤会被标记为 `skipped`
+- `true`（默认）：一旦任一步骤失败，后续尚未开始的步骤会被标记为 `skipped`；已运行中的并发步骤不会被强制取消
 - `false`：继续调度其他可运行步骤（但依赖失败步骤的节点依然会被跳过）
 
 **适用场景：**
@@ -567,6 +567,7 @@ def get_execution_order(graph: dict[str, list[str]]) -> list[list[str]]: ...
 **职责：**
 - 状态机驱动的 DAG 调度
 - 并发控制（asyncio.Semaphore）
+- `fail_fast` 控制失败后是否继续启动尚未开始的步骤
 - 重试逻辑
 - hook 生命周期调度
 - 自动发现并加载 `hooks.py`

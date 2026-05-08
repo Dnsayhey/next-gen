@@ -110,6 +110,10 @@ class Scheduler:
             for d in self.graph[step.node.name]
         )
 
+    def has_failure(self) -> bool:
+        """判断当前用例是否已有失败步骤"""
+        return any(s.status == StepStatus.FAILED for s in self.steps.values())
+
     def _build_result(self, start_time: float, errors: list[str] | None = None) -> TestResult:
         """基于当前运行时状态构建测试结果"""
         total_ms = int((time.time() - start_time) * 1000)
@@ -300,6 +304,11 @@ class Scheduler:
             step.start_time = time.time()
 
             try:
+                if self.testcase.fail_fast and self.has_failure():
+                    step.status = StepStatus.SKIPPED
+                    logger.info(f"fail_fast 生效，跳过步骤: {step.node.name}")
+                    return
+
                 step_timeout = step.node.config.get("timeout")
 
                 if step_timeout:
@@ -345,9 +354,7 @@ class Scheduler:
             return self._build_result(start_time, [error])
 
         while True:
-            if self.testcase.fail_fast and any(
-                s.status == StepStatus.FAILED for s in self.steps.values()
-            ):
+            if self.testcase.fail_fast and self.has_failure():
                 for s in self.steps.values():
                     if s.status == StepStatus.PENDING:
                         s.status = StepStatus.SKIPPED
