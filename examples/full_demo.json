@@ -102,6 +102,32 @@
         { "contains": ["$.headers.X-Custom-Header", "my-value"] },
         { "contains": ["$.headers.Authorization", "Bearer"] }
       ]
+    },
+    "with_retry": {
+      "request": {
+        "method": "GET",
+        "url": "${base_url}/get"
+      },
+      "config": {
+        "retry": 2,
+        "retry_delay": 1
+      },
+      "validate": [
+        { "eq": ["$.status_code", 200] }
+      ]
+    },
+    "with_timeout": {
+      "request": {
+        "method": "GET",
+        "url": "${base_url}/get",
+        "timeout": 10
+      },
+      "config": {
+        "timeout": 30
+      },
+      "validate": [
+        { "eq": ["$.status_code", 200] }
+      ]
     }
   }
 }

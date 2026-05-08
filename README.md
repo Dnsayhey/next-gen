@@ -87,6 +87,8 @@ uv run python -m nextgen.cli demo.yaml
 - `examples/conditional_demo.yaml`：`when` 条件执行示例
 - `examples/set_vars_demo.yaml`：`set_vars` 与 `extract` 的作用域示例
 - `examples/matrix_demo.yaml`：`matrix` 参数化示例，包含单维展开和笛卡尔积展开
+- `examples/parallel_demo.yaml`：`mode: parallel` 并行调度示例
+- `examples/fail_fast_demo.yaml`：`fail_fast: false` 与依赖失败跳过语义示例
 - `examples/hook_demo.yaml`：`before_all / after_all / before_each / after_each / before / after` 与自定义 hook 示例
 - `examples/retry_demo.yaml`：固定间隔和指数退避重试示例
 - `examples/timeout_demo.yaml`：请求级和步骤级超时示例
@@ -99,7 +101,7 @@ uv run nextgen examples/full_demo.yaml --verbose
 uv run nextgen examples/hook_demo.yaml --verbose
 ```
 
-`examples/hook_demo.yaml` 会自动加载同目录下的 [examples/hooks.py](/Users/yanlei/Projects/python/next-gen/examples/hooks.py:1)，用来演示自定义 hook 的发现与注册。
+`examples/hook_demo.yaml` 会自动加载同目录下的 `examples/hooks.py`，用来演示自定义 hook 的发现与注册。
 
 ## 执行语义（mode / depends_on / fail_fast）
 
@@ -172,6 +174,8 @@ request:
   content_type: application/xml
 ```
 
+`@` 文件路径可以使用相对路径或绝对路径；相对路径以 testcase 文件所在目录为基准。
+
 ## 项目结构
 
 ```
@@ -186,12 +190,15 @@ nextgen/
 ├── parser/
 │   └── loader.py       # YAML/JSON 解析
 ├── executors/
-│   └── http/           # HTTP 执行器
+│   ├── http/           # HTTP 执行器
+│   └── db/             # DB 执行器
 └── reporter/
     └── json_reporter.py
 ```
 
 ## 扩展新 Action 类型
+
+完整扩展示例见 [设计文档 §9](docs/design.md#9-扩展新-action-类型)。注册入口是 `ActionSpec`：
 
 ```python
 from nextgen import ActionSpec, register_action

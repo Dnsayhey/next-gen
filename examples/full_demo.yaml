@@ -65,16 +65,16 @@ steps:
     validate:
       - eq: [$.form.field1, value1]
 
-  # 4. Multipart 文件上传（需要引用本地文件）
-  # upload_file:
-  #   request:
-  #     method: POST
-  #     url: ${base_url}/post
-  #     multipart:
-  #       file: "@./test_upload.csv"
-  #       description: 测试文件
-  #   validate:
-  #     - eq: [$.form.description, 测试文件]
+  # 4. Multipart 文件上传（引用同目录下的 test_upload.csv）
+  upload_file:
+    request:
+      method: POST
+      url: ${base_url}/post
+      multipart:
+        file: "@./test_upload.csv"
+        description: 测试文件
+    validate:
+      - eq: [$.form.description, 测试文件]
 
   # 5. Raw Body（XML/纯文本）
   post_raw:

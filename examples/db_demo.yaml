@@ -1,7 +1,7 @@
 version: 1
 
 vars:
-  db_url: sqlite:///tmp/test.db
+  db_url: sqlite://./examples/test.db
 
 steps:
   # 创建表

@@ -29,7 +29,7 @@
 ### 设计决策
 
 * **变量作用域**：`set_vars` 和大部分 step hook 默认只在当前步骤内可见，`extract` 声明的变量会回写全局上下文
-* **断言操作符**：基础比较（eq / ne / gt / lt / gte / lte）+ contains
+* **断言操作符**：基础比较、字符串、集合、正则、长度等通用操作符，`validate` 和 `when` 共用同一套语义
 * **报告格式**：JSON 输出到 stdout，步骤报告包含 `action_input / action_output`
 * **DSL 格式**：支持 YAML 和 JSON 两种格式
 * **Executor / Hook 架构**：注册表模式，支持扩展 action 和自定义 hook
@@ -149,7 +149,7 @@ steps:
       - eq: [$.args.ref, test]
 ```
 
-### 4.2 请求体类型
+### 4.3 请求体类型
 
 支持 4 种请求体类型（互斥，同时出现会报错）：
 
@@ -176,13 +176,14 @@ request:
 **文件路径规则：**
 - 使用 `@` 前缀表示读取文件内容：`"@./file.txt"`、` "@/abs/path/file.txt"`
 - 支持相对路径和绝对路径
+- 相对路径以 testcase 文件所在目录为基准
 - 自动根据扩展名判断文本/二进制读取模式
 - 如文件不存在会报错
 
 **YAML 注意事项：**
 - `@` 是 YAML 保留字符，需要加引号：`file: "@./data.csv"`
 
-### 4.3 变量系统
+### 4.4 变量系统
 
 ```yaml
 vars:
@@ -209,7 +210,8 @@ steps:
 - `${var}` — 从全局 vars 或已提取的变量中替换
 - `$.data.token` — 从 response body 提取（JSONPath）
 - `$.status_code` — 提取状态码
-- `$.headers.xxx` — 从 response body 中的 headers 字段提取
+- `$.headers.xxx` — 从 HTTP 响应头提取
+- `$.body.xxx` — 显式从 response body 命名空间提取（适用于 body 中也包含 `status_code` / `headers` 等同名字段时）
 - `{jsonpath: "$.data.token"}` — JSONPath 显式写法
 - `{regex: "token=([a-z0-9]+)", group: 1}` — 正则提取，使用 Python `re.search`
 - `default` — 可选，未匹配或提取失败时使用默认值
@@ -220,7 +222,7 @@ steps:
 - `before_each` / `before` / `after` / `after_each` 默认操作当前步骤上下文
 - `extract` 声明的变量在步骤成功后提交到全局上下文，供后续步骤使用
 
-### 4.4 断言系统
+### 4.5 断言系统
 
 ```yaml
 validate:
@@ -254,7 +256,7 @@ validate:
 
 `matches` 使用 Python 标准库 `re.search` 语义；如果需要整串匹配，请在正则中显式使用 `^` / `$`。
 
-### 4.5 执行配置
+### 4.6 执行配置
 
 ```yaml
 steps:
@@ -279,7 +281,7 @@ attempt 3 → 8s
 ...
 ```
 
-### 4.6 超时配置
+### 4.7 超时配置
 
 支持两个层次的超时：
 
@@ -300,7 +302,7 @@ steps:
 - `config.timeout` 作用于整个步骤生命周期
 - 步骤总超时覆盖：`before_each -> set_vars -> when -> before -> action -> validate -> extract -> after -> after_each`
 
-### 4.7 条件执行（when）
+### 4.8 条件执行（when）
 
 支持基于变量的条件执行，条件不满足时步骤自动跳过。
 
@@ -337,8 +339,9 @@ steps:
 **条件格式：**
 - `list` — 断言列表，默认 AND 逻辑
 - `dict` — 必须包含 `and` 或 `or` 键，值为断言列表
-- 支持所有断言操作符：eq / ne / gt / lt / gte / lte / contains
+- 支持所有断言操作符：eq / ne / gt / lt / gte / lte / contains / not_contains / starts_with / ends_with / in / not_in / matches / len_*
 - 支持 `${var}` 变量替换
+- `len_*` 遇到不可计算长度的值（如数字、`None`）时返回 false
 
 **执行行为：**
 - 条件为 false → 步骤标记为 SKIPPED
@@ -346,7 +349,49 @@ steps:
 - SKIPPED 的步骤不会执行 action / validate / extract / step hooks
 - 依赖被跳过步骤的步骤也会被跳过
 
-### 4.8 设置变量（set_vars）
+### 4.9 Matrix 参数化
+
+`matrix` 用于把一个 step 模板展开成多组步骤。每个 matrix 变量会作为当前步骤的局部变量写入 `set_vars`，因此可在 request、validate、when 等配置中通过 `${var}` 使用。
+
+```yaml
+steps:
+  login:
+    matrix:
+      user: [admin, user1]
+    request:
+      method: POST
+      url: ${base_url}/post
+      json:
+        username: ${user}
+    validate:
+      - eq: [$.json.username, "${user}"]
+```
+
+多维 matrix 默认按笛卡尔积展开。例如：
+
+```yaml
+steps:
+  search:
+    matrix:
+      keyword: [book, laptop]
+      region: [us, eu]
+    request:
+      method: GET
+      url: ${base_url}/get
+      params:
+        q: ${keyword}
+        region: ${region}
+```
+
+会展开为 `search[keyword=book,region=us]`、`search[keyword=book,region=eu]`、`search[keyword=laptop,region=us]`、`search[keyword=laptop,region=eu]`。
+
+**约束：**
+- `matrix` 必须是非空 dict
+- 每个变量的取值必须是非空 list
+- matrix 变量名不能与同一步的 `set_vars` 重名
+- 其他步骤依赖 matrix 模板步骤时，依赖会展开到该模板的所有实例
+
+### 4.10 设置变量（set_vars）
 
 在步骤执行前设置变量，支持变量拼接。
 
@@ -375,7 +420,7 @@ steps:
 - `set_vars` 默认只对当前步骤可见
 - 跨步骤复用数据时，应通过 `extract` 显式导出变量
 
-### 4.9 Hook 系统
+### 4.11 Hook 系统
 
 支持 testcase 级和 step 级 hook：
 
@@ -409,11 +454,11 @@ steps:
 - step 级：`before` / `after`
 
 **内置 hook：**
-- `sleep`
-- `log`
-- `getTimestamp`
-- `getTimeStr`
-- `getRandomStr`
+- `sleep: seconds` 或 `sleep: {seconds: 1}` — 暂停指定秒数
+- `log: message` 或 `log: {message: "...", level: info}` — 输出日志，`level` 支持 `trace/debug/info/success/warning/error/critical`
+- `getTimestamp: var` 或 `getTimestamp: {var: name}` — 写入毫秒时间戳
+- `getTimeStr: var` 或 `getTimeStr: {var: name, format: "%Y-%m-%d %H:%M:%S"}` — 写入格式化时间字符串
+- `getRandomStr: var` 或 `getRandomStr: {var: name, length: 8}` — 写入随机字符串
 
 **步骤内完整顺序：**
 
@@ -460,7 +505,7 @@ class StepNode:
 ```python
 @dataclass
 class AssertionNode:
-    op: str      # eq / ne / gt / lt / gte / lte / contains
+    op: str      # eq / ne / gt / lt / gte / lte / contains / not_contains / starts_with / ends_with / in / not_in / matches / len_*
     left: str    # 表达式（由 executor 解释）
     right: Any   # 期望值
 ```
@@ -562,6 +607,8 @@ def detect_cycle(graph: dict[str, list[str]]) -> None: ...
 def get_execution_order(graph: dict[str, list[str]]) -> list[list[str]]: ...
 ```
 
+`get_execution_order` 是 planner 的辅助能力，用于 dry-run、可视化和调试分层拓扑顺序；当前 scheduler 采用运行时动态调度，不直接依赖该函数。
+
 ### 6.4 Scheduler（调度器）
 
 **职责：**
@@ -587,14 +634,16 @@ def load_discovered_hooks(testcase_path: str | Path, cwd: str | Path) -> list[Pa
 
 ### 6.6 Action（执行器）
 
-**Protocol 定义：**
+执行器通过 `ActionSpec` 注册到 action 注册表：
 ```python
-class Action(Protocol):
-    def parse_config(self, raw: dict[str, Any]) -> Any: ...
-    async def execute(self, config: Any, ctx: Context) -> dict: ...
-    def extract(self, result: dict, config: dict, ctx: Context) -> dict: ...
-    def validate(self, result: dict, assertions: list) -> list[str]: ...
-    def summarize(self, config: Any) -> str: ...
+@dataclass(frozen=True)
+class ActionSpec:
+    name: str
+    parse_config: Callable[[dict[str, Any]], Any]
+    execute: Callable[[Any, Context], Awaitable[dict[str, Any]]]
+    extract: Callable[[dict[str, Any], dict[str, Any], Context], dict[str, Any]]
+    validate: Callable[[dict[str, Any], list[AssertionNode]], list[str]]
+    summarize: Callable[[Any], str]
 ```
 
 `execute` 返回值支持以下通用字段（可选）：
@@ -654,6 +703,7 @@ steps:
 - PostgreSQL: `postgres://user:pass@host:5432/dbname`
 - MySQL: `mysql://user:pass@host:3306/dbname`
 - SQLite: `sqlite:///path/to/db.sqlite`
+- SQLite 相对路径: `sqlite://./examples/test.db`
 
 ---
 
@@ -808,10 +858,10 @@ uv run nextgen demo.yaml
 * [x] Hook 系统（内置 + 自定义）
 * [x] 超时配置
 * [x] 指数退避重试
+* [x] fail-fast 策略
 
 ### 待实现
 
-* [ ] fail-fast 策略
 * [ ] 彩色终端报告
 * [ ] HTML 报告
 * [ ] 分布式执行

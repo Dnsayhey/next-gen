@@ -5,7 +5,7 @@ vars:
   base_url: https://httpbin.org
 
 steps:
-  # 固定间隔重试
+  # 固定间隔重试：本步骤故意请求 500 并断言 200，用于观察失败后的重试行为
   fixed_retry:
     request:
       method: GET
@@ -16,7 +16,7 @@ steps:
     validate:
       - eq: [$.status_code, 200]
 
-  # 指数退避重试
+  # 指数退避重试：本步骤同样故意失败，用于观察 1s / 2s / 4s 的退避等待
   backoff_retry:
     request:
       method: GET
