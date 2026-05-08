@@ -241,6 +241,10 @@ def parse_testcase(data: dict[str, Any]) -> TestCase:
     if mode not in ("sequential", "parallel"):
         raise ValueError(f"不支持的执行模式: {mode}，支持: sequential, parallel")
 
+    fail_fast = data.get("fail_fast", True)
+    if not isinstance(fail_fast, bool):
+        raise ValueError(f"fail_fast 格式错误: 期望 bool，得到 {type(fail_fast).__name__}")
+
     steps: dict[str, StepNode] = {}
     matrix_map: dict[str, list[str]] = {}
 
@@ -272,6 +276,7 @@ def parse_testcase(data: dict[str, Any]) -> TestCase:
         vars=data.get("vars", {}),
         steps=steps,
         mode=mode,
+        fail_fast=fail_fast,
         hooks=parse_testcase_hooks(data.get("hooks")),
     )
 

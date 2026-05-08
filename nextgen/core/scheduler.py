@@ -345,6 +345,15 @@ class Scheduler:
             return self._build_result(start_time, [error])
 
         while True:
+            if self.testcase.fail_fast and any(
+                s.status == StepStatus.FAILED for s in self.steps.values()
+            ):
+                for s in self.steps.values():
+                    if s.status == StepStatus.PENDING:
+                        s.status = StepStatus.SKIPPED
+                        logger.info(f"fail_fast 生效，跳过步骤: {s.node.name}")
+                break
+
             pending = [
                 s for s in self.steps.values()
                 if s.status == StepStatus.PENDING
@@ -361,6 +370,8 @@ class Scheduler:
 
             # 找出可执行的步骤
             runnable = [s for s in pending if self.is_runnable(s)]
+            if self.testcase.mode == "sequential" and runnable:
+                runnable = [next(s for s in self.steps.values() if s in runnable)]
 
             if not runnable:
                 # 检查是否还有正在运行或重试的步骤

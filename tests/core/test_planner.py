@@ -33,7 +33,7 @@ class TestBuildGraph:
         graph = build_graph(testcase)
         assert graph == {"a": [], "b": []}
 
-    def test_sequential_mode_auto_dependencies(self):
+    def test_sequential_mode_has_no_implicit_dependencies(self):
         testcase = CaseModel(
             version=1,
             steps={
@@ -44,14 +44,14 @@ class TestBuildGraph:
             mode="sequential",
         )
         graph = build_graph(testcase)
-        assert graph == {"a": [], "b": ["a"], "c": ["b"]}
+        assert graph == {"a": [], "b": [], "c": []}
 
     def test_sequential_mode_with_explicit_dependencies(self):
         testcase = CaseModel(
             version=1,
             steps={
                 "a": make_step("a"),
-                "b": make_step("b"),
+                "b": make_step("b", ["a"]),
                 "c": make_step("c", ["a"]),
             },
             mode="sequential",

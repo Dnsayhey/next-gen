@@ -9,20 +9,10 @@ def build_graph(testcase: TestCase) -> dict[str, list[str]]:
     """构建依赖图
 
     返回: {step_name: [dep1, dep2, ...]}
-
-    sequential 模式：无显式依赖的步骤自动依赖上一步
-    parallel 模式：无显式依赖的步骤可并行执行
     """
     graph = {}
-    step_names = list(testcase.steps.keys())
-
-    for i, (name, step) in enumerate(testcase.steps.items()):
-        if step.depends_on:
-            graph[name] = step.depends_on
-        elif testcase.mode == "sequential" and i > 0:
-            graph[name] = [step_names[i - 1]]
-        else:
-            graph[name] = []
+    for name, step in testcase.steps.items():
+        graph[name] = step.depends_on or []
 
     logger.debug(f"构建依赖图: {graph}")
     return graph

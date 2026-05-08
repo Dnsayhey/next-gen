@@ -65,22 +65,23 @@ Reporter（结果输出）
 ```yaml
 version: 1
 mode: sequential  # 默认值，可省略
+fail_fast: true   # 默认值，可省略
 
 steps:
   login:
     request: ...
   get_user:
-    request: ...      # 自动依赖 login
+    request: ...
   get_order:
-    request: ...      # 自动依赖 get_user
+    request: ...
 ```
 
 | 模式 | 行为 |
 |------|------|
-| `sequential`（默认） | 无 `depends_on` 则按定义顺序串行 |
-| `parallel` | 无 `depends_on` 则可并行执行 |
+| `sequential`（默认） | 每轮只调度 1 个可运行步骤（按定义顺序） |
+| `parallel` | 每轮可调度多个可运行步骤（受并发上限控制） |
 
-**显式依赖优先：**
+**依赖只来自 `depends_on`（不再自动推导）：**
 ```yaml
 mode: sequential
 
@@ -88,11 +89,15 @@ steps:
   login:
     request: ...
   get_user:
-    request: ...           # 自动依赖 login
+    request: ...           # 无 depends_on，仍会串行调度，但不是 login 的依赖
   independent_task:
-    depends_on: [login]    # 显式依赖，覆盖自动顺序
+    depends_on: [login]    # 显式依赖
     request: ...
 ```
+
+**`fail_fast` 语义：**
+- `true`（默认）：一旦任一步骤失败，后续仍为 `pending` 的步骤会被标记为 `skipped`
+- `false`：继续调度其他可运行步骤（但依赖失败步骤的节点依然会被跳过）
 
 **适用场景：**
 - API 测试：`parallel`（独立步骤可并行）
@@ -492,6 +497,7 @@ class TestCase:
     steps: dict[str, StepNode]
     vars: dict[str, Any]
     mode: str = "sequential"  # "sequential" | "parallel"
+    fail_fast: bool = True
     hooks: TestCaseHooks = field(default_factory=TestCaseHooks)
     source_path: str | None = None
 ```

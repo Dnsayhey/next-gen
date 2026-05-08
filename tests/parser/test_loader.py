@@ -390,6 +390,7 @@ class TestParseTestcase:
         }
         testcase = parse_testcase(data)
         assert testcase.mode == "sequential"
+        assert testcase.fail_fast is True
 
     def test_sequential_mode(self):
         data = {
@@ -408,6 +409,15 @@ class TestParseTestcase:
         }
         testcase = parse_testcase(data)
         assert testcase.mode == "parallel"
+
+    def test_fail_fast_false(self):
+        data = {
+            "version": 1,
+            "fail_fast": False,
+            "steps": {"test": {"request": {"method": "GET", "url": "http://test.com"}}},
+        }
+        testcase = parse_testcase(data)
+        assert testcase.fail_fast is False
 
     def test_testcase_with_hooks(self):
         data = {
@@ -430,6 +440,15 @@ class TestParseTestcase:
             "steps": {"test": {"request": {"method": "GET", "url": "http://test.com"}}},
         }
         with pytest.raises(ValueError, match="不支持的执行模式"):
+            parse_testcase(data)
+
+    def test_invalid_fail_fast_type(self):
+        data = {
+            "version": 1,
+            "fail_fast": "false",
+            "steps": {"test": {"request": {"method": "GET", "url": "http://test.com"}}},
+        }
+        with pytest.raises(ValueError, match="fail_fast 格式错误"):
             parse_testcase(data)
 
 

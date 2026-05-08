@@ -101,6 +101,14 @@ uv run nextgen examples/hook_demo.yaml --verbose
 
 `examples/hook_demo.yaml` 会自动加载同目录下的 [examples/hooks.py](/Users/yanlei/Projects/python/next-gen/examples/hooks.py:1)，用来演示自定义 hook 的发现与注册。
 
+## 执行语义（mode / depends_on / fail_fast）
+
+- `depends_on` 是唯一依赖来源，默认不会自动给步骤补依赖
+- `mode: sequential`：每轮只执行一个可运行步骤（按定义顺序）
+- `mode: parallel`：每轮可并发执行多个可运行步骤
+- `fail_fast` 默认 `true`：出现失败后，剩余 `pending` 步骤会被标记为 `skipped`
+- `fail_fast: false`：继续执行其他可运行步骤（但依赖失败步骤的节点仍会被跳过）
+
 ## 执行结果（JSON）
 
 CLI 会将结果以 JSON 输出到 stdout。每个步骤包含：

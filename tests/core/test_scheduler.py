@@ -42,6 +42,9 @@ def scheduler_executor_registry():
         name = config["name"]
         events.append(f"execute:{name}")
 
+        if name == "boom":
+            raise RuntimeError("boom")
+
         if name == "sleepy":
             await asyncio.sleep(0.06)
 
@@ -86,7 +89,7 @@ class TestScheduler:
     """测试 Scheduler 运行时语义"""
 
     @pytest.mark.asyncio
-    async def test_sequential_mode_uses_planned_dependencies(self, scheduler_executor_registry):
+    async def test_sequential_mode_runs_one_runnable_step_at_a_time(self, scheduler_executor_registry):
         testcase = CaseModel(
             version=1,
             mode="sequential",
@@ -110,6 +113,68 @@ class TestScheduler:
             "execute:b",
             "execute:c",
         ]
+
+    @pytest.mark.asyncio
+    async def test_fail_fast_defaults_to_true(self, scheduler_executor_registry):
+        testcase = CaseModel(
+            version=1,
+            mode="sequential",
+            steps={
+                "boom": make_step("boom"),
+                "after": make_step("after"),
+            },
+        )
+
+        scheduler = Scheduler(testcase, max_concurrency=3)
+        result = await scheduler.run()
+
+        assert [step.status for step in result.steps] == [
+            StepStatus.FAILED,
+            StepStatus.SKIPPED,
+        ]
+        assert scheduler_executor_registry == ["execute:boom"]
+
+    @pytest.mark.asyncio
+    async def test_fail_fast_false_continues_independent_steps(self, scheduler_executor_registry):
+        testcase = CaseModel(
+            version=1,
+            mode="sequential",
+            fail_fast=False,
+            steps={
+                "boom": make_step("boom"),
+                "after": make_step("after"),
+            },
+        )
+
+        scheduler = Scheduler(testcase, max_concurrency=3)
+        result = await scheduler.run()
+
+        assert [step.status for step in result.steps] == [
+            StepStatus.FAILED,
+            StepStatus.SUCCESS,
+        ]
+        assert scheduler_executor_registry == ["execute:boom", "execute:after"]
+
+    @pytest.mark.asyncio
+    async def test_failed_dependency_is_skipped_even_when_fail_fast_disabled(self, scheduler_executor_registry):
+        testcase = CaseModel(
+            version=1,
+            mode="parallel",
+            fail_fast=False,
+            steps={
+                "boom": make_step("boom"),
+                "after": make_step("after", depends_on=["boom"]),
+            },
+        )
+
+        scheduler = Scheduler(testcase, max_concurrency=3)
+        result = await scheduler.run()
+
+        assert [step.status for step in result.steps] == [
+            StepStatus.FAILED,
+            StepStatus.SKIPPED,
+        ]
+        assert scheduler_executor_registry == ["execute:boom"]
 
     @pytest.mark.asyncio
     async def test_set_vars_is_visible_to_when(self, scheduler_executor_registry):

@@ -81,6 +81,7 @@ class TestCase:
     steps: dict[str, StepNode]
     vars: dict[str, Any] = field(default_factory=dict)
     mode: str = "sequential"  # "sequential" | "parallel"
+    fail_fast: bool = True
     hooks: TestCaseHooks = field(default_factory=TestCaseHooks)
     source_path: str | None = None
     base_dir: str | None = None
