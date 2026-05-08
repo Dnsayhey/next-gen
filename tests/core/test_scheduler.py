@@ -909,6 +909,42 @@ class TestScheduler:
         assert scheduler.context.get("token") == "one"
 
     @pytest.mark.asyncio
+    async def test_after_hook_failure_does_not_block_later_after_hooks(
+        self,
+        tmp_path,
+        scheduler_action_registry,
+    ):
+        trace_file = tmp_path / "after_best_effort.log"
+
+        @register_hook("boomAfterBeforeTrace")
+        async def boom_after_before_trace(ctx, params):
+            raise RuntimeError("after exploded")
+
+        @register_hook("traceAfterStillRuns")
+        async def trace_after_still_runs(ctx, params):
+            with open(params["file"], "a", encoding="utf-8") as f:
+                f.write("after still ran\n")
+
+        testcase = CaseModel(
+            version=1,
+            mode="parallel",
+            steps={"one": make_step("one")},
+        )
+        testcase.steps["one"].extract = {"token": "$.name"}
+        testcase.steps["one"].hooks.after = [
+            HookAction("boomAfterBeforeTrace", {}),
+            HookAction("traceAfterStillRuns", {"file": str(trace_file)}),
+        ]
+
+        scheduler = Scheduler(testcase)
+        result = await scheduler.run()
+
+        assert scheduler_action_registry == ["execute:one"]
+        assert result.steps[0].status == StepStatus.SUCCESS
+        assert scheduler.context.get("token") == "one"
+        assert trace_file.read_text(encoding="utf-8").splitlines() == ["after still ran"]
+
+    @pytest.mark.asyncio
     async def test_after_each_failure_does_not_publish_extracted_variables(
         self,
         scheduler_action_registry,

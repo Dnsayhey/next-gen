@@ -97,6 +97,21 @@ class Scheduler:
                 target = step.node.name if step else "testcase"
                 raise HookError(f"{phase} hook '{hook.type}' 执行失败 ({target}): {exc}") from exc
 
+    async def execute_hooks_best_effort(
+        self,
+        hooks: list[HookAction],
+        ctx: Context,
+        *,
+        step: StepRuntime,
+        phase: str,
+    ) -> None:
+        """顺序执行 hook，HookError 只记录并继续后续 hook"""
+        for hook in hooks:
+            try:
+                await self.execute_hooks([hook], ctx, step=step, phase=phase)
+            except HookError as exc:
+                logger.warning(str(exc))
+
     def is_runnable(self, step: StepRuntime) -> bool:
         """判断步骤是否可执行"""
         return (
@@ -215,15 +230,12 @@ class Scheduler:
 
         step.status = StepStatus.SUCCESS
 
-        try:
-            await self.execute_hooks(
-                step.node.hooks.after,
-                step_ctx,
-                step=step,
-                phase="after",
-            )
-        except HookError as exc:
-            logger.warning(str(exc))
+        await self.execute_hooks_best_effort(
+            step.node.hooks.after,
+            step_ctx,
+            step=step,
+            phase="after",
+        )
 
     async def _run_step_with_retry(self, step: StepRuntime) -> None:
         """执行单个步骤，重试和跳过都在一个生命周期内完成"""
