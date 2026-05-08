@@ -8,10 +8,11 @@ from loguru import logger
 
 from nextgen.core.context import Context
 from nextgen.core.errors import ActionExecutionError
+from nextgen.core.files import load_file_content, resolve_case_path
 from nextgen.core.result import ActionResult
 
 from .model import RequestConfig
-from .utils import check_content_type_conflict, load_file_content, resolve_case_path
+from .utils import check_content_type_conflict
 
 
 def _body_preview(body_type: str | None, request: RequestConfig, ctx: Context) -> Any:

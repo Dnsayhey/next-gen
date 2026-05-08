@@ -3,12 +3,12 @@
 import pytest
 
 from nextgen.core.context import Context
+from nextgen.core.files import load_file_content, resolve_case_path
 from nextgen.core.model import AssertionNode
 from nextgen.executors.http.config import parse_request_config, summarize_request
 from nextgen.executors.http.client import execute_request
 from nextgen.executors.http.extract import extract_variables
 from nextgen.executors.http.model import RequestConfig
-from nextgen.executors.http.utils import load_file_content, resolve_case_path
 from nextgen.executors.http.validate import validate_response
 
 
