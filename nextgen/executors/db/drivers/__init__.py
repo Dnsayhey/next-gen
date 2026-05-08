@@ -1,6 +1,6 @@
 """数据库驱动"""
 
-from typing import Any, Protocol
+from typing import Any, Awaitable, Callable, Protocol
 
 from nextgen.executors.db.drivers import postgres, mysql, sqlite
 
@@ -8,13 +8,7 @@ from nextgen.executors.db.drivers import postgres, mysql, sqlite
 class DbDriver(Protocol):
     """数据库驱动模块接口"""
 
-    async def execute(
-        self,
-        url: str,
-        query: str,
-        params: list[Any] | None = None,
-    ) -> dict[str, Any]:
-        ...
+    execute: Callable[[str, str, list[Any] | None], Awaitable[dict[str, Any]]]
 
 # URL scheme → 驱动映射
 DRIVERS: dict[str, DbDriver] = {
