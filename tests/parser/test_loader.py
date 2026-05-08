@@ -9,7 +9,7 @@ import yaml
 
 from nextgen.bootstrap import load_builtin_actions
 from nextgen.core.errors import ParseError
-from nextgen.core.model import StepNode, TestCase as CaseModel
+from nextgen.core.model import AndCondition, ExprCondition, OrCondition, StepNode, TestCase as CaseModel
 from nextgen.executors.http.config import parse_request_config
 from nextgen.executors.http.model import RequestConfig
 from nextgen.parser.loader import (
@@ -198,7 +198,9 @@ class TestParseStep:
             "when": [{"eq": ["${env}", "staging"]}],
         }
         step = parse_step("test", data)
-        assert step.when == [{"eq": ["${env}", "staging"]}]
+        assert step.when == AndCondition([
+            ExprCondition(op="eq", left="${env}", right="staging")
+        ])
 
     def test_step_with_when_and(self):
         data = {
@@ -211,12 +213,10 @@ class TestParseStep:
             },
         }
         step = parse_step("test", data)
-        assert step.when == {
-            "and": [
-                {"eq": ["${role}", "admin"]},
-                {"gt": ["${level}", 5]},
-            ]
-        }
+        assert step.when == AndCondition([
+            ExprCondition(op="eq", left="${role}", right="admin"),
+            ExprCondition(op="gt", left="${level}", right=5),
+        ])
 
     def test_step_with_when_or(self):
         data = {
@@ -229,12 +229,10 @@ class TestParseStep:
             },
         }
         step = parse_step("test", data)
-        assert step.when == {
-            "or": [
-                {"eq": ["${env}", "staging"]},
-                {"eq": ["${env}", "dev"]},
-            ]
-        }
+        assert step.when == OrCondition([
+            ExprCondition(op="eq", left="${env}", right="staging"),
+            ExprCondition(op="eq", left="${env}", right="dev"),
+        ])
 
     def test_step_without_when(self):
         data = {

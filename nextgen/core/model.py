@@ -21,6 +21,32 @@ class AssertionNode:
 
 
 @dataclass
+class ExprCondition:
+    """单个条件表达式"""
+
+    op: str
+    left: Any
+    right: Any
+
+
+@dataclass
+class AndCondition:
+    """AND 条件"""
+
+    items: list["ConditionNode"] = field(default_factory=list)
+
+
+@dataclass
+class OrCondition:
+    """OR 条件"""
+
+    items: list["ConditionNode"] = field(default_factory=list)
+
+
+ConditionNode = ExprCondition | AndCondition | OrCondition
+
+
+@dataclass
 class HookAction:
     """钩子动作"""
     type: str
@@ -51,7 +77,7 @@ class StepNode:
     depends_on: list[str] = field(default_factory=list)
     extract: dict[str, Any] = field(default_factory=dict)
     validate: list[AssertionNode] = field(default_factory=list)
-    when: list | dict | None = None  # 条件执行（list=AND, dict=and/or）
+    when: ConditionNode | None = None
     set_vars: dict[str, str] = field(default_factory=dict)  # 设置变量
     config: dict[str, Any] = field(default_factory=dict)
     hooks: StepHooks = field(default_factory=StepHooks)

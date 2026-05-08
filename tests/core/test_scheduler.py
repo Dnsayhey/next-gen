@@ -19,6 +19,7 @@ from nextgen.core.model import (
 from nextgen.core.result import ActionResult, StepStatus
 from nextgen.core.scheduler import Scheduler, StepRuntime
 from nextgen.core.hooks import register_hook
+from nextgen.parser.loader import parse_when
 
 
 def make_step(
@@ -34,7 +35,7 @@ def make_step(
         name=name,
         action=ActionNode(type="test_scheduler_action", config={"name": name}),
         depends_on=depends_on or [],
-        when=when,
+        when=parse_when(when),
         set_vars=set_vars or {},
         config=config or {},
     )

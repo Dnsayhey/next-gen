@@ -494,7 +494,7 @@ class StepNode:
     depends_on: list[str]
     extract: dict[str, Any]
     validate: list[AssertionNode]
-    when: list | dict | None      # 条件执行（list=AND, dict=and/or）
+    when: ConditionNode | None
     set_vars: dict[str, str]      # 设置变量
     config: dict[str, Any]
     hooks: StepHooks

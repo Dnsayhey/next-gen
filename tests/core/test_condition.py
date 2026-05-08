@@ -5,6 +5,7 @@ import pytest
 from nextgen.core.condition import evaluate_condition
 from nextgen.core.context import Context
 from nextgen.core.errors import ParseError
+from nextgen.parser.loader import parse_when
 
 
 class TestEvaluateCondition:
@@ -16,36 +17,36 @@ class TestEvaluateCondition:
 
     def test_empty_list_returns_true(self):
         ctx = Context()
-        assert evaluate_condition([], ctx) is True
+        assert evaluate_condition(parse_when([]), ctx) is True
 
     def test_simple_eq_pass(self):
         ctx = Context({"code": 0})
-        condition = [{"eq": ["${code}", 0]}]
+        condition = parse_when([{"eq": ["${code}", 0]}])
         assert evaluate_condition(condition, ctx) is True
 
     def test_simple_eq_fail(self):
         ctx = Context({"code": 1})
-        condition = [{"eq": ["${code}", 0]}]
+        condition = parse_when([{"eq": ["${code}", 0]}])
         assert evaluate_condition(condition, ctx) is False
 
     def test_simple_ne(self):
         ctx = Context({"status": "active"})
-        condition = [{"ne": ["${status}", "inactive"]}]
+        condition = parse_when([{"ne": ["${status}", "inactive"]}])
         assert evaluate_condition(condition, ctx) is True
 
     def test_simple_gt(self):
         ctx = Context({"count": 10})
-        condition = [{"gt": ["${count}", 5]}]
+        condition = parse_when([{"gt": ["${count}", 5]}])
         assert evaluate_condition(condition, ctx) is True
 
     def test_condition_uses_context_render_to_preserve_pure_var_type(self):
         ctx = Context({"payload": {"code": 0}, "expected": {"code": 0}})
-        condition = [{"eq": ["${payload}", "${expected}"]}]
+        condition = parse_when([{"eq": ["${payload}", "${expected}"]}])
         assert evaluate_condition(condition, ctx) is True
 
     def test_simple_contains(self):
         ctx = Context({"message": "hello world"})
-        condition = [{"contains": ["${message}", "world"]}]
+        condition = parse_when([{"contains": ["${message}", "world"]}])
         assert evaluate_condition(condition, ctx) is True
 
     @pytest.mark.parametrize(
@@ -62,72 +63,72 @@ class TestEvaluateCondition:
     )
     def test_extended_operators(self, condition, vars):
         ctx = Context(vars)
-        assert evaluate_condition(condition, ctx) is True
+        assert evaluate_condition(parse_when(condition), ctx) is True
 
     def test_len_operator_with_value_without_length_returns_false(self):
         ctx = Context({"count": 1})
-        condition = [{"len_gt": ["${count}", 0]}]
+        condition = parse_when([{"len_gt": ["${count}", 0]}])
         assert evaluate_condition(condition, ctx) is False
 
     def test_and_list_all_pass(self):
         ctx = Context({"a": 1, "b": 2})
-        condition = [
+        condition = parse_when([
             {"eq": ["${a}", 1]},
             {"eq": ["${b}", 2]},
-        ]
+        ])
         assert evaluate_condition(condition, ctx) is True
 
     def test_and_list_one_fail(self):
         ctx = Context({"a": 1, "b": 3})
-        condition = [
+        condition = parse_when([
             {"eq": ["${a}", 1]},
             {"eq": ["${b}", 2]},
-        ]
+        ])
         assert evaluate_condition(condition, ctx) is False
 
     def test_explicit_and(self):
         ctx = Context({"a": 1, "b": 2})
-        condition = {
+        condition = parse_when({
             "and": [
                 {"eq": ["${a}", 1]},
                 {"eq": ["${b}", 2]},
             ]
-        }
+        })
         assert evaluate_condition(condition, ctx) is True
 
     def test_explicit_and_fail(self):
         ctx = Context({"a": 1, "b": 3})
-        condition = {
+        condition = parse_when({
             "and": [
                 {"eq": ["${a}", 1]},
                 {"eq": ["${b}", 2]},
             ]
-        }
+        })
         assert evaluate_condition(condition, ctx) is False
 
     def test_explicit_or_one_pass(self):
         ctx = Context({"env": "staging"})
-        condition = {
+        condition = parse_when({
             "or": [
                 {"eq": ["${env}", "staging"]},
                 {"eq": ["${env}", "development"]},
             ]
-        }
+        })
         assert evaluate_condition(condition, ctx) is True
 
     def test_explicit_or_all_fail(self):
         ctx = Context({"env": "production"})
-        condition = {
+        condition = parse_when({
             "or": [
                 {"eq": ["${env}", "staging"]},
                 {"eq": ["${env}", "development"]},
             ]
-        }
+        })
         assert evaluate_condition(condition, ctx) is False
 
     def test_nested_and_or(self):
         ctx = Context({"role": "admin", "level": 10})
-        condition = {
+        condition = parse_when({
             "and": [
                 {"eq": ["${role}", "admin"]},
                 {
@@ -137,28 +138,27 @@ class TestEvaluateCondition:
                     ]
                 },
             ]
-        }
+        })
         assert evaluate_condition(condition, ctx) is True
 
     def test_invalid_dict_key(self):
         ctx = Context()
-        condition = {"invalid": []}
-        with pytest.raises(ParseError, match="未知的条件格式"):
-            evaluate_condition(condition, ctx)
+        with pytest.raises(ParseError, match="when 格式错误"):
+            parse_when({"invalid": []})
 
     def test_invalid_expression_format(self):
         ctx = Context()
-        condition = [{"invalid": [1, 2, 3]}]  # 不是单键 dict
+        condition = [{"invalid": [1, 2, 3]}]
         with pytest.raises(ValueError, match="表达式参数错误"):
-            evaluate_condition(condition, ctx)
+            parse_when(condition)
 
     def test_variable_not_found(self):
         ctx = Context()
-        condition = [{"eq": ["${nonexistent}", "${nonexistent}"]}]
+        condition = parse_when([{"eq": ["${nonexistent}", "${nonexistent}"]}])
         assert evaluate_condition(condition, ctx) is True
 
     def test_unknown_operator(self):
         ctx = Context()
-        condition = [{"unknown": [1, 1]}]
+        condition = parse_when([{"unknown": [1, 1]}])
         with pytest.raises(ValueError, match="不支持的操作符"):
             evaluate_condition(condition, ctx)

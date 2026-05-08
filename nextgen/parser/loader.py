@@ -14,8 +14,12 @@ from nextgen.core.errors import ParseError
 from nextgen.core.hooks import parse_hook_params
 from nextgen.core.model import (
     ActionNode,
+    AndCondition,
     AssertionNode,
+    ConditionNode,
+    ExprCondition,
     HookAction,
+    OrCondition,
     StepNode,
     StepHooks,
     TestCase,
@@ -78,7 +82,7 @@ def parse_assertions(data: list[dict[str, Any]]) -> list[AssertionNode]:
     return assertions
 
 
-def parse_when(data: list | dict | None) -> list | dict | None:
+def parse_when(data: list | dict | None) -> ConditionNode | None:
     """解析 when 条件
 
     格式:
@@ -89,17 +93,37 @@ def parse_when(data: list | dict | None) -> list | dict | None:
         return None
 
     if isinstance(data, list):
-        # 列表格式，默认 AND，直接返回
-        return data
+        return AndCondition([parse_when_item(item) for item in data])
 
     if isinstance(data, dict):
         if "and" in data:
-            return {"and": data["and"]}
+            return AndCondition([parse_when_item(item) for item in data["and"]])
         if "or" in data:
-            return {"or": data["or"]}
+            return OrCondition([parse_when_item(item) for item in data["or"]])
         raise ParseError(f"when 格式错误: dict 必须包含 and 或 or 键，得到 {list(data.keys())}")
 
     raise ParseError(f"when 格式错误: 期望 list 或 dict，得到 {type(data).__name__}")
+
+
+def parse_when_item(item: dict[str, Any]) -> ConditionNode:
+    """解析 when 条件项"""
+    if not isinstance(item, dict):
+        raise ParseError(f"条件项格式错误: {item}")
+
+    if "and" in item:
+        return AndCondition([parse_when_item(child) for child in item["and"]])
+    if "or" in item:
+        return OrCondition([parse_when_item(child) for child in item["or"]])
+
+    if len(item) != 1:
+        raise ParseError(f"表达式格式错误: {item}")
+
+    op = list(item.keys())[0]
+    args = item[op]
+    if not isinstance(args, list) or len(args) != 2:
+        raise ParseError(f"表达式参数错误: {op} 需要两个参数 [left, right]")
+
+    return ExprCondition(op=op, left=args[0], right=args[1])
 
 
 def parse_hook_action(data: dict[str, Any]) -> HookAction:
