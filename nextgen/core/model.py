@@ -50,7 +50,7 @@ ConditionNode = ExprCondition | AndCondition | OrCondition
 class HookAction:
     """钩子动作"""
     type: str
-    params: dict[str, Any] = field(default_factory=dict)
+    params: Any = field(default_factory=dict)
 
 
 @dataclass

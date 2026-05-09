@@ -11,7 +11,6 @@ from loguru import logger
 
 from nextgen.core.actions import list_actions, get_action
 from nextgen.core.errors import ParseError
-from nextgen.core.hooks import parse_hook_params
 from nextgen.core.model import (
     ActionNode,
     AndCondition,
@@ -134,7 +133,7 @@ def parse_hook_action(data: dict[str, Any]) -> HookAction:
     hook_type = list(data.keys())[0]
     raw_params = data[hook_type]
 
-    return HookAction(type=hook_type, params=parse_hook_params(hook_type, raw_params))
+    return HookAction(type=hook_type, params=raw_params if raw_params is not None else {})
 
 
 def expand_step_matrix(name: str, data: dict[str, Any]) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:

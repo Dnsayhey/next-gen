@@ -1,141 +1,225 @@
-"""Hook 注册与发现"""
+"""Hook 注册、参数绑定与发现"""
 
 from __future__ import annotations
 
-import importlib.util
 import hashlib
+import importlib.util
+import inspect
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Awaitable, Callable
+from typing import Any, Callable
 
 from loguru import logger
 
 from nextgen.core.context import Context
 
-HookHandler = Callable[[Context, dict], Awaitable[None]]
-HookParamParser = Callable[[object], dict]
-
-HOOK_REGISTRY: dict[str, HookHandler] = {}
-HOOK_PARAM_PARSERS: dict[str, HookParamParser] = {}
+HookFunc = Callable[..., Any]
+_CONTEXT_PARAM_NAMES = {"ctx", "context"}
 _LOG_LEVELS = {"trace", "debug", "info", "success", "warning", "error", "critical"}
 
 
-def register_hook(name: str):
-    """注册 hook 处理函数"""
+@dataclass(frozen=True)
+class HookSpec:
+    """已注册 hook 的运行时描述。"""
 
-    def decorator(func: HookHandler) -> HookHandler:
-        HOOK_REGISTRY[name] = func
-        return func
+    name: str
+    func: HookFunc
+    signature: inspect.Signature
+
+
+HOOK_REGISTRY: dict[str, HookSpec] = {}
+
+
+def hook(name_or_func: str | HookFunc | None = None, *, override: bool = False):
+    """注册 hook。
+
+    支持两种写法：
+
+    @hook
+    def my_hook(...): ...
+
+    @hook("custom_name")
+    def my_hook(...): ...
+    """
+
+    if callable(name_or_func):
+        return _register_hook(name_or_func.__name__, name_or_func, override=override)
+
+    def decorator(func: HookFunc) -> HookFunc:
+        hook_name = name_or_func or func.__name__
+        return _register_hook(str(hook_name), func, override=override)
 
     return decorator
 
 
-def register_hook_param_parser(name: str):
-    """注册 hook 参数简写解析函数"""
+def _register_hook(name: str, func: HookFunc, *, override: bool = False) -> HookFunc:
+    if name in HOOK_REGISTRY and not override:
+        raise ValueError(f"hook 已注册: {name}，如需覆盖请使用 override=True")
+    HOOK_REGISTRY[name] = HookSpec(
+        name=name,
+        func=func,
+        signature=inspect.signature(func),
+    )
+    return func
 
-    def decorator(func: HookParamParser) -> HookParamParser:
-        HOOK_PARAM_PARSERS[name] = func
-        return func
+
+def _builtin_hook(name_or_func: str | HookFunc | None = None):
+    """注册内置 hook；模块重复加载时允许覆盖同名内置 hook。"""
+    if callable(name_or_func):
+        return _register_hook(name_or_func.__name__, name_or_func, override=True)
+
+    def decorator(func: HookFunc) -> HookFunc:
+        hook_name = str(name_or_func or func.__name__)
+        return _register_hook(hook_name, func, override=True)
 
     return decorator
 
 
-def get_hook(name: str) -> HookHandler | None:
-    """获取已注册的 hook"""
+def get_hook(name: str) -> HookSpec | None:
+    """获取已注册的 hook。"""
     return HOOK_REGISTRY.get(name)
 
 
-def parse_hook_params(name: str, raw_params: object) -> dict:
-    """解析 hook 参数，优先使用 hook 自己注册的简写规则。"""
-    if isinstance(raw_params, dict):
-        return raw_params
-    parser = HOOK_PARAM_PARSERS.get(name)
-    if parser is not None:
-        return parser(raw_params)
-    if raw_params is None:
-        return {}
-    return {"value": raw_params}
+def bind_hook_arguments(spec: HookSpec, ctx: Context, raw_params: object) -> dict[str, Any]:
+    """根据 hook 函数签名绑定 YAML 参数。"""
+    params = raw_params if isinstance(raw_params, dict) else _scalar_to_params(spec, raw_params)
+    if not isinstance(params, dict):
+        raise ValueError(f"hook '{spec.name}' 参数必须是 dict 或标量，得到 {type(raw_params).__name__}")
+
+    params = dict(params)
+    kwargs: dict[str, Any] = {}
+    accepts_var_kwargs = False
+    keyword_params: set[str] = set()
+
+    for param in spec.signature.parameters.values():
+        if param.kind is inspect.Parameter.VAR_KEYWORD:
+            accepts_var_kwargs = True
+            continue
+        if param.kind not in (
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
+        ):
+            continue
+        if param.name in _CONTEXT_PARAM_NAMES:
+            kwargs[param.name] = ctx
+        else:
+            keyword_params.add(param.name)
+
+    unknown = set(params) - keyword_params
+    if unknown and not accepts_var_kwargs:
+        names = ", ".join(sorted(unknown))
+        raise ValueError(f"hook '{spec.name}' 收到未知参数: {names}")
+
+    for name in sorted(set(params) & keyword_params):
+        kwargs[name] = params.pop(name)
+
+    if accepts_var_kwargs:
+        kwargs.update(params)
+
+    missing: list[str] = []
+    for param in spec.signature.parameters.values():
+        if param.kind not in (
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
+        ):
+            continue
+        if param.name in kwargs:
+            continue
+        if param.default is inspect.Parameter.empty:
+            missing.append(param.name)
+
+    if missing:
+        names = ", ".join(missing)
+        raise ValueError(f"hook '{spec.name}' 缺少参数: {names}")
+
+    return kwargs
 
 
-async def _hook_sleep(ctx: Context, params: dict) -> None:
+def _scalar_to_params(spec: HookSpec, raw_params: object) -> dict[str, Any]:
+    bindable = [
+        param
+        for param in spec.signature.parameters.values()
+        if param.kind
+        in (
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
+        )
+        and param.name not in _CONTEXT_PARAM_NAMES
+    ]
+    required = [
+        param
+        for param in bindable
+        if param.default is inspect.Parameter.empty
+    ]
+
+    if len(required) == 1:
+        return {required[0].name: raw_params}
+    if not required and bindable:
+        return {bindable[0].name: raw_params}
+
+    raise ValueError(f"hook '{spec.name}' 不支持标量参数，请使用 dict 参数")
+
+
+async def call_hook(spec: HookSpec, ctx: Context, raw_params: object) -> None:
+    """绑定并执行 hook，忽略非 None 返回值并记录 warning。"""
+    kwargs = bind_hook_arguments(spec, ctx, raw_params)
+    result = spec.func(**kwargs)
+    if inspect.isawaitable(result):
+        result = await result
+    if result is not None:
+        logger.warning(
+            f"hook '{spec.name}' returned a value and it was ignored; "
+            "use ctx.set(...) to write variables"
+        )
+
+
+@_builtin_hook
+def log(ctx: Context, message: object = "", level: str = "info") -> None:
+    level_name = str(level).lower()
+    if level_name not in _LOG_LEVELS:
+        raise ValueError(f"不支持的日志级别: {level}")
+    getattr(logger, level_name)(ctx.render_value(message))
+
+
+@_builtin_hook
+async def sleep(seconds: float = 0) -> None:
     import asyncio
 
-    seconds = params.get("seconds", 0)
-    await asyncio.sleep(seconds)
+    await asyncio.sleep(float(seconds))
 
 
-@register_hook("log")
-async def _hook_log(ctx: Context, params: dict) -> None:
-    level = str(params.get("level", "info")).lower()
-    message = ctx.render(params.get("message", ""))
-    if level not in _LOG_LEVELS:
-        raise ValueError(f"不支持的日志级别: {level}")
-    log_fn = getattr(logger, level)
-    log_fn(message)
-
-
-@register_hook("sleep")
-async def _hook_sleep_registered(ctx: Context, params: dict) -> None:
-    await _hook_sleep(ctx, params)
-
-
-@register_hook("get_timestamp")
-async def _hook_get_timestamp(ctx: Context, params: dict) -> None:
+@_builtin_hook
+def get_timestamp(ctx: Context, var: str) -> None:
     import time
 
-    ctx.set(_required_var(params), int(time.time() * 1000))
+    ctx.set(str(var), int(time.time() * 1000))
 
 
-@register_hook("get_time_str")
-async def _hook_get_time_str(ctx: Context, params: dict) -> None:
+@_builtin_hook
+def get_time_str(ctx: Context, var: str, format: str = "%Y-%m-%d %H:%M:%S") -> None:
     from datetime import datetime
 
-    fmt = params.get("format", "%Y-%m-%d %H:%M:%S")
-    ctx.set(_required_var(params), datetime.now().strftime(fmt))
+    ctx.set(str(var), datetime.now().strftime(str(format)))
 
 
-@register_hook("get_random_str")
-async def _hook_get_random_str(ctx: Context, params: dict) -> None:
+@_builtin_hook
+def get_random_str(ctx: Context, var: str, length: int = 8) -> None:
     import secrets
     import string
 
-    length = int(params.get("length", 8))
     alphabet = string.ascii_letters + string.digits
-    value = "".join(secrets.choice(alphabet) for _ in range(length))
-    ctx.set(_required_var(params), value)
+    value = "".join(secrets.choice(alphabet) for _ in range(int(length)))
+    ctx.set(str(var), value)
 
 
-@register_hook("set_vars")
-async def _hook_set_vars(ctx: Context, params: dict) -> None:
-    for key, value in params.items():
+@_builtin_hook
+def set_vars(ctx: Context, **vars: object) -> None:
+    for key, value in vars.items():
         ctx.set(str(key), ctx.render_value(value))
 
 
-def _required_var(params: dict) -> str:
-    var_name = params.get("var")
-    if not var_name:
-        raise ValueError("hook 参数必须包含 var")
-    return str(var_name)
-
-
-@register_hook_param_parser("sleep")
-def _parse_sleep_params(raw_params: object) -> dict:
-    return {"seconds": raw_params}
-
-
-@register_hook_param_parser("log")
-def _parse_log_params(raw_params: object) -> dict:
-    return {"message": raw_params}
-
-
-@register_hook_param_parser("get_timestamp")
-@register_hook_param_parser("get_time_str")
-@register_hook_param_parser("get_random_str")
-def _parse_var_params(raw_params: object) -> dict:
-    return {"var": raw_params}
-
-
 def discover_hooks(testcase_path: str | Path, cwd: str | Path) -> list[Path]:
-    """从用例目录向上扫描 hooks.py，到 cwd 为止"""
+    """从用例目录向上扫描 hooks.py，到 cwd 为止。"""
     current = Path(testcase_path).resolve().parent
     root = Path(cwd).resolve()
     hook_files: list[Path] = []
@@ -155,7 +239,7 @@ def discover_hooks(testcase_path: str | Path, cwd: str | Path) -> list[Path]:
 
 
 def _load_hooks_module(path: Path) -> None:
-    """动态加载单个 hooks.py"""
+    """动态加载单个 hooks.py。"""
     digest = hashlib.sha256(str(path.resolve()).encode("utf-8")).hexdigest()[:16]
     module_name = f"nextgen_user_hooks_{digest}"
     spec = importlib.util.spec_from_file_location(module_name, path)
@@ -168,7 +252,7 @@ def _load_hooks_module(path: Path) -> None:
 
 
 def load_discovered_hooks(testcase_path: str | Path, cwd: str | Path) -> list[Path]:
-    """发现并加载 hooks.py"""
+    """发现并加载 hooks.py。"""
     loaded = discover_hooks(testcase_path, cwd)
     for hook_file in loaded:
         _load_hooks_module(hook_file)

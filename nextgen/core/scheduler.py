@@ -11,7 +11,7 @@ from nextgen.core.actions import get_action
 from nextgen.core.condition import evaluate_condition
 from nextgen.core.context import Context
 from nextgen.core.errors import ExecutionError, HookError, ValidationError
-from nextgen.core.hooks import get_hook, load_discovered_hooks
+from nextgen.core.hooks import call_hook, get_hook, load_discovered_hooks
 from nextgen.core.model import (
     AssertionNode,
     HookAction,
@@ -91,9 +91,9 @@ class Scheduler:
             if handler is None:
                 raise HookError(f"未注册的 hook: {hook.type}")
 
-            params = ctx.render_dict(hook.params)
+            params = ctx.render_value(hook.params)
             try:
-                await handler(ctx, params)
+                await call_hook(handler, ctx, params)
             except Exception as exc:
                 target = step.node.name if step else "testcase"
                 raise HookError(f"{phase} hook '{hook.type}' 执行失败 ({target}): {exc}") from exc

@@ -127,23 +127,23 @@ class TestParseHookAction:
     def test_parse_sleep_shorthand(self):
         action = parse_hook_action({"sleep": 2})
         assert action.type == "sleep"
-        assert action.params == {"seconds": 2}
+        assert action.params == 2
 
     def test_parse_log_shorthand(self):
         action = parse_hook_action({"log": "hello"})
-        assert action.params == {"message": "hello"}
+        assert action.params == "hello"
 
     def test_parse_var_shorthand(self):
         action = parse_hook_action({"get_timestamp": "start"})
-        assert action.params == {"var": "start"}
+        assert action.params == "start"
 
     def test_parse_full_dict(self):
         action = parse_hook_action({"get_random_str": {"var": "rid", "length": 12}})
         assert action.params == {"var": "rid", "length": 12}
 
-    def test_parse_unknown_scalar_hook_uses_value_param(self):
+    def test_parse_unknown_scalar_hook_keeps_raw_value(self):
         action = parse_hook_action({"customHook": "raw"})
-        assert action.params == {"value": "raw"}
+        assert action.params == "raw"
 
     def test_parse_none_params_as_empty_dict(self):
         action = parse_hook_action({"customHook": None})
@@ -278,7 +278,7 @@ class TestParseStep:
         }
         step = parse_step("test", data)
         assert [action.type for action in step.hooks.before] == ["log"]
-        assert step.hooks.before[0].params == {"message": "before"}
+        assert step.hooks.before[0].params == "before"
         assert step.hooks.after[0].params == {"message": "after", "level": "warning"}
 
 
@@ -456,8 +456,8 @@ class TestParseTestcase:
         }
         testcase = parse_testcase(data)
         assert testcase.hooks.before_all[0].type == "log"
-        assert testcase.hooks.before_all[0].params == {"message": "suite start"}
-        assert testcase.hooks.after_each[0].params == {"seconds": 1}
+        assert testcase.hooks.before_all[0].params == "suite start"
+        assert testcase.hooks.after_each[0].params == 1
 
     def test_invalid_mode(self):
         data = {

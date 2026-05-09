@@ -1,91 +1,158 @@
-# Hooks 系统改进讨论
+# Hooks 系统设计
 
-> 状态：部分已实施
+> 状态：已实施基础易用版。
 
-## 已实施
+## 设计目标
 
-### step 级 hooks.after 非阻断执行
+Hook 是生命周期副作用函数，不是返回值管道。
 
-**问题：** hooks.after 失败会将步骤标记为 FAILED，导致已成功 extract 的变量丢失。
+用户写 hook 时应尽量像写普通 Python 函数：
 
-**方案：** extract 完成后立即标记 SUCCESS，hooks.after 通过 `execute_hooks_best_effort` 非阻断执行——单个 hook 失败只记 warning，不改变步骤状态，不阻止 extract 发布，不影响后续 hook 执行。
+- 用 `@hook` 注册。
+- 函数名默认就是 hook 名。
+- 支持同步函数和异步函数。
+- YAML 参数按函数签名绑定。
+- 需要上下文时声明 `ctx` 或 `context` 参数。
+- 要写变量时显式调用 `ctx.set(...)`。
+- 返回非 `None` 值不会参与执行语义，只记录 warning。
 
-**实施：** `scheduler.py` 中新增 `execute_hooks_best_effort` 方法，`_execute_step_logic` 在 extract 后调用。
-
-## 待实施提案
-
-### 1. 同名覆盖检测
-
-**问题：** 不同来源注册同名 hook 会静默覆盖（内置 hook、插件 hook、自动发现的 hooks.py），难以排查。
-
-**方案：** 加载时检测冲突，抛出 warning 或 error。
-
-### 2. 支持同步函数注册
-
-**问题：** 所有 hook handler 必须是 `async def`，对简单场景（设变量、打日志）门槛偏高。
-
-**方案：** 执行层检测返回值是否 awaitable——同步函数直接调用，不做 `asyncio.to_thread`。hook 拿到 mutable Context，丢到线程里会引入线程安全问题和顺序感问题。需要阻塞 IO 的 hook 由用户自己写 async 或显式 offload。
+## 用户 API
 
 ```python
-@register_hook("seed_vars")
-def seed_vars(ctx, params):       # 同步函数，也能正常工作
-    for key, value in params.items():
-        ctx.set(key, value)
+from nextgen import hook
+
+
+@hook
+def mask_token(ctx, source="token", target="masked_token", keep=2):
+    value = str(ctx.get(source, ""))
+    ctx.set(target, value[:keep] + "***" + value[-keep:])
 ```
 
-### 3. 合并 param parser 与 handler 定义
-
-**问题：** `register_hook_param_parser` 需要单独注册，容易遗忘或与 handler 不同步。
-
-**方案：** 将 parser 作为 `register_hook` 的参数：
-
-```python
-@register_hook("sleep", parser=lambda v: {"seconds": v})
-async def hook_sleep(ctx, params):
-    await asyncio.sleep(params["seconds"])
-```
-
-### 4. 参数校验
-
-**问题：** handler 收到的 `params` 是裸 `dict`，没有校验，传错参数只能运行时发现。
-
-**方案：** 先支持简单 callable validator 或 dataclass parser，等 hook 使用变多再考虑复杂 schema。
-
-### 5. 放宽文件名限制
-
-**问题：** 只能叫 `hooks.py`，无法按功能拆分。
-
-**方案：** 支持在 DSL 或配置中指定额外的 hook 文件路径，同时保留 `hooks.py` 作为默认约定。
-
-### 6. 条件执行
-
-**问题：** 所有 hook 无条件执行，需要条件判断时只能在 handler 内部写逻辑。
-
-**方案：** DSL 层面支持 `when` 条件：
+YAML:
 
 ```yaml
 hooks:
   after:
-    - notifySlack: { message: "step failed" }
-      when: "step.status == 'failed'"
+    - mask_token:
+        source: token
+        target: masked_token
+        keep: 2
 ```
 
-### 7. 更细粒度的生命周期点
+需要自定义 hook 名时：
 
-**问题：** 固定 5 个时机（before_all / after_all / before_each / after_each / step before & after），无法扩展。
+```python
+@hook("mask")
+def mask_token(ctx):
+    ...
+```
 
-**方案：** 增加 `on_retry`、`on_error`、`after_validate` 等更细粒度的执行点。
+默认不允许重复注册同名 hook。确实需要覆盖时必须显式声明：
 
-**注意：** 短期不建议实施。刚把 after 的语义收紧（非阻断），短期再快速扩生命周期点容易把边界弄糊，等真实案例出现再说。
+```python
+@hook("mask", override=True)
+def custom_mask(ctx):
+    ...
+```
 
-## 优先级建议
+## 参数绑定规则
+
+```python
+@hook
+def notify(message: str, level: str = "info"):
+    ...
+```
+
+```yaml
+- notify:
+    message: "done"
+    level: warning
+```
+
+- YAML 中的 dict 参数按函数签名传入。
+- 有默认值的参数可以省略。
+- 没有默认值的参数缺失时报错。
+- 传入函数不认识的参数时报错。
+- 函数声明 `**kwargs` 时可以接收任意额外参数。
+- `ctx` 和 `context` 是保留注入参数，不从 YAML 读取，也不应作为业务参数名使用。
+
+## 标量简写
+
+如果 YAML 参数是标量，执行期会根据函数签名绑定到业务参数：
+
+```python
+@hook
+async def sleep(seconds: float = 0):
+    ...
+```
+
+```yaml
+- sleep: 1
+```
+
+等价于：
+
+```yaml
+- sleep:
+    seconds: 1
+```
+
+绑定规则：
+
+- 如果只有一个必填业务参数，绑定到该参数。
+- 如果没有必填业务参数，绑定到第一个非 `ctx` / `context` 的业务参数。
+- 如果有多个必填业务参数，标量简写会报错，要求使用 dict。
+
+因此：
+
+```yaml
+- log: "done"
+```
+
+会绑定为 `log(message="done")`。
+
+## 返回值语义
+
+Hook 不通过返回值传递数据。
+
+- `return None`：正常。
+- `return 非 None`：执行继续，记录 warning。
+
+提示信息：
+
+```text
+hook 'foo' returned a value and it was ignored; use ctx.set(...) to write variables
+```
+
+## 内置 hooks
+
+内置 hook 名统一使用 snake_case：
+
+- `log(ctx, message="", level="info")`
+- `sleep(seconds=0)`
+- `get_timestamp(ctx, var)`
+- `get_time_str(ctx, var, format="%Y-%m-%d %H:%M:%S")`
+- `get_random_str(ctx, var, length=8)`
+- `set_vars(ctx, **vars)`
+
+## 生命周期语义
+
+### step 级 hooks.after 非阻断执行
+
+`hooks.after` 在 extract / export 之后执行。步骤已标记为成功后，`hooks.after` 通过 best-effort 方式执行：
+
+- 单个 after hook 失败只记录 warning。
+- 不改变步骤状态。
+- 不阻止 extract / export 发布到全局 context。
+- 不影响后续 after hook 执行。
+
+其他 hook 阶段仍然是阻断式执行。
+
+## 后续提案
 
 | 优先级 | 提案 | 理由 |
 |--------|------|------|
-| P0 | 同名覆盖检测 | 静默覆盖太难排查，属于坑位修复，改动小。早期项目宁可报错清楚一点 |
-| P1 | 支持同步函数 | 降低门槛，但不用 `asyncio.to_thread`，直接判断 awaitable |
-| P1 | 合并 param parser | 减少认知负担，能把 handler 和 shorthand 解析放在一起 |
-| P2 | 参数校验 | 有价值，但先从简单 callable validator 开始，别一上来搞复杂 schema |
-| P3 | 放宽文件名限制 | 锦上添花 |
-| P3 | 条件执行 | 可在 handler 内变通 |
-| P3 | 细粒度生命周期 | 等真实案例出现再扩，避免把边界弄糊 |
+| P2 | 参数类型转换 | 可基于 type hint 做轻量转换，但别过早引入复杂 schema |
+| P3 | 放宽文件名限制 | 允许按功能拆分 hook 文件，同时保留 `hooks.py` 默认约定 |
+| P3 | 条件执行 | 可先在 hook 内部判断，等真实需求稳定后再扩 DSL |
+| P3 | 更细生命周期点 | 如 `on_retry`、`on_error`、`after_validate`，等真实案例出现再扩 |

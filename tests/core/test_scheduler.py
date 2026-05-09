@@ -18,7 +18,7 @@ from nextgen.core.model import (
 )
 from nextgen.core.result import ActionResult, StepStatus
 from nextgen.core.scheduler import Scheduler, StepRuntime
-from nextgen.core.hooks import register_hook
+from nextgen.core.hooks import HOOK_REGISTRY, hook
 from nextgen.parser.loader import parse_when
 
 
@@ -95,6 +95,14 @@ def scheduler_action_registry():
     ))
     yield events
     restore_actions(actions)
+
+
+@pytest.fixture(autouse=True)
+def hook_registry_snapshot():
+    hooks = HOOK_REGISTRY.copy()
+    yield
+    HOOK_REGISTRY.clear()
+    HOOK_REGISTRY.update(hooks)
 
 
 class TestScheduler:
@@ -590,12 +598,12 @@ class TestScheduler:
         hook_file.write_text(
             "\n".join(
                 [
-                    "from nextgen import register_hook",
+                    "from nextgen import hook",
                     "",
-                    "@register_hook('trace')",
-                    "async def trace(ctx, params):",
-                    "    with open(params['file'], 'a', encoding='utf-8') as f:",
-                    "        f.write(params['value'] + '\\n')",
+                    "@hook('trace')",
+                    "def trace(file, value):",
+                    "    with open(file, 'a', encoding='utf-8') as f:",
+                    "        f.write(value + '\\n')",
                 ]
             )
         )
@@ -660,12 +668,12 @@ class TestScheduler:
         hook_file.write_text(
             "\n".join(
                 [
-                    "from nextgen import register_hook",
+                    "from nextgen import hook",
                     "",
-                    "@register_hook('trace')",
-                    "async def trace(ctx, params):",
-                    "    with open(params['file'], 'a', encoding='utf-8') as f:",
-                    "        f.write(params['value'] + '\\n')",
+                    "@hook('trace')",
+                    "def trace(file, value):",
+                    "    with open(file, 'a', encoding='utf-8') as f:",
+                    "        f.write(value + '\\n')",
                 ]
             )
         )
@@ -722,12 +730,12 @@ class TestScheduler:
         hook_file.write_text(
             "\n".join(
                 [
-                    "from nextgen import register_hook",
+                    "from nextgen import hook",
                     "",
-                    "@register_hook('traceVar')",
-                    "async def trace_var(ctx, params):",
-                    "    value = ctx.get(params['source'])",
-                    "    with open(params['file'], 'a', encoding='utf-8') as f:",
+                    "@hook('traceVar')",
+                    "def trace_var(ctx, file, source):",
+                    "    value = ctx.get(source)",
+                    "    with open(file, 'a', encoding='utf-8') as f:",
                     "        f.write(str(value) + '\\n')",
                 ]
             )
@@ -765,10 +773,10 @@ class TestScheduler:
         hook_file.write_text(
             "\n".join(
                 [
-                    "from nextgen import register_hook",
+                    "from nextgen import hook",
                     "",
-                    "@register_hook('boomHook')",
-                    "async def boom_hook(ctx, params):",
+                    "@hook('boomHook')",
+                    "def boom_hook():",
                     "    raise RuntimeError('boom')",
                 ]
             )
@@ -799,8 +807,8 @@ class TestScheduler:
 
     @pytest.mark.asyncio
     async def test_after_all_failure_marks_result_failed(self, scheduler_action_registry):
-        @register_hook("boomAfterAllForResult")
-        async def boom_after_all(ctx, params):
+        @hook("boomAfterAllForResult")
+        async def boom_after_all():
             raise RuntimeError("after all exploded")
 
         testcase = CaseModel(
@@ -823,8 +831,8 @@ class TestScheduler:
         self,
         scheduler_action_registry,
     ):
-        @register_hook("boomBeforeEachForResult")
-        async def boom_before_each(ctx, params):
+        @hook("boomBeforeEachForResult")
+        async def boom_before_each():
             raise RuntimeError("before each exploded")
 
         testcase = CaseModel(
@@ -850,15 +858,15 @@ class TestScheduler:
     ):
         trace_file = tmp_path / "before_each_failure.log"
 
-        @register_hook("traceBeforeEachThenFail")
-        async def trace_before_each_then_fail(ctx, params):
-            with open(params["file"], "a", encoding="utf-8") as f:
+        @hook("traceBeforeEachThenFail")
+        def trace_before_each_then_fail(file):
+            with open(file, "a", encoding="utf-8") as f:
                 f.write("before_each\n")
             raise RuntimeError("before each exploded")
 
-        @register_hook("traceAfterEachAfterBeforeFailure")
-        async def trace_after_each_after_before_failure(ctx, params):
-            with open(params["file"], "a", encoding="utf-8") as f:
+        @hook("traceAfterEachAfterBeforeFailure")
+        def trace_after_each_after_before_failure(file):
+            with open(file, "a", encoding="utf-8") as f:
                 f.write("after_each\n")
 
         testcase = CaseModel(
@@ -888,8 +896,8 @@ class TestScheduler:
         self,
         scheduler_action_registry,
     ):
-        @register_hook("boomAfterForPublish")
-        async def boom_after(ctx, params):
+        @hook("boomAfterForPublish")
+        async def boom_after():
             raise RuntimeError("after exploded")
 
         testcase = CaseModel(
@@ -916,13 +924,13 @@ class TestScheduler:
     ):
         trace_file = tmp_path / "after_best_effort.log"
 
-        @register_hook("boomAfterBeforeTrace")
-        async def boom_after_before_trace(ctx, params):
+        @hook("boomAfterBeforeTrace")
+        async def boom_after_before_trace():
             raise RuntimeError("after exploded")
 
-        @register_hook("traceAfterStillRuns")
-        async def trace_after_still_runs(ctx, params):
-            with open(params["file"], "a", encoding="utf-8") as f:
+        @hook("traceAfterStillRuns")
+        def trace_after_still_runs(file):
+            with open(file, "a", encoding="utf-8") as f:
                 f.write("after still ran\n")
 
         testcase = CaseModel(
@@ -999,8 +1007,8 @@ class TestScheduler:
         self,
         scheduler_action_registry,
     ):
-        @register_hook("setAfterExportProbe")
-        async def set_after_export_probe(ctx, params):
+        @hook("setAfterExportProbe")
+        def set_after_export_probe(ctx):
             ctx.set("after_value", "late")
 
         testcase = CaseModel(
@@ -1043,8 +1051,8 @@ class TestScheduler:
         self,
         scheduler_action_registry,
     ):
-        @register_hook("boomAfterEachForPublish")
-        async def boom_after_each(ctx, params):
+        @hook("boomAfterEachForPublish")
+        async def boom_after_each():
             raise RuntimeError("after each exploded")
 
         testcase = CaseModel(
@@ -1068,10 +1076,10 @@ class TestScheduler:
         tmp_path,
         scheduler_action_registry,
     ):
-        @register_hook("dirtyAttemptContext")
-        async def dirty_attempt_context(ctx, params):
+        @hook("dirtyAttemptContext")
+        def dirty_attempt_context(ctx, file):
             seen = ctx.get("attempt_local")
-            with open(params["file"], "a", encoding="utf-8") as f:
+            with open(file, "a", encoding="utf-8") as f:
                 f.write(str(seen) + "\n")
             ctx.set("attempt_local", "dirty")
 

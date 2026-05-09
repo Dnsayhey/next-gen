@@ -2,8 +2,8 @@
 
 from nextgen.bootstrap import load_builtin_actions
 from nextgen.core.actions import ActionSpec, register_action
-from nextgen.core.hooks import register_hook
+from nextgen.core.hooks import hook
 
 load_builtin_actions()
 
-__all__ = ["ActionSpec", "register_action", "register_hook"]
+__all__ = ["ActionSpec", "hook", "register_action"]

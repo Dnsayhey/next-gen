@@ -5,7 +5,22 @@ from pathlib import Path
 import pytest
 
 from nextgen.core.context import Context
-from nextgen.core.hooks import HOOK_REGISTRY, discover_hooks
+from nextgen.core import hooks as hooks_module
+from nextgen.core.hooks import (
+    HOOK_REGISTRY,
+    bind_hook_arguments,
+    call_hook,
+    discover_hooks,
+    hook,
+)
+
+
+@pytest.fixture(autouse=True)
+def hook_registry_snapshot():
+    hooks = HOOK_REGISTRY.copy()
+    yield
+    HOOK_REGISTRY.clear()
+    HOOK_REGISTRY.update(hooks)
 
 
 class TestDiscoverHooks:
@@ -60,18 +75,18 @@ class TestBuiltinHooks:
     @pytest.mark.asyncio
     async def test_log_rejects_unknown_level(self):
         with pytest.raises(ValueError, match="不支持的日志级别"):
-            await HOOK_REGISTRY["log"](Context(), {"level": "__dict__", "message": "hello"})
+            await call_hook(HOOK_REGISTRY["log"], Context(), {"level": "__dict__", "message": "hello"})
 
     @pytest.mark.asyncio
     async def test_var_hooks_require_var_param(self):
-        with pytest.raises(ValueError, match="必须包含 var"):
-            await HOOK_REGISTRY["get_timestamp"](Context(), {})
+        with pytest.raises(ValueError, match="缺少参数: var"):
+            await call_hook(HOOK_REGISTRY["get_timestamp"], Context(), {})
 
     @pytest.mark.asyncio
     async def test_get_time_str_sets_formatted_value(self):
         ctx = Context()
 
-        await HOOK_REGISTRY["get_time_str"](ctx, {"var": "today", "format": "%Y"})
+        await call_hook(HOOK_REGISTRY["get_time_str"], ctx, {"var": "today", "format": "%Y"})
 
         assert len(ctx.get("today")) == 4
         assert ctx.get("today").isdigit()
@@ -80,7 +95,8 @@ class TestBuiltinHooks:
     async def test_set_vars_renders_and_sets_values_in_order(self):
         ctx = Context({"suffix": "abc"})
 
-        await HOOK_REGISTRY["set_vars"](
+        await call_hook(
+            HOOK_REGISTRY["set_vars"],
             ctx,
             {
                 "dir": "new_${suffix}",
@@ -92,3 +108,108 @@ class TestBuiltinHooks:
         assert ctx.get("dir") == "new_abc"
         assert ctx.get("path") == "/new_abc/file.txt"
         assert ctx.get("items") == ["new_abc", "/new_abc/file.txt"]
+
+
+class TestHookBinding:
+    """测试 hook 函数签名绑定"""
+
+    def test_duplicate_hook_name_is_rejected_by_default(self):
+        @hook("duplicate_name")
+        def first():
+            return None
+
+        with pytest.raises(ValueError, match="hook 已注册: duplicate_name"):
+            @hook("duplicate_name")
+            def second():
+                return None
+
+    def test_duplicate_hook_name_can_be_overridden_explicitly(self):
+        @hook("override_name")
+        def first():
+            return None
+
+        @hook("override_name", override=True)
+        def second():
+            return None
+
+        assert HOOK_REGISTRY["override_name"].func is second
+
+    def test_scalar_params_bind_to_single_required_arg(self):
+        @hook("bind_scalar_required")
+        def bind_scalar_required(seconds):
+            return None
+
+        kwargs = bind_hook_arguments(HOOK_REGISTRY["bind_scalar_required"], Context(), 2)
+
+        assert kwargs == {"seconds": 2}
+
+    def test_scalar_params_bind_to_single_optional_arg(self):
+        @hook("bind_scalar_optional")
+        def bind_scalar_optional(message=""):
+            return None
+
+        kwargs = bind_hook_arguments(HOOK_REGISTRY["bind_scalar_optional"], Context(), "hello")
+
+        assert kwargs == {"message": "hello"}
+
+    def test_scalar_params_bind_to_first_optional_arg(self):
+        kwargs = bind_hook_arguments(HOOK_REGISTRY["log"], Context(), "hello")
+
+        assert kwargs["message"] == "hello"
+        assert "level" not in kwargs
+
+    def test_scalar_params_reject_ambiguous_signature(self):
+        @hook("bind_scalar_ambiguous")
+        def bind_scalar_ambiguous(a, b):
+            return None
+
+        with pytest.raises(ValueError, match="不支持标量参数"):
+            bind_hook_arguments(HOOK_REGISTRY["bind_scalar_ambiguous"], Context(), "raw")
+
+    def test_unknown_dict_param_is_rejected(self):
+        @hook("bind_unknown_param")
+        def bind_unknown_param(message):
+            return None
+
+        with pytest.raises(ValueError, match="未知参数: extra"):
+            bind_hook_arguments(
+                HOOK_REGISTRY["bind_unknown_param"],
+                Context(),
+                {"message": "ok", "extra": "nope"},
+            )
+
+    def test_var_kwargs_accept_unknown_params(self):
+        @hook("bind_kwargs")
+        def bind_kwargs(ctx, **values):
+            return None
+
+        kwargs = bind_hook_arguments(HOOK_REGISTRY["bind_kwargs"], Context(), {"a": 1})
+
+        assert set(kwargs) == {"ctx", "a"}
+        assert kwargs["a"] == 1
+
+    @pytest.mark.asyncio
+    async def test_sync_hook_can_write_context(self):
+        @hook("sync_context_write")
+        def sync_context_write(ctx, value):
+            ctx.set("value", value)
+
+        ctx = Context()
+
+        await call_hook(HOOK_REGISTRY["sync_context_write"], ctx, {"value": "ok"})
+
+        assert ctx.get("value") == "ok"
+
+    @pytest.mark.asyncio
+    async def test_non_none_return_value_is_ignored_with_warning(self, monkeypatch):
+        @hook("return_value_warning")
+        def return_value_warning():
+            return {"ignored": True}
+
+        warnings = []
+        monkeypatch.setattr(hooks_module.logger, "warning", warnings.append)
+
+        await call_hook(HOOK_REGISTRY["return_value_warning"], Context(), {})
+
+        assert len(warnings) == 1
+        assert "returned a value and it was ignored" in warnings[0]
