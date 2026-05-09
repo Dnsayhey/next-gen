@@ -218,7 +218,9 @@ steps:
 **作用域规则：**
 - `vars`、`before_all` 写入、历史步骤 `extract` 的结果存在于全局上下文
 - `set_vars` 默认只在当前步骤内可见
-- `before_each` / `before` / `after` / `after_each` 默认操作当前步骤上下文
+- `before_each` 操作步骤级 `base_step_ctx`，其写入对同一步骤的所有 retry attempt 可见
+- `before` / `after` 操作单次 attempt 的 `step_ctx`
+- `after_each` 操作最后一次 attempt 的 `step_ctx`
 - `extract` 声明的变量在步骤成功后提交到全局上下文，供后续步骤使用
 - `export` 从当前步骤上下文渲染变量，并在步骤成功后提交到全局上下文；同名时覆盖 `extract`
 
@@ -300,7 +302,7 @@ steps:
 **说明：**
 - `request.timeout` 只作用于单次请求
 - `config.timeout` 作用于整个步骤生命周期
-- 步骤总超时覆盖：`before_each -> set_vars -> when -> before -> action -> validate -> extract -> after -> after_each`
+- 步骤总超时覆盖：`before_each -> set_vars -> when -> before -> action -> validate -> extract -> export -> after -> after_each`
 
 ### 4.8 条件执行（when）
 
@@ -482,7 +484,7 @@ steps:
 **步骤内完整顺序：**
 
 ```text
-before_each -> set_vars -> when -> before -> action -> validate -> extract -> after -> after_each
+before_each -> set_vars -> when -> before -> action -> validate -> extract -> export -> after -> after_each
 ```
 
 **retry 语义：**
@@ -492,6 +494,8 @@ before_each -> set_vars -> when -> before -> action -> validate -> extract -> af
 **自定义 hook：**
 - 用户可在 `hooks.py` 中通过 `from nextgen import hook` 注册
 - 运行时会从 testcase 所在目录向上扫描到当前工作目录，按从外到内顺序加载
+- hook 参数在执行期按函数签名绑定；标量简写优先绑定到唯一必填业务参数，没有必填参数时绑定到第一个非 `ctx` / `context` 的业务参数
+- `ctx` / `context` 是保留注入参数名，不应作为业务参数名使用
 
 ---
 
@@ -512,6 +516,7 @@ class StepNode:
     action: ActionNode
     depends_on: list[str]
     extract: dict[str, Any]
+    export: dict[str, Any]
     validate: list[AssertionNode]
     when: ConditionNode | None
     set_vars: dict[str, str]      # 设置变量
@@ -564,6 +569,7 @@ class TestCase:
     fail_fast: bool = True
     hooks: TestCaseHooks = field(default_factory=TestCaseHooks)
     source_path: str | None = None
+    base_dir: str | None = None
 ```
 
 ---
@@ -606,12 +612,13 @@ class Context:
     def derive(self, initial: dict[str, Any] | None = None) -> "Context": ...
     def merge(self, updates: dict[str, Any]) -> None: ...
     def render(self, value: Any) -> Any: ...
+    def render_value(self, value: Any) -> Any: ...
     def render_dict(self, data: dict) -> dict: ...
 ```
 
 调度器运行时会基于全局上下文派生步骤局部上下文，以支持：
 - `set_vars` 和 step hooks 的局部可见性
-- `extract` 成功后再回写全局上下文
+- `extract` / `export` 成功后再回写全局上下文
 
 ### 6.3 Planner（DAG 规划）
 
@@ -778,11 +785,18 @@ class StepStatus(str, Enum):
 ```text
 nextgen/
 ├── cli.py              # CLI 入口
+├── bootstrap.py        # 内置 action 加载
 ├── core/
 │   ├── model.py        # 通用 AST 模型（StepNode, TestCase 等）
 │   ├── context.py      # 变量系统
+│   ├── actions.py      # action 注册表
 │   ├── planner.py      # DAG 规划
 │   ├── condition.py    # 条件评估器
+│   ├── operators.py    # 通用断言操作符
+│   ├── extract.py      # 通用提取规则
+│   ├── files.py        # 文件路径辅助
+│   ├── result.py       # 执行结果模型
+│   ├── errors.py       # 通用错误层级
 │   ├── hooks.py        # hook 注册表与发现逻辑
 │   └── scheduler.py    # 调度器（action 注册表）
 ├── parser/
@@ -793,6 +807,7 @@ nextgen/
 │   │   ├── client.py   # 请求发送
 │   │   ├── model.py    # HTTP action 内部模型
 │   │   ├── extract.py  # 变量提取
+│   │   ├── path.py     # HTTP 结果路径读取
 │   │   ├── validate.py # 断言验证
 │   │   └── utils.py    # 工具函数
 │   └── db/             # 内置 DB action 实现
@@ -805,7 +820,8 @@ nextgen/
 │           ├── mysql.py
 │           └── sqlite.py
 └── reporter/
-    └── json_reporter.py
+    ├── base.py          # reporter 接口
+    └── json_reporter.py # JSON 报告实现
 ```
 
 ---

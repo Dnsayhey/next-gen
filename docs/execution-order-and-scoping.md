@@ -123,17 +123,13 @@ steps:
 steps:
   login:
     validate:
-      - op: eq
-        left: status_code
-        right: 200
-      - op: contains
-        left: body.token
-        right: "eyJ"
+      - eq: [$$.status_code, 200]
+      - contains: [$.token, "eyJ"]
 ```
 
 - **时机：** action 之后，extract / export 之前。
 - **行为：** 断言失败抛出 `ValidationError`，触发重试（如有）。
-- **作用域：** `right` 值会经过 `step_ctx.render()` 渲染。`left` 是由 action 实现解释的表达式（如 `status_code`、`body.token`），不走变量替换。
+- **作用域：** 断言右值会经过 `step_ctx.render()` 渲染。左值是由 action 实现解释的表达式（如 HTTP action 中的 `$.token`、`$$.status_code`），不走变量替换。
 
 #### 6. extract（提取变量）
 
@@ -141,8 +137,8 @@ steps:
 steps:
   login:
     extract:
-      token: body.token
-      user_id: body.user.id
+      token: $.token
+      user_id: $.user.id
 ```
 
 - **时机：** validate 之后，export 之前。
@@ -213,7 +209,7 @@ steps:
 | **每次重试都是全新的 step_ctx** | `step_ctx = base_step_ctx.derive()` 在每次重试循环顶部执行，前一次重试的 set_vars、extract、hook 修改变量等全部丢弃 |
 | **before_each 写入可跨重试** | before_each 操作的是 `base_step_ctx`，它在重试循环外部，所以 before_each 设置的变量对所有重试可见 |
 | **extract/export 延迟合并** | extract/export 结果先存在 pending 区，只有步骤最终 SUCCESS 才 merge 到全局，且 export 同名覆盖 extract |
-| **after_each 总是执行（有前提）** | 在 finally 块中执行，但仅限真正进入 `_run_step_with_retry` 的步骤。`when` skip 会进入（会跑 after_each）；依赖失败或 fail_fast 导致 scheduler 直接标 SKIPPED 的步骤不会跑 after_each |
+| **after_each 总是执行（有前提）** | 在 `_run_step_with_retry` 的 finally 块中执行，但仅限真正进入该函数的步骤。`when` skip 会进入（会跑 after_each）；依赖失败或 fail_fast 导致 scheduler 直接标 SKIPPED 的步骤不会跑 after_each |
 | **after_each 之后才合并** | 先执行 after_each，再根据状态决定是否 merge pending_extracts / pending_exports。after_each 和 after hooks 可以通过 `ctx.set()` 修改变量，但只有 pending 区中记录的 key 才会 merge 到全局——after hook 额外 `ctx.set()` 的变量不会自动发布 |
 | **hooks.after 非阻断** | hooks.after 通过 `execute_hooks_best_effort` 执行，失败只记日志不影响步骤状态和 extract/export 发布 |
 

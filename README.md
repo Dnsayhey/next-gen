@@ -183,11 +183,18 @@ request:
 ```
 nextgen/
 ├── cli.py              # CLI 入口
+├── bootstrap.py        # 内置 action 加载
 ├── core/
 │   ├── model.py        # AST 模型
 │   ├── errors.py       # 通用错误层级
 │   ├── context.py      # 变量系统
+│   ├── actions.py      # action 注册表
+│   ├── hooks.py        # hook 注册表与发现
 │   ├── planner.py      # DAG 规划
+│   ├── condition.py    # when 条件评估
+│   ├── operators.py    # 通用断言操作符
+│   ├── extract.py      # 通用提取规则
+│   ├── result.py       # 执行结果模型
 │   └── scheduler.py    # 调度器
 ├── parser/
 │   └── loader.py       # YAML/JSON 解析
@@ -195,7 +202,8 @@ nextgen/
 │   ├── http/           # 内置 HTTP action 实现
 │   └── db/             # 内置 DB action 实现
 └── reporter/
-    └── json_reporter.py
+    ├── base.py          # reporter 接口
+    └── json_reporter.py # JSON 报告实现
 ```
 
 ## 扩展新 Action 类型
