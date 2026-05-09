@@ -1,0 +1,29 @@
+version: 1
+
+vars:
+  base_url: https://httpbin.org
+
+steps:
+  login:
+    request:
+      method: POST
+      url: ${base_url}/post
+      json:
+        token: demo-token
+    extract:
+      raw_token: $.json.token
+    export:
+      auth_header: "Bearer ${raw_token}"
+      auth_debug: "${auth_header}"
+    validate:
+      - eq: [$.json.token, demo-token]
+
+  use_exported_header:
+    depends_on: [login]
+    request:
+      method: GET
+      url: ${base_url}/headers
+      headers:
+        Authorization: ${auth_header}
+    validate:
+      - eq: [$.body.headers.Authorization, "Bearer demo-token"]

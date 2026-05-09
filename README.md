@@ -86,6 +86,7 @@ uv run python -m nextgen.cli demo.yaml
 - `examples/full_demo.json`：JSON 版完整示例
 - `examples/conditional_demo.yaml`：`when` 条件执行示例
 - `examples/set_vars_demo.yaml`：`set_vars` 与 `extract` 的作用域示例
+- `examples/export_demo.yaml`：`extract` 后用 `export` 显式导出拼接变量的示例
 - `examples/matrix_demo.yaml`：`matrix` 参数化示例，包含单维展开和笛卡尔积展开
 - `examples/parallel_demo.yaml`：`mode: parallel` 并行调度示例
 - `examples/fail_fast_demo.yaml`：`fail_fast: false` 与依赖失败跳过语义示例
@@ -118,6 +119,7 @@ CLI 会将结果以 JSON 输出到 stdout。每个步骤包含：
 - `metric`：该步骤最核心的摘要指标，例如 HTTP 的 `{"label": "status_code", "value": 200}` 或 DB 的 `{"label": "row_count", "value": 1}`；`label` 使用稳定的 snake_case 标识
 - `action_input`：action 收到的已渲染输入（便于排查变量替换与参数问题）
 - `action_output`：action 输出快照（HTTP 为 `status_code/headers/body`，DB 为 `row_count/columns/rows`）
+- `extracted` / `exported`：步骤成功后准备发布到全局上下文的提取变量与显式导出变量
 
 失败定位语义：
 

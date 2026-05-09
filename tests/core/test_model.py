@@ -79,6 +79,7 @@ class TestStepNode:
         assert step.action.config == {"method": "GET", "url": "http://test.com"}
         assert step.depends_on == []
         assert step.extract == {}
+        assert step.export == {}
         assert step.validate == []
         assert step.config == {}
         assert step.hooks == StepHooks()
@@ -134,6 +135,8 @@ class TestStepResult:
         assert result.action_input is None
         assert result.action_output is None
         assert result.error is None
+        assert result.extracted == {}
+        assert result.exported == {}
 
 
 class TestCaseResult:

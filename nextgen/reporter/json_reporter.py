@@ -32,6 +32,7 @@ class JsonReporter:
                     "action_output": s.action_output,
                     "error": s.error,
                     "extracted": s.extracted,
+                    "exported": s.exported,
                 }
                 for s in result.steps
             ],

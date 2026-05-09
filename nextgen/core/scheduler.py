@@ -40,6 +40,7 @@ class StepRuntime:
         self.end_time: float | None = None
         self.result: ActionResult | None = None
         self.pending_extracts: dict[str, Any] = {}
+        self.pending_exports: dict[str, Any] = {}
 
     @property
     def duration_ms(self) -> int:
@@ -149,6 +150,7 @@ class Scheduler:
                 action_output=runtime.result.action_output if runtime.result else None,
                 error=runtime.error,
                 extracted=runtime.pending_extracts,
+                exported=runtime.pending_exports,
             ))
 
         status = (
@@ -228,6 +230,15 @@ class Scheduler:
         else:
             step.pending_extracts = {}
 
+        if step.node.export:
+            step.pending_exports = {}
+            for key, value in step.node.export.items():
+                rendered = step_ctx.render_value(value)
+                step_ctx.set(key, rendered)
+                step.pending_exports[key] = rendered
+        else:
+            step.pending_exports = {}
+
         step.status = StepStatus.SUCCESS
 
         await self.execute_hooks_best_effort(
@@ -263,6 +274,7 @@ class Scheduler:
                 while True:
                     step.status = StepStatus.RUNNING
                     step.pending_extracts = {}
+                    step.pending_exports = {}
                     step_ctx = base_step_ctx.derive()
 
                     try:
@@ -316,10 +328,11 @@ class Scheduler:
                     logger.error(str(exc))
 
             if step.status == StepStatus.SUCCESS:
-                self.context.merge(step.pending_extracts)
+                self.context.merge({**step.pending_extracts, **step.pending_exports})
 
             if step.status != StepStatus.SUCCESS:
                 step.pending_extracts = {}
+                step.pending_exports = {}
 
     async def run_step(self, step: StepRuntime) -> None:
         """执行单个步骤（步骤级超时覆盖全部重试）"""

@@ -221,6 +221,7 @@ steps:
 - `set_vars` 默认只在当前步骤内可见
 - `before_each` / `before` / `after` / `after_each` 默认操作当前步骤上下文
 - `extract` 声明的变量在步骤成功后提交到全局上下文，供后续步骤使用
+- `export` 从当前步骤上下文渲染变量，并在步骤成功后提交到全局上下文；同名时覆盖 `extract`
 
 ### 4.5 断言系统
 
@@ -413,12 +414,28 @@ steps:
 3. `before` — 执行步骤前 hook
 4. `request` / `db` — 执行 action
 5. `validate` — 验证结果
-6. `extract` — 提取变量并提交声明导出变量
-7. `after` — 执行步骤后 hook
+6. `extract` — 从 action 结果提取变量
+7. `export` — 从当前步骤上下文显式导出变量
+8. `after` — 执行步骤后 hook
 
 **作用域说明：**
 - `set_vars` 默认只对当前步骤可见
-- 跨步骤复用数据时，应通过 `extract` 显式导出变量
+- 跨步骤复用 action 结果时，应通过 `extract` 显式提取变量
+- 跨步骤复用局部计算或拼接结果时，应通过 `export` 显式导出变量
+
+```yaml
+steps:
+  login:
+    request:
+      method: POST
+      url: ${base_url}/login
+    extract:
+      raw_token: $.token
+    export:
+      auth_header: "Bearer ${raw_token}"
+```
+
+`export` 在 `extract` 后、`after` hook 前计算；同一个 `export` 中后面的变量可以引用前面已导出的变量。
 
 ### 4.11 Hook 系统
 

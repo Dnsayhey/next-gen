@@ -42,6 +42,7 @@ def test_json_reporter_includes_testcase_status_errors_and_metric():
                 },
                 error="boom",
                 extracted={"token": "abc123"},
+                exported={"auth_header": "Bearer abc123"},
             )
         ],
     )
@@ -57,6 +58,7 @@ def test_json_reporter_includes_testcase_status_errors_and_metric():
     assert data["steps"][0]["action_output"]["status_code"] == 500
     assert data["steps"][0]["action_output"]["body"]["message"] == "boom"
     assert data["steps"][0]["extracted"] == {"token": "abc123"}
+    assert data["steps"][0]["exported"] == {"auth_header": "Bearer abc123"}
 
 
 def test_json_reporter_serializes_success_result_with_summary():

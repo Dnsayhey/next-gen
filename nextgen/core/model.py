@@ -76,6 +76,7 @@ class StepNode:
     action: ActionNode
     depends_on: list[str] = field(default_factory=list)
     extract: dict[str, Any] = field(default_factory=dict)
+    export: dict[str, Any] = field(default_factory=dict)
     validate: list[AssertionNode] = field(default_factory=list)
     when: ConditionNode | None = None
     set_vars: dict[str, str] = field(default_factory=dict)  # 设置变量

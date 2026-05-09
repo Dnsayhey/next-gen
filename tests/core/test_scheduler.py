@@ -945,6 +945,100 @@ class TestScheduler:
         assert trace_file.read_text(encoding="utf-8").splitlines() == ["after still ran"]
 
     @pytest.mark.asyncio
+    async def test_export_can_use_extracted_values_and_publish_globals(
+        self,
+        scheduler_action_registry,
+    ):
+        testcase = CaseModel(
+            version=1,
+            mode="parallel",
+            steps={"one": make_step("one")},
+        )
+        testcase.steps["one"].extract = {"raw_token": "$.name"}
+        testcase.steps["one"].export = {
+            "auth_header": "Bearer ${raw_token}",
+            "final_header": "${auth_header}",
+        }
+
+        scheduler = Scheduler(testcase)
+        result = await scheduler.run()
+
+        assert scheduler_action_registry == ["execute:one"]
+        assert result.steps[0].status == StepStatus.SUCCESS
+        assert result.steps[0].extracted == {"raw_token": "one"}
+        assert result.steps[0].exported == {
+            "auth_header": "Bearer one",
+            "final_header": "Bearer one",
+        }
+        assert scheduler.context.get("raw_token") == "one"
+        assert scheduler.context.get("auth_header") == "Bearer one"
+        assert scheduler.context.get("final_header") == "Bearer one"
+
+    @pytest.mark.asyncio
+    async def test_export_overrides_extract_when_names_conflict(
+        self,
+        scheduler_action_registry,
+    ):
+        testcase = CaseModel(
+            version=1,
+            mode="parallel",
+            steps={"one": make_step("one")},
+        )
+        testcase.steps["one"].extract = {"token": "$.name"}
+        testcase.steps["one"].export = {"token": "Bearer ${token}"}
+
+        scheduler = Scheduler(testcase)
+        result = await scheduler.run()
+
+        assert result.steps[0].extracted == {"token": "one"}
+        assert result.steps[0].exported == {"token": "Bearer one"}
+        assert scheduler.context.get("token") == "Bearer one"
+
+    @pytest.mark.asyncio
+    async def test_export_does_not_see_after_hook_values(
+        self,
+        scheduler_action_registry,
+    ):
+        @register_hook("setAfterExportProbe")
+        async def set_after_export_probe(ctx, params):
+            ctx.set("after_value", "late")
+
+        testcase = CaseModel(
+            version=1,
+            mode="parallel",
+            steps={"one": make_step("one")},
+        )
+        testcase.steps["one"].export = {"exported_after_value": "${after_value}"}
+        testcase.steps["one"].hooks.after = [HookAction("setAfterExportProbe", {})]
+
+        scheduler = Scheduler(testcase)
+        result = await scheduler.run()
+
+        assert result.steps[0].status == StepStatus.SUCCESS
+        assert result.steps[0].exported == {"exported_after_value": "${after_value}"}
+        assert scheduler.context.get("exported_after_value") == "${after_value}"
+        assert scheduler.context.get("after_value") is None
+
+    @pytest.mark.asyncio
+    async def test_export_is_not_published_when_step_fails(
+        self,
+        scheduler_action_registry,
+    ):
+        testcase = CaseModel(
+            version=1,
+            mode="parallel",
+            steps={"boom": make_step("boom")},
+        )
+        testcase.steps["boom"].export = {"should_not_publish": "value"}
+
+        scheduler = Scheduler(testcase)
+        result = await scheduler.run()
+
+        assert result.steps[0].status == StepStatus.FAILED
+        assert result.steps[0].exported == {}
+        assert scheduler.context.get("should_not_publish") is None
+
+    @pytest.mark.asyncio
     async def test_after_each_failure_does_not_publish_extracted_variables(
         self,
         scheduler_action_registry,

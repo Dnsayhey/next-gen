@@ -169,6 +169,7 @@ class TestParseStep:
         data = {
             "request": {"method": "GET", "url": "http://test.com"},
             "extract": {"token": "$.data.token"},
+            "export": {"auth_header": "Bearer ${token}"},
             "validate": [{"eq": ["$.code", 0]}],
         }
         step = parse_step("test", data)
@@ -177,6 +178,7 @@ class TestParseStep:
         assert isinstance(step.action.config, RequestConfig)
         assert step.action.config.method == "GET"
         assert step.extract == {"token": "$.data.token"}
+        assert step.export == {"auth_header": "Bearer ${token}"}
         assert len(step.validate) == 1
 
     def test_missing_action(self):

@@ -44,15 +44,16 @@ run_step()
        │   │    ├─ 4. action (执行)                    │
        │   │    ├─ 5. validate (断言)                  │
        │   │    ├─ 6. extract (提取)                   │
+       │   │    ├─ 7. export (显式导出)                │
        │   │    │  ★ SUCCESS                           │
-       │   │    └─ 7. hooks.after (非阻断)             │
+       │   │    └─ 8. hooks.after (非阻断)             │
        │   │                                          │
        │   └── extract 之前失败则重试 ──────────────────┘
        │
        ├─ finally:
        │    ├─ execute_hooks(after_each)    使用最后一次重试的 step_ctx
-       │    ├─ 若 SUCCESS → self.context.merge(pending_extracts)
-       │    └─ 若非 SUCCESS → pending_extracts = {}
+       │    ├─ 若 SUCCESS → self.context.merge(pending_extracts + pending_exports)
+       │    └─ 若非 SUCCESS → 清空 pending_extracts / pending_exports
        │
 ```
 
@@ -130,7 +131,7 @@ steps:
         right: "eyJ"
 ```
 
-- **时机：** action 之后，extract 之前。
+- **时机：** action 之后，extract / export 之前。
 - **行为：** 断言失败抛出 `ValidationError`，触发重试（如有）。
 - **作用域：** `right` 值会经过 `step_ctx.render()` 渲染。`left` 是由 action 实现解释的表达式（如 `status_code`、`body.token`），不走变量替换。
 
@@ -144,11 +145,26 @@ steps:
       user_id: body.user.id
 ```
 
-- **时机：** validate 之后，hooks.after 之前。
+- **时机：** validate 之后，export 之前。
 - **作用域：** 写入 `step_ctx`（步骤局部），同时记录到 `step.pending_extracts`。
-- **关键：** extract 完成后步骤立即标记为 SUCCESS。后续 hooks.after 为非阻断执行，其失败不影响 extract 变量发布到全局。
+- **关键：** extract 完成后，其值可被后续 export 引用。
 
-#### 7. hooks.after（步骤后置钩子）
+#### 7. export（显式导出变量）
+
+```yaml
+steps:
+  login:
+    extract:
+      raw_token: $.token
+    export:
+      auth_header: "Bearer ${raw_token}"
+```
+
+- **时机：** extract 之后，hooks.after 之前。
+- **作用域：** 从 `step_ctx` 渲染变量，同时记录到 `step.pending_exports`。同一个 export 中后面的变量可以引用前面已导出的变量。
+- **提交：** 和 extract 一样，只有步骤最终 SUCCESS 后才发布到全局上下文；同名时 export 覆盖 extract。
+
+#### 8. hooks.after（步骤后置钩子）
 
 ```yaml
 steps:
@@ -158,9 +174,9 @@ steps:
         - log: "login done, token=${token}"
 ```
 
-- **时机：** extract 之后，步骤已标记为 SUCCESS 之后。仅当本次 attempt 成功走到 extract 之后才执行；如果 action 或 validate 失败并触发重试，该次失败 attempt 不会跑 after hooks。
-- **作用域：** 读写 `step_ctx`。可以读到 extract 提取出的变量。
-- **非阻断：** 通过 `execute_hooks_best_effort` 执行，单个 hook 失败只记 warning 日志，不改变步骤状态，不阻止 extract 发布，不影响后续 hook 执行。
+- **时机：** export 之后，步骤已标记为 SUCCESS 之后。仅当本次 attempt 成功走到 export 之后才执行；如果 action 或 validate 失败并触发重试，该次失败 attempt 不会跑 after hooks。
+- **作用域：** 读写 `step_ctx`。可以读到 extract 提取出的变量和 export 设置的变量，但 after hook 的额外写入不会自动发布到全局。
+- **非阻断：** 通过 `execute_hooks_best_effort` 执行，单个 hook 失败只记 warning 日志，不改变步骤状态，不阻止 extract/export 发布，不影响后续 hook 执行。
 
 ---
 
@@ -196,10 +212,10 @@ steps:
 | **derive 是深拷贝** | `derive()` 对 vars 做 `deepcopy`，子 context 的修改不影响父级 |
 | **每次重试都是全新的 step_ctx** | `step_ctx = base_step_ctx.derive()` 在每次重试循环顶部执行，前一次重试的 set_vars、extract、hook 修改变量等全部丢弃 |
 | **before_each 写入可跨重试** | before_each 操作的是 `base_step_ctx`，它在重试循环外部，所以 before_each 设置的变量对所有重试可见 |
-| **extract 延迟合并** | extract 结果先存在 `pending_extracts`，只有步骤最终 SUCCESS 才 merge 到全局 |
+| **extract/export 延迟合并** | extract/export 结果先存在 pending 区，只有步骤最终 SUCCESS 才 merge 到全局，且 export 同名覆盖 extract |
 | **after_each 总是执行（有前提）** | 在 finally 块中执行，但仅限真正进入 `_run_step_with_retry` 的步骤。`when` skip 会进入（会跑 after_each）；依赖失败或 fail_fast 导致 scheduler 直接标 SKIPPED 的步骤不会跑 after_each |
-| **after_each 之后才合并** | 先执行 after_each，再根据状态决定是否 merge pending_extracts。after_each 和 after hooks 可以通过 `ctx.set()` 修改变量，但只有 `pending_extracts` 中记录的 extract key 才会 merge 到全局——after hook 额外 `ctx.set()` 的变量不会自动发布 |
-| **hooks.after 非阻断** | hooks.after 通过 `execute_hooks_best_effort` 执行，失败只记日志不影响步骤状态和 extract 发布 |
+| **after_each 之后才合并** | 先执行 after_each，再根据状态决定是否 merge pending_extracts / pending_exports。after_each 和 after hooks 可以通过 `ctx.set()` 修改变量，但只有 pending 区中记录的 key 才会 merge 到全局——after hook 额外 `ctx.set()` 的变量不会自动发布 |
+| **hooks.after 非阻断** | hooks.after 通过 `execute_hooks_best_effort` 执行，失败只记日志不影响步骤状态和 extract/export 发布 |
 
 ---
 
@@ -208,12 +224,12 @@ steps:
 | 维度 | before_each / after_each | before / after |
 |------|--------------------------|----------------|
 | 定义位置 | 用例级 `hooks:` 字段 | 步骤级 `hooks:` 字段 |
-| 执行次数 | 每步 1 次 | before: 每次 attempt；after: 仅成功走到 extract 的 attempt |
+| 执行次数 | 每步 1 次 | before: 每次 attempt；after: 仅成功走到 export 的 attempt |
 | 作用域 | `base_step_ctx` | `step_ctx`（每次重试重新派生） |
 | before_each | 在所有重试之前执行 | — |
 | after_each | 在所有重试之后执行（finally） | — |
 | before | — | 在 action 之前执行 |
-| after | — | 在 action 之后、extract 之后执行 |
+| after | — | 在 action 之后、extract/export 之后执行 |
 
 ---
 
@@ -237,13 +253,15 @@ steps:
 │  │  │  action                → result       │
 │  │  │  validate              → pass/fail    │
 │  │  │  extract               → step_ctx     │
+│  │  │  export                → step_ctx     │
 │  │  │  ★ SUCCESS                            │
 │  │  │  hooks.after (非阻断)   → step_ctx     │
 │  │  └───────────────────────────────────────┘
 │  │  (如果失败，Retry #2: 重新 derive step_ctx，再来一遍)
 │  │
 │  ├─ after_each hooks                  [最后一次的 step_ctx]
-│  ├─ global.merge(pending_extracts)    [仅 SUCCESS 时，只合并 extract key]
+│  ├─ global.merge(pending_extracts + pending_exports)
+│  │                                      [仅 SUCCESS 时，export 覆盖 extract]
 │
 ├─ ─ ─ ─ Step B ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
 │  (仅 sequential 或 B depends_on A 时，全局 context 包含 Step A extract)

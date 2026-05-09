@@ -56,6 +56,7 @@ class StepResult:
     action_output: dict[str, Any] | None = None
     error: str | None = None
     extracted: dict[str, Any] = field(default_factory=dict)
+    exported: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

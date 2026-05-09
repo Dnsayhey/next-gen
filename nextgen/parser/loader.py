@@ -234,6 +234,7 @@ def parse_step(name: str, data: dict[str, Any]) -> StepNode:
         action=ActionNode(type=action_type, config=parsed_config),
         depends_on=data.get("depends_on", []),
         extract=data.get("extract", {}),
+        export=data.get("export", {}),
         validate=parse_assertions(data.get("validate", [])),
         when=parse_when(data.get("when")),
         set_vars=data.get("set_vars", {}),
