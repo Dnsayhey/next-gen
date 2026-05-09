@@ -13,7 +13,12 @@ from nextgen.core.result import StepResult, StepStatus, TestResult, TestStatus
 from nextgen.parser.loader import load_testcase
 from nextgen.reporter.json_reporter import JsonReporter
 
-app = typer.Typer(name="nextgen", help="Next-Gen API Test Engine")
+app = typer.Typer(
+    name="nextgen",
+    help="Next-Gen API Test Engine",
+    add_completion=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
+)
 
 
 def render_terminal_summary(result: TestResult) -> str:
