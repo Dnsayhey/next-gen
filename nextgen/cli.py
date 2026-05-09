@@ -1,4 +1,4 @@
-"""CLI 入口"""
+"""CLI entrypoint."""
 
 import asyncio
 from pathlib import Path
@@ -60,11 +60,11 @@ def format_failed_step(step: StepResult) -> str:
 
 @app.command()
 def run(
-    file: Path = typer.Argument(..., help="测试用例 YAML 文件路径"),
-    parallel: int = typer.Option(10, "--parallel", "-p", help="最大并发数"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="显示详细日志"),
+    file: Path = typer.Argument(..., help="Testcase YAML file path"),
+    parallel: int = typer.Option(10, "--parallel", "-p", help="Maximum concurrency"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show verbose logs"),
 ) -> None:
-    """运行测试用例"""
+    """Run a testcase."""
     if not verbose:
         logger.remove()
         logger.add(lambda m: None, level="WARNING")
@@ -72,22 +72,22 @@ def run(
     try:
         load_builtin_actions()
 
-        # 加载测试用例
+        # Load testcase.
         testcase = load_testcase(file)
 
-        # 验证 DAG
+        # Validate DAG.
         validate_testcase(testcase)
 
-        # 执行
+        # Execute.
         scheduler = Scheduler(testcase, max_concurrency=parallel)
         result = asyncio.run(scheduler.run())
         result.testcase = str(file)
 
-        # 输出报告
+        # Output report.
         print(JsonReporter().render(result))
         typer.echo(render_terminal_summary(result), err=True)
 
-        # 退出码
+        # Exit code.
         if result.status == TestStatus.FAILED:
             raise typer.Exit(code=1)
 
@@ -95,7 +95,7 @@ def run(
         logger.error(str(e))
         raise typer.Exit(code=2)
     except ValueError as e:
-        logger.error(f"测试用例格式错误: {e}")
+        logger.error(f"Invalid testcase format: {e}")
         raise typer.Exit(code=2)
 
 

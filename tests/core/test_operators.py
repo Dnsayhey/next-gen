@@ -1,4 +1,4 @@
-"""operators.py 单元测试"""
+"""operators.py unit tests"""
 
 import pytest
 
@@ -6,7 +6,7 @@ from nextgen.core.operators import evaluate_operator
 
 
 class TestEvaluateOperator:
-    """测试共享比较操作符"""
+    """Test shared comparison operators"""
 
     @pytest.mark.parametrize(
         ("op", "left", "right", "expected"),
@@ -44,5 +44,5 @@ class TestEvaluateOperator:
         assert evaluate_operator("not_in", "a", 1) is False
 
     def test_unknown_operator(self):
-        with pytest.raises(ValueError, match="不支持的操作符"):
+        with pytest.raises(ValueError, match="unsupported operator"):
             evaluate_operator("unknown", 1, 1)

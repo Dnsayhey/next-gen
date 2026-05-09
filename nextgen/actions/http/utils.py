@@ -1,4 +1,4 @@
-"""HTTP action 工具函数"""
+"""HTTP action utilities."""
 
 from loguru import logger
 
@@ -6,14 +6,14 @@ from nextgen.actions.http.model import RequestConfig
 
 
 def check_content_type_conflict(request: RequestConfig) -> None:
-    """检查 content_type 与请求体类型是否冲突"""
+    """Check whether content_type conflicts with body type."""
     body_type = request.body_type()
     if not body_type or not request.content_type:
         return
 
-    # 检查用户是否手动设置了 content_type
+    # Check whether the user manually set content_type.
     user_content_type = request.headers.get("content-type") or request.headers.get("Content-Type")
     if user_content_type:
         logger.warning(
-            f"内容类型冲突：当前请求体类型是 {body_type}，但请求头中设置了 {user_content_type}"
+            f"content type conflict: body_type={body_type}, header content-type={user_content_type}"
         )

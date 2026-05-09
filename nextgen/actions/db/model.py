@@ -1,4 +1,4 @@
-"""DB action 内部模型"""
+"""Internal models for the DB action."""
 
 from dataclasses import dataclass, field
 from typing import Any
@@ -8,7 +8,7 @@ from nextgen.core.errors import ParseError
 
 @dataclass
 class DbConfig:
-    """DB action 配置"""
+    """DB action configuration."""
 
     url: str
     query: str
@@ -16,14 +16,14 @@ class DbConfig:
 
     @classmethod
     def from_dict(cls, config: dict[str, Any]) -> "DbConfig":
-        """解析 db 配置"""
+        """Parse db configuration."""
         if "url" not in config:
-            raise ParseError("db 必须包含 url 字段")
+            raise ParseError("db must include a url field")
         if "query" not in config:
-            raise ParseError("db 必须包含 query 字段")
+            raise ParseError("db must include a query field")
         params = config.get("params", [])
         if not isinstance(params, list):
-            raise ParseError("db.params 必须是 list")
+            raise ParseError("db.params must be a list")
 
         return cls(
             url=config["url"],
@@ -32,6 +32,6 @@ class DbConfig:
         )
 
     def summary(self) -> str:
-        """生成 db action 摘要"""
+        """Generate a db action summary."""
         db_type = self.url.split("://")[0] if "://" in self.url else "db"
         return f"{db_type}: {self.query[:50]}"

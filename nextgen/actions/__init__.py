@@ -1,1 +1,1 @@
-"""内置 action 实现包"""
+"""Built-in action implementation package."""

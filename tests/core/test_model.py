@@ -1,4 +1,4 @@
-"""model.py 单元测试"""
+"""model.py unit tests"""
 
 import pytest
 
@@ -21,7 +21,7 @@ from nextgen.core.result import (
 
 
 class TestStepStatus:
-    """测试 StepStatus 枚举"""
+    """Test StepStatus enum"""
 
     def test_status_values(self):
         assert StepStatus.PENDING == "pending"
@@ -37,7 +37,7 @@ class TestStepStatus:
 
 
 class TestActionResult:
-    """测试 ActionResult"""
+    """Test ActionResult"""
 
     def test_action_result_creation(self):
         result = ActionResult(
@@ -54,7 +54,7 @@ class TestActionResult:
 
 
 class TestAssertionNode:
-    """测试 AssertionNode"""
+    """Test AssertionNode"""
 
     def test_assertion_creation(self):
         node = AssertionNode(op="eq", left="$.code", right=0)
@@ -64,7 +64,7 @@ class TestAssertionNode:
 
 
 class TestStepNode:
-    """测试 StepNode"""
+    """Test StepNode"""
 
     def test_step_creation(self):
         step = StepNode(
@@ -86,7 +86,7 @@ class TestStepNode:
 
 
 class TestCaseModel:
-    """测试 TestCase"""
+    """Test TestCase"""
 
     def test_testcase_creation(self):
         step = StepNode(
@@ -110,7 +110,7 @@ class TestCaseModel:
 
 
 class TestHooksModel:
-    """测试 hook 数据模型"""
+    """Test hook data model"""
 
     def test_hook_action_creation(self):
         action = HookAction(type="log", params={"message": "hello"})
@@ -119,7 +119,7 @@ class TestHooksModel:
 
 
 class TestStepResult:
-    """测试 StepResult"""
+    """Test StepResult"""
 
     def test_step_result_creation(self):
         result = StepResult(
@@ -140,7 +140,7 @@ class TestStepResult:
 
 
 class TestCaseResult:
-    """测试 TestResult"""
+    """Test TestResult"""
 
     def test_summary(self):
         steps = [

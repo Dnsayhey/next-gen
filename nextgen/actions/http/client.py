@@ -1,4 +1,4 @@
-"""HTTP action 客户端 - 发送请求"""
+"""HTTP action client."""
 
 from pathlib import Path
 from typing import Any
@@ -60,33 +60,33 @@ async def execute_request(
     request: RequestConfig,
     ctx: Context,
 ) -> ActionResult:
-    """执行 HTTP 请求
+    """Execute an HTTP request.
 
     Returns:
         ActionResult with HTTP response data and reporting snapshots.
     """
     base_dir = ctx.metadata.get("base_dir")
 
-    # 渲染变量
+    # Render variables.
     url = ctx.render(request.url)
     headers = ctx.render_dict(request.headers)
     params = ctx.render_dict(request.params)
     body_type = request.body_type()
 
-    # 检查 header 冲突
+    # Check header conflicts.
     check_content_type_conflict(request)
 
-    # 设置默认 content_type
+    # Set default content_type.
     if request.content_type and "content-type" not in {k.lower() for k in headers}:
         headers["content-type"] = request.content_type
 
     action_input = _build_action_input(request, ctx, headers, params, body_type)
-    logger.info(f"发送请求: {request.method} {url}")
+    logger.info(f"Sending request: {request.method} {url}")
 
-    # 设置超时
+    # Configure timeout.
     timeout = request.timeout if request.timeout else None
 
-    # 根据请求体类型发送请求
+    # Send request according to body type.
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             if body_type == "json":
@@ -110,14 +110,14 @@ async def execute_request(
                 )
 
             elif body_type == "multipart":
-                # multipart 需要特殊处理 @ 前缀的文件
+                # Multipart data needs special handling for @-prefixed files.
                 files = {}
                 form_fields = {}
                 multipart_data = ctx.render_dict(request.multipart)
 
                 for key, value in multipart_data.items():
                     if isinstance(value, str) and value.startswith("@"):
-                        # 文件上传
+                        # File upload.
                         file_content = load_file_content(value, base_dir)
                         file_path = resolve_case_path(value[1:], base_dir)
                         files[key] = (
@@ -138,7 +138,7 @@ async def execute_request(
                 )
 
             elif body_type == "raw":
-                # 处理 @ 前缀的文件
+                # Handle @-prefixed files.
                 raw_content = load_file_content(request.body, base_dir)
                 if isinstance(raw_content, str):
                     raw_content = ctx.render(raw_content)
@@ -152,7 +152,7 @@ async def execute_request(
                 )
 
             else:
-                # 无请求体
+                # No request body.
                 response = await client.request(
                     method=request.method,
                     url=url,
@@ -162,9 +162,9 @@ async def execute_request(
     except Exception as exc:
         raise ActionExecutionError(str(exc), action_input) from exc
 
-    logger.info(f"响应状态: {response.status_code}")
+    logger.info(f"Response status: {response.status_code}")
 
-    # 解析响应体
+    # Parse response body.
     try:
         body = response.json()
     except Exception:

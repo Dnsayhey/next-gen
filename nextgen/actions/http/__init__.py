@@ -1,4 +1,4 @@
-"""HTTP action 实现"""
+"""HTTP action implementation."""
 
 from nextgen.core.actions import ActionSpec, register_action
 

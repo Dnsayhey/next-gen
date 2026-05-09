@@ -1,4 +1,4 @@
-"""条件执行评估器"""
+"""Conditional execution evaluator."""
 
 from loguru import logger
 
@@ -8,14 +8,14 @@ from nextgen.core.operators import evaluate_operator
 
 
 def evaluate_condition(condition: ConditionNode | None, ctx: Context) -> bool:
-    """评估条件是否满足
+    """Evaluate whether a condition is satisfied.
 
     Args:
-        condition: 条件 AST 节点
-        ctx: 变量上下文
+        condition: Condition AST node.
+        ctx: Variable context.
 
     Returns:
-        条件是否满足
+        Whether the condition is satisfied.
     """
     if condition is None:
         return True
@@ -28,7 +28,7 @@ def evaluate_condition(condition: ConditionNode | None, ctx: Context) -> bool:
 
 
 def _eval_expr(expr: ExprCondition, ctx: Context) -> bool:
-    """评估单个表达式"""
+    """Evaluate a single expression."""
     left_expr = expr.left
     right_expr = expr.right
 
@@ -36,5 +36,5 @@ def _eval_expr(expr: ExprCondition, ctx: Context) -> bool:
     right = ctx.render(right_expr)
 
     result = evaluate_operator(expr.op, left, right)
-    logger.debug(f"条件评估: {left_expr} {expr.op} {right_expr} → {result}")
+    logger.debug(f"Condition evaluated: {left_expr} {expr.op} {right_expr} -> {result}")
     return result

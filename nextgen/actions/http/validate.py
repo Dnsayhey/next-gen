@@ -1,4 +1,4 @@
-"""HTTP 响应验证"""
+"""HTTP response validation."""
 
 from typing import Any
 
@@ -8,19 +8,19 @@ from nextgen.core.operators import evaluate_operator
 
 
 class HttpValidator:
-    """HTTP 响应断言器"""
+    """HTTP response validator."""
 
     def validate(
         self,
         result: dict[str, Any],
         assertions: list[AssertionNode],
     ) -> list[str]:
-        """验证 HTTP 响应
+        """Validate an HTTP response.
 
-        支持 JSONPath 语法：
-        - $.code → 从 body 提取
-        - $$.status_code → 状态码
-        - $$.headers.xxx → 从 HTTP 响应头提取
+        Supports JSONPath syntax:
+        - $.code -> extract from body
+        - $$.status_code -> status code
+        - $$.headers.xxx -> HTTP response header
         """
         errors = []
 
@@ -34,16 +34,16 @@ class HttpValidator:
                 passed = evaluate_operator(assertion.op, actual, expected)
                 if not passed:
                     errors.append(
-                        f"{assertion.op} 断言失败: {assertion.left} "
-                        f"实际={actual}, 期望={expected}"
+                        f"{assertion.op} assertion failed: {assertion.left} "
+                        f"actual={actual}, expected={expected}"
                     )
             except Exception as e:
-                errors.append(f"断言执行错误: {assertion}, 错误: {e}")
+                errors.append(f"assertion execution error: {assertion}, error: {e}")
 
         return errors
 
 
-# 模块级便捷函数（保持向后兼容）
+# Module-level convenience function kept for compatibility.
 _validator = HttpValidator()
 
 

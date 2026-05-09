@@ -1,10 +1,10 @@
-"""context.py 单元测试"""
+"""context.py unit tests"""
 
 from nextgen.core.context import Context
 
 
 class TestContext:
-    """测试 Context 变量系统"""
+    """Test Context variable system"""
 
     def test_initial_vars(self):
         ctx = Context({"key": "value"})

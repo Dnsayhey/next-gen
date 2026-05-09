@@ -1,4 +1,4 @@
-"""condition.py 单元测试"""
+"""condition.py unit tests"""
 
 import pytest
 
@@ -9,7 +9,7 @@ from nextgen.parser.loader import parse_when
 
 
 class TestEvaluateCondition:
-    """测试 evaluate_condition"""
+    """Test evaluate_condition"""
 
     def test_none_returns_true(self):
         ctx = Context()
@@ -143,13 +143,13 @@ class TestEvaluateCondition:
 
     def test_invalid_dict_key(self):
         ctx = Context()
-        with pytest.raises(ParseError, match="when 格式错误"):
+        with pytest.raises(ParseError, match="invalid when format"):
             parse_when({"invalid": []})
 
     def test_invalid_expression_format(self):
         ctx = Context()
         condition = [{"invalid": [1, 2, 3]}]
-        with pytest.raises(ValueError, match="表达式参数错误"):
+        with pytest.raises(ValueError, match="invalid expression args"):
             parse_when(condition)
 
     def test_variable_not_found(self):
@@ -160,5 +160,5 @@ class TestEvaluateCondition:
     def test_unknown_operator(self):
         ctx = Context()
         condition = parse_when([{"unknown": [1, 1]}])
-        with pytest.raises(ValueError, match="不支持的操作符"):
+        with pytest.raises(ValueError, match="unsupported operator"):
             evaluate_condition(condition, ctx)

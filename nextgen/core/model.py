@@ -1,4 +1,4 @@
-"""AST 模型定义 - DSL 的 Python 表示"""
+"""AST model definitions for the DSL."""
 
 from dataclasses import dataclass, field
 from typing import Any
@@ -6,7 +6,7 @@ from typing import Any
 
 @dataclass
 class ActionNode:
-    """步骤中的 action 节点"""
+    """Action node inside a step."""
 
     type: str
     config: Any
@@ -14,15 +14,15 @@ class ActionNode:
 
 @dataclass
 class AssertionNode:
-    """断言节点"""
+    """Assertion node."""
     op: str  # eq / ne / gt / lt / gte / lte / contains / not_contains / starts_with / ends_with / in / not_in / matches / len_*
-    left: str  # 表达式（由 action 实现解释）
-    right: Any  # 期望值
+    left: str  # Expression interpreted by the action implementation.
+    right: Any  # Expected value.
 
 
 @dataclass
 class ExprCondition:
-    """单个条件表达式"""
+    """Single condition expression."""
 
     op: str
     left: Any
@@ -31,14 +31,14 @@ class ExprCondition:
 
 @dataclass
 class AndCondition:
-    """AND 条件"""
+    """AND condition."""
 
     items: list["ConditionNode"] = field(default_factory=list)
 
 
 @dataclass
 class OrCondition:
-    """OR 条件"""
+    """OR condition."""
 
     items: list["ConditionNode"] = field(default_factory=list)
 
@@ -48,14 +48,14 @@ ConditionNode = ExprCondition | AndCondition | OrCondition
 
 @dataclass
 class HookAction:
-    """钩子动作"""
+    """Hook action."""
     type: str
     params: Any = field(default_factory=dict)
 
 
 @dataclass
 class TestCaseHooks:
-    """用例级钩子"""
+    """Testcase-level hooks."""
     before_all: list[HookAction] = field(default_factory=list)
     after_all: list[HookAction] = field(default_factory=list)
     before_each: list[HookAction] = field(default_factory=list)
@@ -64,14 +64,14 @@ class TestCaseHooks:
 
 @dataclass
 class StepHooks:
-    """步骤级钩子"""
+    """Step-level hooks."""
     before: list[HookAction] = field(default_factory=list)
     after: list[HookAction] = field(default_factory=list)
 
 
 @dataclass
 class StepNode:
-    """测试步骤节点"""
+    """Test step node."""
     name: str
     action: ActionNode
     depends_on: list[str] = field(default_factory=list)
@@ -79,14 +79,14 @@ class StepNode:
     export: dict[str, Any] = field(default_factory=dict)
     validate: list[AssertionNode] = field(default_factory=list)
     when: ConditionNode | None = None
-    set_vars: dict[str, str] = field(default_factory=dict)  # 设置变量
+    set_vars: dict[str, str] = field(default_factory=dict)  # Variables to set.
     config: dict[str, Any] = field(default_factory=dict)
     hooks: StepHooks = field(default_factory=StepHooks)
 
 
 @dataclass
 class TestCase:
-    """测试用例"""
+    """Testcase model."""
     version: int
     steps: dict[str, StepNode]
     vars: dict[str, Any] = field(default_factory=dict)

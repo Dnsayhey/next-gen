@@ -1,4 +1,4 @@
-"""JSON 报告生成器"""
+"""JSON report generator."""
 
 import json
 from dataclasses import dataclass
@@ -9,7 +9,7 @@ from nextgen.reporter.base import register_reporter
 
 @dataclass(frozen=True)
 class JsonReporter:
-    """JSON 报告器"""
+    """JSON reporter."""
 
     indent: int = 2
     name: str = "json"

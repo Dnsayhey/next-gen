@@ -1,4 +1,4 @@
-"""变量上下文 - 管理测试执行过程中的变量"""
+"""Variable context for test execution."""
 
 import re
 from copy import deepcopy
@@ -12,9 +12,9 @@ _MAX_RENDER_DEPTH = 10
 
 
 class Context:
-    """变量上下文
+    """Variable context.
 
-    变量作用域：局部优先（extract 覆盖全局同名变量）
+    Variable scope: local values take precedence over global values.
     """
 
     def __init__(
@@ -26,34 +26,34 @@ class Context:
         self.metadata: dict[str, Any] = metadata or {}
 
     def set(self, key: str, value: Any) -> None:
-        """设置变量"""
+        """Set a variable."""
         self.vars[key] = value
-        logger.debug(f"设置变量: {key} = {value}")
+        logger.debug(f"Set variable: {key} = {value}")
 
     def get(self, key: str) -> Any | None:
-        """获取变量"""
+        """Get a variable."""
         return self.vars.get(key)
 
     def snapshot(self) -> dict[str, Any]:
-        """获取当前上下文快照"""
+        """Return a snapshot of the current context."""
         return deepcopy(self.vars)
 
     def derive(self, initial: dict[str, Any] | None = None) -> "Context":
-        """基于当前上下文创建子上下文"""
+        """Create a child context from the current context."""
         data = self.snapshot()
         if initial:
             data.update(initial)
         return Context(data, metadata=self.metadata)
 
     def merge(self, updates: dict[str, Any]) -> None:
-        """批量合并变量"""
+        """Merge variables in bulk."""
         for key, value in updates.items():
             self.set(key, value)
 
     def render(self, value: Any, _depth: int = 0) -> Any:
-        """渲染变量替换
+        """Render variable substitutions.
 
-        支持 ${var_name} 语法
+        Supports ${var_name} syntax.
         """
         if not isinstance(value, str):
             return value
@@ -89,7 +89,7 @@ class Context:
         return result
 
     def render_value(self, value: Any) -> Any:
-        """递归渲染任意 JSON-like 值。"""
+        """Recursively render any JSON-like value."""
         if isinstance(value, dict):
             return {k: self.render_value(v) for k, v in value.items()}
         if isinstance(value, list):
@@ -97,5 +97,5 @@ class Context:
         return self.render(value)
 
     def render_dict(self, data: dict[str, Any]) -> dict[str, Any]:
-        """递归渲染字典中的变量"""
+        """Recursively render variables in a dictionary."""
         return self.render_value(data)

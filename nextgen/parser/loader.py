@@ -1,4 +1,4 @@
-"""DSL 解析器 - 支持 YAML 和 JSON 格式"""
+"""DSL parser for YAML and JSON formats."""
 
 from copy import deepcopy
 from itertools import product
@@ -29,14 +29,14 @@ SUPPORTED_EXTENSIONS = {".yaml", ".yml", ".json"}
 
 
 def load_file(path: str | Path) -> dict[str, Any]:
-    """加载测试用例文件（支持 YAML / JSON）"""
+    """Load a testcase file."""
     path = Path(path)
     if not path.exists():
-        raise FileNotFoundError(f"测试用例文件不存在: {path}")
+        raise FileNotFoundError(f"testcase file does not exist: {path}")
 
     ext = path.suffix.lower()
     if ext not in SUPPORTED_EXTENSIONS:
-        raise ParseError(f"不支持的文件格式: {ext}，支持: {SUPPORTED_EXTENSIONS}")
+        raise ParseError(f"unsupported file format: {ext}; supported: {SUPPORTED_EXTENSIONS}")
 
     with open(path, "r", encoding="utf-8") as f:
         if ext == ".json":
@@ -45,14 +45,14 @@ def load_file(path: str | Path) -> dict[str, Any]:
             data = yaml.safe_load(f)
 
     if not isinstance(data, dict):
-        raise ParseError(f"文件格式错误，期望 dict，得到 {type(data).__name__}")
+        raise ParseError(f"invalid file format: expected dict, got {type(data).__name__}")
 
-    logger.debug(f"加载文件: {path}")
+    logger.debug(f"Loaded file: {path}")
     return data
 
 
 def find_action_type(data: dict[str, Any]) -> str | None:
-    """从 step 数据中找到 action 类型"""
+    """Find the action type in step data."""
     for action_type in list_actions():
         if action_type in data:
             return action_type
@@ -60,21 +60,21 @@ def find_action_type(data: dict[str, Any]) -> str | None:
 
 
 def parse_assertions(data: list[dict[str, Any]]) -> list[AssertionNode]:
-    """解析 validate 断言列表
+    """Parse validate assertions.
 
-    格式: [{eq: [$.code, 0]}, {contains: [$.data.name, "test"]}]
+    Format: [{eq: [$.code, 0]}, {contains: [$.data.name, "test"]}]
     """
     assertions = []
 
     for item in data:
         if not isinstance(item, dict) or len(item) != 1:
-            raise ParseError(f"断言格式错误: {item}")
+            raise ParseError(f"invalid assertion format: {item}")
 
         op = list(item.keys())[0]
         args = item[op]
 
         if not isinstance(args, list) or len(args) != 2:
-            raise ParseError(f"断言参数错误: {op} 需要两个参数 [left, right]")
+            raise ParseError(f"invalid assertion args: {op} requires two args [left, right]")
 
         assertions.append(AssertionNode(op=op, left=args[0], right=args[1]))
 
@@ -82,11 +82,11 @@ def parse_assertions(data: list[dict[str, Any]]) -> list[AssertionNode]:
 
 
 def parse_when(data: list | dict | None) -> ConditionNode | None:
-    """解析 when 条件
+    """Parse a when condition.
 
-    格式:
-    - list: [{eq: [$.code, 0]}, ...]  → 默认 AND
-    - dict: {and: [...]} 或 {or: [...]}  → 显式逻辑
+    Format:
+    - list: [{eq: [$.code, 0]}, ...] -> implicit AND
+    - dict: {and: [...]} or {or: [...]} -> explicit logic
     """
     if data is None:
         return None
@@ -99,15 +99,15 @@ def parse_when(data: list | dict | None) -> ConditionNode | None:
             return AndCondition([parse_when_item(item) for item in data["and"]])
         if "or" in data:
             return OrCondition([parse_when_item(item) for item in data["or"]])
-        raise ParseError(f"when 格式错误: dict 必须包含 and 或 or 键，得到 {list(data.keys())}")
+        raise ParseError(f"invalid when format: dict must include 'and' or 'or', got {list(data.keys())}")
 
-    raise ParseError(f"when 格式错误: 期望 list 或 dict，得到 {type(data).__name__}")
+    raise ParseError(f"invalid when format: expected list or dict, got {type(data).__name__}")
 
 
 def parse_when_item(item: dict[str, Any]) -> ConditionNode:
-    """解析 when 条件项"""
+    """Parse one when condition item."""
     if not isinstance(item, dict):
-        raise ParseError(f"条件项格式错误: {item}")
+        raise ParseError(f"invalid condition item format: {item}")
 
     if "and" in item:
         return AndCondition([parse_when_item(child) for child in item["and"]])
@@ -115,20 +115,20 @@ def parse_when_item(item: dict[str, Any]) -> ConditionNode:
         return OrCondition([parse_when_item(child) for child in item["or"]])
 
     if len(item) != 1:
-        raise ParseError(f"表达式格式错误: {item}")
+        raise ParseError(f"invalid expression format: {item}")
 
     op = list(item.keys())[0]
     args = item[op]
     if not isinstance(args, list) or len(args) != 2:
-        raise ParseError(f"表达式参数错误: {op} 需要两个参数 [left, right]")
+        raise ParseError(f"invalid expression args: {op} requires two args [left, right]")
 
     return ExprCondition(op=op, left=args[0], right=args[1])
 
 
 def parse_hook_action(data: dict[str, Any]) -> HookAction:
-    """解析单个 hook 动作"""
+    """Parse one hook action."""
     if not isinstance(data, dict) or len(data) != 1:
-        raise ParseError(f"hook 格式错误: {data}")
+        raise ParseError(f"invalid hook format: {data}")
 
     hook_type = list(data.keys())[0]
     raw_params = data[hook_type]
@@ -137,20 +137,20 @@ def parse_hook_action(data: dict[str, Any]) -> HookAction:
 
 
 def expand_step_matrix(name: str, data: dict[str, Any]) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:
-    """展开 step matrix 模板"""
+    """Expand a step matrix template."""
     matrix = data.get("matrix")
     if matrix is None:
         return [(name, deepcopy(data), {})]
 
     if not isinstance(matrix, dict) or not matrix:
-        raise ParseError(f"step '{name}' 的 matrix 格式错误: 期望非空 dict")
+        raise ParseError(f"step '{name}' has invalid matrix format: expected a non-empty dict")
 
     keys = list(matrix.keys())
     value_lists: list[list[Any]] = []
     for key in keys:
         values = matrix[key]
         if not isinstance(values, list) or not values:
-            raise ParseError(f"step '{name}' 的 matrix 变量 '{key}' 必须是非空 list")
+            raise ParseError(f"step '{name}' matrix variable '{key}' must be a non-empty list")
         value_lists.append(values)
 
     base_data = deepcopy(data)
@@ -167,11 +167,11 @@ def expand_step_matrix(name: str, data: dict[str, Any]) -> list[tuple[str, dict[
 
 
 def parse_step_hooks(data: dict[str, Any] | None) -> StepHooks:
-    """解析步骤级 hooks"""
+    """Parse step-level hooks."""
     if data is None:
         return StepHooks()
     if not isinstance(data, dict):
-        raise ParseError(f"step hooks 格式错误: 期望 dict，得到 {type(data).__name__}")
+        raise ParseError(f"invalid step hooks format: expected dict, got {type(data).__name__}")
 
     return StepHooks(
         before=[parse_hook_action(item) for item in data.get("before", [])],
@@ -180,11 +180,11 @@ def parse_step_hooks(data: dict[str, Any] | None) -> StepHooks:
 
 
 def parse_testcase_hooks(data: dict[str, Any] | None) -> TestCaseHooks:
-    """解析用例级 hooks"""
+    """Parse testcase-level hooks."""
     if data is None:
         return TestCaseHooks()
     if not isinstance(data, dict):
-        raise ParseError(f"testcase hooks 格式错误: 期望 dict，得到 {type(data).__name__}")
+        raise ParseError(f"invalid testcase hooks format: expected dict, got {type(data).__name__}")
 
     return TestCaseHooks(
         before_all=[parse_hook_action(item) for item in data.get("before_all", [])],
@@ -195,36 +195,36 @@ def parse_testcase_hooks(data: dict[str, Any] | None) -> TestCaseHooks:
 
 
 def resolve_depends_on(depends_on: list[str], matrix_map: dict[str, list[str]]) -> list[str]:
-    """将模板依赖展开为具体步骤依赖"""
+    """Resolve template dependencies into concrete step dependencies."""
     resolved: list[str] = []
     for dep in depends_on:
         if dep not in matrix_map:
-            raise ParseError(f"依赖的步骤不存在: {dep}")
+            raise ParseError(f"dependency step does not exist: {dep}")
         resolved.extend(matrix_map[dep])
     return resolved
 
 
 def parse_step(name: str, data: dict[str, Any]) -> StepNode:
-    """解析单个 step"""
-    # 查找 action 类型
+    """Parse one step."""
+    # Find action type.
     action_type = find_action_type(data)
 
     if not action_type:
         raise ParseError(
-            f"step '{name}' 缺少 action 字段，"
-            f"支持的 action 类型: {list_actions()}"
+            f"step '{name}' is missing an action field; "
+            f"supported action types: {list_actions()}"
         )
 
-    # 检查是否有多个 action
+    # Check whether multiple actions are present.
     found_actions = [a for a in list_actions() if a in data]
     if len(found_actions) > 1:
         raise ParseError(
-            f"step '{name}' 包含多个 action: {found_actions}，只能有一个"
+            f"step '{name}' contains multiple actions: {found_actions}; only one is allowed"
         )
 
     action = get_action(action_type)
     if action is None:
-        raise ParseError(f"未注册的 action 类型: {action_type}")
+        raise ParseError(f"unregistered action type: {action_type}")
 
     parsed_config = action.parse_config(data[action_type])
 
@@ -243,20 +243,20 @@ def parse_step(name: str, data: dict[str, Any]) -> StepNode:
 
 
 def parse_testcase(data: dict[str, Any]) -> TestCase:
-    """解析整个测试用例"""
+    """Parse an entire testcase."""
     if "version" not in data:
-        raise ParseError("缺少 version 字段")
+        raise ParseError("missing version field")
 
     if "steps" not in data or not data["steps"]:
-        raise ParseError("缺少 steps 字段或 steps 为空")
+        raise ParseError("missing steps field or steps is empty")
 
     mode = data.get("mode", "sequential")
     if mode not in ("sequential", "parallel"):
-        raise ParseError(f"不支持的执行模式: {mode}，支持: sequential, parallel")
+        raise ParseError(f"unsupported execution mode: {mode}; supported: sequential, parallel")
 
     fail_fast = data.get("fail_fast", True)
     if not isinstance(fail_fast, bool):
-        raise ParseError(f"fail_fast 格式错误: 期望 bool，得到 {type(fail_fast).__name__}")
+        raise ParseError(f"invalid fail_fast format: expected bool, got {type(fail_fast).__name__}")
 
     steps: dict[str, StepNode] = {}
     matrix_map: dict[str, list[str]] = {}
@@ -272,12 +272,12 @@ def parse_testcase(data: dict[str, Any]) -> TestCase:
                 conflict = set(matrix_vars) & set(step.set_vars)
                 if conflict:
                     raise ParseError(
-                        f"step '{name}' 的 matrix 变量与 set_vars 重名: {sorted(conflict)}"
+                        f"step '{name}' matrix variables conflict with set_vars: {sorted(conflict)}"
                     )
                 step.set_vars = {**matrix_vars, **step.set_vars}
 
             if step.name in steps:
-                raise ParseError(f"步骤名称重复: {step.name}")
+                raise ParseError(f"duplicate step name: {step.name}")
 
             steps[step.name] = step
 
@@ -295,11 +295,11 @@ def parse_testcase(data: dict[str, Any]) -> TestCase:
 
 
 def load_testcase(path: str | Path) -> TestCase:
-    """从 YAML/JSON 文件加载测试用例"""
+    """Load a testcase from a YAML/JSON file."""
     path = Path(path).resolve()
     data = load_file(path)
     testcase = parse_testcase(data)
     testcase.source_path = str(path)
     testcase.base_dir = str(path.parent)
-    logger.info(f"解析测试用例: {path}, 包含 {len(testcase.steps)} 个步骤")
+    logger.info(f"Parsed testcase: {path}, steps={len(testcase.steps)}")
     return testcase

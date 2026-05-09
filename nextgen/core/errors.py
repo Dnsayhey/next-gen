@@ -1,30 +1,30 @@
-"""通用错误类型"""
+"""Common error types."""
 
 from typing import Any
 
 
 class NextgenError(Exception):
-    """Nextgen 基础错误类型"""
+    """Base error type for Nextgen."""
 
 
 class ParseError(NextgenError, ValueError):
-    """测试用例或配置解析失败"""
+    """Testcase or configuration parsing failed."""
 
 
 class ExecutionError(NextgenError, RuntimeError):
-    """执行阶段失败"""
+    """Execution failed."""
 
 
 class ValidationError(NextgenError, AssertionError):
-    """断言或验证失败"""
+    """Assertion or validation failed."""
 
 
 class HookError(ExecutionError):
-    """hook 执行失败"""
+    """Hook execution failed."""
 
 
 class ActionExecutionError(ExecutionError):
-    """action 执行失败，携带已渲染的输入快照"""
+    """Action execution failed with the rendered input snapshot."""
 
     def __init__(self, message: str, action_input: dict[str, Any]):
         super().__init__(message)

@@ -1,4 +1,4 @@
-"""运行时执行结果模型"""
+"""Runtime execution result models."""
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -6,9 +6,9 @@ from typing import Any, TypedDict
 
 
 class ResultMetric(TypedDict):
-    """action/step 结果的核心摘要指标。
+    """Core summary metric for an action or step result.
 
-    label 使用稳定的 snake_case 标识，value 保持为 JSON 友好的标量值。
+    label uses a stable snake_case identifier, while value remains a JSON-friendly scalar.
     """
 
     label: str
@@ -17,7 +17,7 @@ class ResultMetric(TypedDict):
 
 @dataclass
 class ActionResult:
-    """action 执行结果边界对象"""
+    """Boundary object for action execution results."""
 
     data: dict[str, Any]
     action_input: dict[str, Any] | None = None
@@ -26,7 +26,7 @@ class ActionResult:
 
 
 class StepStatus(str, Enum):
-    """步骤执行状态"""
+    """Step execution status."""
 
     PENDING = "pending"
     RUNNING = "running"
@@ -37,7 +37,7 @@ class StepStatus(str, Enum):
 
 
 class TestStatus(str, Enum):
-    """测试用例执行状态"""
+    """Testcase execution status."""
 
     SUCCESS = "success"
     FAILED = "failed"
@@ -45,7 +45,7 @@ class TestStatus(str, Enum):
 
 @dataclass
 class StepResult:
-    """步骤执行结果"""
+    """Step execution result."""
 
     name: str
     status: StepStatus
@@ -61,9 +61,9 @@ class StepResult:
 
 @dataclass
 class TestResult:
-    """测试用例执行结果"""
+    """Testcase execution result."""
 
-    testcase: str  # 文件名
+    testcase: str  # File name.
     total_duration_ms: int
     steps: list[StepResult]
     status: TestStatus

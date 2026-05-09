@@ -1,4 +1,4 @@
-"""PostgreSQL 驱动"""
+"""PostgreSQL driver."""
 
 from typing import Any
 
@@ -7,17 +7,17 @@ from loguru import logger
 
 
 async def execute(url: str, query: str, params: list[Any] | None = None) -> dict[str, Any]:
-    """执行 PostgreSQL 查询
+    """Execute a PostgreSQL query.
 
     Args:
-        url: 连接字符串，如 postgres://user:pass@host:5432/dbname
-        query: SQL 查询
-        params: 查询参数
+        url: Connection string, such as postgres://user:pass@host:5432/dbname.
+        query: SQL query.
+        params: Query parameters.
 
     Returns:
         {"rows": [...], "row_count": int, "columns": [...]}
     """
-    logger.debug(f"连接 PostgreSQL: {url}")
+    logger.debug(f"Connecting to PostgreSQL: {url}")
 
     conn = await asyncpg.connect(url)
     try:

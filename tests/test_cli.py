@@ -1,4 +1,4 @@
-"""cli.py 单元测试"""
+"""cli.py unit tests"""
 
 from nextgen.cli import render_terminal_summary
 from nextgen.core.result import (

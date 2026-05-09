@@ -1,4 +1,4 @@
-"""DB 结果验证"""
+"""DB result validation."""
 
 from typing import Any
 
@@ -8,19 +8,19 @@ from nextgen.core.operators import evaluate_operator
 
 
 class DbValidator:
-    """DB 结果断言器"""
+    """DB result validator."""
 
     def validate(
         self,
         result: dict[str, Any],
         assertions: list[AssertionNode],
     ) -> list[str]:
-        """验证查询结果
+        """Validate a query result.
 
-        支持 JSONPath 语法：
-        - $.row_count → 行数
-        - $.rows[0].name → 行数据
-        - $.columns → 列名列表
+        Supports JSONPath syntax:
+        - $.row_count -> row count
+        - $.rows[0].name -> row data
+        - $.columns -> column names
         """
         errors = []
 
@@ -35,16 +35,16 @@ class DbValidator:
                 passed = evaluate_operator(assertion.op, actual, expected)
                 if not passed:
                     errors.append(
-                        f"{assertion.op} 断言失败: {assertion.left} "
-                        f"实际={actual}, 期望={expected}"
+                        f"{assertion.op} assertion failed: {assertion.left} "
+                        f"actual={actual}, expected={expected}"
                     )
             except Exception as e:
-                errors.append(f"断言执行错误: {assertion}, 错误: {e}")
+                errors.append(f"assertion execution error: {assertion}, error: {e}")
 
         return errors
 
 
-# 模块级便捷函数
+# Module-level convenience function.
 _validator = DbValidator()
 
 

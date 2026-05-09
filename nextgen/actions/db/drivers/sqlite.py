@@ -1,4 +1,4 @@
-"""SQLite 驱动"""
+"""SQLite driver."""
 
 from typing import Any
 from urllib.parse import urlparse
@@ -9,7 +9,7 @@ from loguru import logger
 
 
 def resolve_db_path(url: str) -> str:
-    """解析 SQLite URL 路径。
+    """Resolve a SQLite URL path.
 
     - sqlite:///tmp/test.db -> /tmp/test.db
     - sqlite://./examples/test.db -> ./examples/test.db
@@ -21,19 +21,19 @@ def resolve_db_path(url: str) -> str:
 
 
 async def execute(url: str, query: str, params: list[Any] | None = None) -> dict[str, Any]:
-    """执行 SQLite 查询
+    """Execute a SQLite query.
 
     Args:
-        url: 连接字符串，如 sqlite:///path/to/db.sqlite
-        query: SQL 查询
-        params: 查询参数
+        url: Connection string, such as sqlite:///path/to/db.sqlite.
+        query: SQL query.
+        params: Query parameters.
 
     Returns:
         {"rows": [...], "row_count": int, "columns": [...]}
     """
     db_path = resolve_db_path(url)
 
-    logger.debug(f"连接 SQLite: {db_path}")
+    logger.debug(f"Connecting to SQLite: {db_path}")
 
     db = await aiosqlite.connect(db_path)
     try:
@@ -46,7 +46,7 @@ async def execute(url: str, query: str, params: list[Any] | None = None) -> dict
 
         row_dicts = [dict(row) for row in rows]
 
-        # rowcount: SELECT 用 len(rows)，INSERT/UPDATE/DELETE 用 cursor.rowcount，DDL 返回 0
+        # rowcount: SELECT uses len(rows), INSERT/UPDATE/DELETE uses cursor.rowcount, DDL returns 0.
         if columns:
             row_count = len(row_dicts)
         else:

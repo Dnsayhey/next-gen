@@ -1,4 +1,4 @@
-"""报告器接口与注册表"""
+"""Reporter protocol and registry."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from nextgen.core.result import TestResult
 
 
 class Reporter(Protocol):
-    """测试结果报告器接口"""
+    """Test result reporter protocol."""
 
     name: str
 
@@ -20,15 +20,15 @@ REPORTER_REGISTRY: dict[str, Reporter] = {}
 
 
 def register_reporter(reporter: Reporter) -> None:
-    """注册报告器实现"""
+    """Register a reporter implementation."""
     REPORTER_REGISTRY[reporter.name] = reporter
 
 
 def get_reporter(name: str) -> Reporter | None:
-    """获取报告器实现"""
+    """Get a reporter implementation."""
     return REPORTER_REGISTRY.get(name)
 
 
 def list_reporters() -> list[str]:
-    """列出已注册报告器名称"""
+    """List registered reporter names."""
     return list(REPORTER_REGISTRY)

@@ -1,4 +1,4 @@
-"""loader.py 单元测试"""
+"""loader.py unit tests"""
 
 import json
 import tempfile
@@ -30,7 +30,7 @@ def builtin_actions():
 
 
 class TestLoadFile:
-    """测试 load_file"""
+    """Test load_file"""
 
     def test_load_yaml(self, tmp_path):
         data = {"version": 1, "steps": {"test": {"request": {"method": "GET", "url": "http://test.com"}}}}
@@ -53,12 +53,12 @@ class TestLoadFile:
     def test_unsupported_extension(self, tmp_path):
         file = tmp_path / "test.txt"
         file.write_text("content")
-        with pytest.raises(ValueError, match="不支持的文件格式"):
+        with pytest.raises(ValueError, match="unsupported file format"):
             load_file(file)
 
 
 class TestFindActionType:
-    """测试 find_action_type"""
+    """Test find_action_type"""
 
     def test_find_request(self):
         data = {"request": {"method": "GET", "url": "http://test.com"}}
@@ -70,7 +70,7 @@ class TestFindActionType:
 
 
 class TestParseRequest:
-    """测试 parse_request"""
+    """Test parse_request"""
 
     def test_valid_request(self):
         config = {"method": "GET", "url": "http://test.com"}
@@ -94,12 +94,12 @@ class TestParseRequest:
             "json": {"key": "value"},
             "form": {"key": "value"},
         }
-        with pytest.raises(ValueError, match="不能同时出现"):
+        with pytest.raises(ValueError, match="mutually exclusive"):
             RequestConfig.from_dict(config)
 
 
 class TestParseAssertions:
-    """测试 parse_assertions"""
+    """Test parse_assertions"""
 
     def test_valid_assertions(self):
         data = [
@@ -113,16 +113,16 @@ class TestParseAssertions:
         assert assertions[0].right == 0
 
     def test_invalid_format(self):
-        with pytest.raises(ValueError, match="断言格式错误"):
+        with pytest.raises(ValueError, match="invalid assertion format"):
             parse_assertions([{"eq": 1, "ne": 2}])
 
     def test_invalid_args(self):
-        with pytest.raises(ValueError, match="两个参数"):
+        with pytest.raises(ValueError, match="two args"):
             parse_assertions([{"eq": [1]}])
 
 
 class TestParseHookAction:
-    """测试 parse_hook_action"""
+    """Test parse_hook_action"""
 
     def test_parse_sleep_shorthand(self):
         action = parse_hook_action({"sleep": 2})
@@ -150,20 +150,20 @@ class TestParseHookAction:
         assert action.params == {}
 
     def test_invalid_hook_format(self):
-        with pytest.raises(ValueError, match="hook 格式错误"):
+        with pytest.raises(ValueError, match="invalid hook format"):
             parse_hook_action({"a": 1, "b": 2})
 
     def test_parse_step_hooks_rejects_non_dict(self):
-        with pytest.raises(ValueError, match="step hooks 格式错误"):
+        with pytest.raises(ValueError, match="invalid step hooks format"):
             parse_step_hooks([])
 
     def test_parse_testcase_hooks_rejects_non_dict(self):
-        with pytest.raises(ValueError, match="testcase hooks 格式错误"):
+        with pytest.raises(ValueError, match="invalid testcase hooks format"):
             parse_testcase_hooks([])
 
 
 class TestParseStep:
-    """测试 parse_step"""
+    """Test parse_step"""
 
     def test_valid_step(self):
         data = {
@@ -182,7 +182,7 @@ class TestParseStep:
         assert len(step.validate) == 1
 
     def test_missing_action(self):
-        with pytest.raises(ValueError, match="缺少 action 字段"):
+        with pytest.raises(ValueError, match="missing an action field"):
             parse_step("test", {"depends_on": ["a"]})
 
     def test_rejects_multiple_actions_in_one_step(self):
@@ -190,7 +190,7 @@ class TestParseStep:
             "request": {"method": "GET", "url": "http://test.com"},
             "db": {"url": "sqlite:///tmp/test.db", "query": "SELECT 1"},
         }
-        with pytest.raises(ValueError, match="包含多个 action"):
+        with pytest.raises(ValueError, match="contains multiple actions"):
             parse_step("test", data)
 
     def test_step_with_when_list(self):
@@ -247,7 +247,7 @@ class TestParseStep:
             "request": {"method": "GET", "url": "http://test.com"},
             "when": {"invalid": []},
         }
-        with pytest.raises(ValueError, match="when 格式错误"):
+        with pytest.raises(ValueError, match="invalid when format"):
             parse_step("test", data)
 
     def test_step_with_set_vars(self):
@@ -283,7 +283,7 @@ class TestParseStep:
 
 
 class TestParseTestcase:
-    """测试 parse_testcase"""
+    """Test parse_testcase"""
 
     def test_valid_testcase(self):
         data = {
@@ -378,7 +378,7 @@ class TestParseTestcase:
                 }
             },
         }
-        with pytest.raises(ValueError, match="matrix 格式错误"):
+        with pytest.raises(ValueError, match="invalid matrix format"):
             parse_testcase(data)
 
     def test_matrix_rejects_set_vars_conflict(self):
@@ -396,7 +396,7 @@ class TestParseTestcase:
                 }
             },
         }
-        with pytest.raises(ValueError, match="matrix 变量与 set_vars 重名"):
+        with pytest.raises(ValueError, match="matrix variables conflict with set_vars"):
             parse_testcase(data)
 
     def test_missing_version(self):
@@ -465,7 +465,7 @@ class TestParseTestcase:
             "mode": "invalid",
             "steps": {"test": {"request": {"method": "GET", "url": "http://test.com"}}},
         }
-        with pytest.raises(ValueError, match="不支持的执行模式"):
+        with pytest.raises(ValueError, match="unsupported execution mode"):
             parse_testcase(data)
 
     def test_invalid_fail_fast_type(self):
@@ -474,12 +474,12 @@ class TestParseTestcase:
             "fail_fast": "false",
             "steps": {"test": {"request": {"method": "GET", "url": "http://test.com"}}},
         }
-        with pytest.raises(ValueError, match="fail_fast 格式错误"):
+        with pytest.raises(ValueError, match="invalid fail_fast format"):
             parse_testcase(data)
 
 
 class TestLoadTestcase:
-    """测试 load_testcase"""
+    """Test load_testcase"""
 
     def test_load_yaml(self, tmp_path):
         data = {

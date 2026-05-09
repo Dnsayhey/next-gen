@@ -1,10 +1,10 @@
-"""extract.py 单元测试"""
+"""extract.py unit tests"""
 
 from nextgen.core.extract import extract_value, jsonpath_value, parse_extract_rule
 
 
 class TestExtractRule:
-    """测试通用提取规则"""
+    """Test common extraction rules"""
 
     def test_parse_string_rule_as_jsonpath(self):
         rule = parse_extract_rule("$.data.token")
@@ -14,7 +14,7 @@ class TestExtractRule:
 
 
 class TestExtractValue:
-    """测试通用提取逻辑"""
+    """Test common extraction logic"""
 
     def test_jsonpath_single_match_returns_value(self):
         value = extract_value({"users": [{"name": "Alice"}]}, "$.users[0].name")
@@ -36,7 +36,7 @@ class TestExtractValue:
 
 
 class TestJsonpathValue:
-    """测试公共 JSONPath 提取 helper"""
+    """Test shared JSONPath extraction helper"""
 
     def test_single_match_returns_value(self):
         assert jsonpath_value({"users": [{"name": "Alice"}]}, "$.users[0].name") == "Alice"

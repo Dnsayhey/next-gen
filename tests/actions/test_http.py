@@ -1,4 +1,4 @@
-"""HTTP action 单元测试"""
+"""HTTP action unit tests"""
 
 import pytest
 
@@ -12,7 +12,7 @@ from nextgen.actions.http.validate import validate_response
 
 
 class TestRequestConfig:
-    """测试 RequestConfig"""
+    """Test RequestConfig"""
 
     def test_default_values(self):
         node = RequestConfig(method="GET", url="http://test.com")
@@ -121,7 +121,7 @@ class TestRequestConfig:
 
 
 class TestExtractVariables:
-    """测试 extract_variables"""
+    """Test extract_variables"""
 
     def test_extract_from_body(self):
         result = {
@@ -269,7 +269,7 @@ class TestExtractVariables:
 
 
 class TestValidateResponse:
-    """测试 validate_response"""
+    """Test validate_response"""
 
     def test_eq_pass(self):
         result = {
@@ -283,7 +283,7 @@ class TestValidateResponse:
 
 
 class TestHttpFileUtils:
-    """测试 HTTP 文件路径工具"""
+    """Test HTTP file path utilities"""
 
     def test_resolve_relative_path_against_case_base_dir(self, tmp_path):
         assert resolve_case_path("data.txt", tmp_path) == tmp_path / "data.txt"
@@ -303,7 +303,7 @@ class TestHttpFileUtils:
         assertions = [AssertionNode(op="eq", left="$.code", right=0)]
         errors = validate_response(result, assertions)
         assert len(errors) == 1
-        assert "eq 断言失败" in errors[0]
+        assert "eq assertion failed" in errors[0]
 
     def test_contains_pass(self):
         result = {

@@ -1,4 +1,4 @@
-"""DB 结果变量提取"""
+"""DB result variable extraction."""
 
 from typing import Any
 
@@ -13,20 +13,20 @@ def extract_variables(
     config: dict[str, Any],
     ctx: Context,
 ) -> dict[str, Any]:
-    """从查询结果中提取变量
+    """Extract variables from a query result.
 
-    支持 JSONPath 语法：
-    - $.rows[0].name → 从行中提取
-    - $.row_count → 行数
-    - $.columns → 列名列表
+    Supports JSONPath syntax:
+    - $.rows[0].name -> extract from rows
+    - $.row_count -> row count
+    - $.columns -> column names
 
     Args:
-        result: 查询结果 {"rows": [...], "row_count": int, "columns": [...]}
-        config: 提取配置 {"var_name": "$.path"}
-        ctx: 变量上下文
+        result: Query result {"rows": [...], "row_count": int, "columns": [...]}
+        config: Extraction config {"var_name": "$.path"}
+        ctx: Variable context.
 
     Returns:
-        提取的变量字典
+        Extracted variables.
     """
     extracted = {}
 
@@ -35,9 +35,9 @@ def extract_variables(
             value = extract_value(result, rule)
             extracted[var_name] = value
             ctx.set(var_name, value)
-            logger.debug(f"提取变量: {var_name} = {value}")
+            logger.debug(f"Extracted variable: {var_name} = {value}")
         except Exception as e:
-            logger.warning(f"提取变量失败: {var_name} ({rule}): {e}")
+            logger.warning(f"Failed to extract variable: {var_name} ({rule}): {e}")
             extracted[var_name] = None
             ctx.set(var_name, None)
 

@@ -1,4 +1,4 @@
-"""DB action 单元测试"""
+"""DB action unit tests"""
 
 import pytest
 
@@ -14,7 +14,7 @@ from nextgen.actions.db.drivers.sqlite import resolve_db_path
 
 
 class TestDbConfig:
-    """测试 DbConfig"""
+    """Test DbConfig"""
 
     def test_db_config_from_dict(self):
         config = DbConfig.from_dict({
@@ -39,7 +39,7 @@ class TestDbConfig:
             DbConfig.from_dict({"url": "sqlite:///tmp/test.db"})
 
     def test_params_must_be_list(self):
-        with pytest.raises(ValueError, match="db.params 必须是 list"):
+        with pytest.raises(ValueError, match="db.params must be a list"):
             DbConfig.from_dict({
                 "url": "sqlite:///tmp/test.db",
                 "query": "SELECT 1",
@@ -120,7 +120,7 @@ class TestDbConfig:
 
 
 class TestGetDriver:
-    """测试 get_driver"""
+    """Test get_driver"""
 
     def test_postgres(self):
         driver = get_driver("postgres://localhost/test")
@@ -139,12 +139,12 @@ class TestGetDriver:
         assert driver.__name__ == "nextgen.actions.db.drivers.sqlite"
 
     def test_unsupported(self):
-        with pytest.raises(ValueError, match="不支持的数据库类型"):
+        with pytest.raises(ValueError, match="unsupported database type"):
             get_driver("mongodb://localhost/test")
 
 
 class TestSqliteDriver:
-    """测试 SQLite URL 路径解析"""
+    """Test SQLite URL path resolution"""
 
     def test_resolve_absolute_path(self):
         assert resolve_db_path("sqlite:///tmp/test.db") == "/tmp/test.db"
@@ -154,7 +154,7 @@ class TestSqliteDriver:
 
 
 class TestExtractVariables:
-    """测试 extract_variables"""
+    """Test extract_variables"""
 
     def test_extract_row_field(self):
         result = {
@@ -226,7 +226,7 @@ class TestExtractVariables:
 
 
 class TestValidateResult:
-    """测试 validate_result"""
+    """Test validate_result"""
 
     def test_eq_pass(self):
         result = {
@@ -247,7 +247,7 @@ class TestValidateResult:
         assertions = [AssertionNode(op="eq", left="$.row_count", right=1)]
         errors = validate_result(result, assertions)
         assert len(errors) == 1
-        assert "eq 断言失败" in errors[0]
+        assert "eq assertion failed" in errors[0]
 
     def test_contains_pass(self):
         result = {

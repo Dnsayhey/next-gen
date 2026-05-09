@@ -1,4 +1,4 @@
-"""Hook 注册、参数绑定与发现"""
+"""Hook registration, argument binding, and discovery."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ _LOG_LEVELS = {"trace", "debug", "info", "success", "warning", "error", "critica
 
 @dataclass(frozen=True)
 class HookSpec:
-    """已注册 hook 的运行时描述。"""
+    """Runtime description for a registered hook."""
 
     name: str
     func: HookFunc
@@ -31,9 +31,9 @@ HOOK_REGISTRY: dict[str, HookSpec] = {}
 
 
 def hook(name_or_func: str | HookFunc | None = None, *, override: bool = False):
-    """注册 hook。
+    """Register a hook.
 
-    支持两种写法：
+    Supported forms:
 
     @hook
     def my_hook(...): ...
@@ -54,7 +54,7 @@ def hook(name_or_func: str | HookFunc | None = None, *, override: bool = False):
 
 def _register_hook(name: str, func: HookFunc, *, override: bool = False) -> HookFunc:
     if name in HOOK_REGISTRY and not override:
-        raise ValueError(f"hook 已注册: {name}，如需覆盖请使用 override=True")
+        raise ValueError(f"hook already registered: {name}; use override=True to replace it")
     HOOK_REGISTRY[name] = HookSpec(
         name=name,
         func=func,
@@ -64,7 +64,7 @@ def _register_hook(name: str, func: HookFunc, *, override: bool = False) -> Hook
 
 
 def _builtin_hook(name_or_func: str | HookFunc | None = None):
-    """注册内置 hook；模块重复加载时允许覆盖同名内置 hook。"""
+    """Register a built-in hook and allow replacement on module reload."""
     if callable(name_or_func):
         return _register_hook(name_or_func.__name__, name_or_func, override=True)
 
@@ -76,15 +76,15 @@ def _builtin_hook(name_or_func: str | HookFunc | None = None):
 
 
 def get_hook(name: str) -> HookSpec | None:
-    """获取已注册的 hook。"""
+    """Get a registered hook."""
     return HOOK_REGISTRY.get(name)
 
 
 def bind_hook_arguments(spec: HookSpec, ctx: Context, raw_params: object) -> dict[str, Any]:
-    """根据 hook 函数签名绑定 YAML 参数。"""
+    """Bind YAML parameters according to the hook function signature."""
     params = raw_params if isinstance(raw_params, dict) else _scalar_to_params(spec, raw_params)
     if not isinstance(params, dict):
-        raise ValueError(f"hook '{spec.name}' 参数必须是 dict 或标量，得到 {type(raw_params).__name__}")
+        raise ValueError(f"hook '{spec.name}' params must be a dict or scalar, got {type(raw_params).__name__}")
 
     params = dict(params)
     kwargs: dict[str, Any] = {}
@@ -108,7 +108,7 @@ def bind_hook_arguments(spec: HookSpec, ctx: Context, raw_params: object) -> dic
     unknown = set(params) - keyword_params
     if unknown and not accepts_var_kwargs:
         names = ", ".join(sorted(unknown))
-        raise ValueError(f"hook '{spec.name}' 收到未知参数: {names}")
+        raise ValueError(f"hook '{spec.name}' received unknown params: {names}")
 
     for name in sorted(set(params) & keyword_params):
         kwargs[name] = params.pop(name)
@@ -130,7 +130,7 @@ def bind_hook_arguments(spec: HookSpec, ctx: Context, raw_params: object) -> dic
 
     if missing:
         names = ", ".join(missing)
-        raise ValueError(f"hook '{spec.name}' 缺少参数: {names}")
+        raise ValueError(f"hook '{spec.name}' missing required params: {names}")
 
     return kwargs
 
@@ -157,11 +157,11 @@ def _scalar_to_params(spec: HookSpec, raw_params: object) -> dict[str, Any]:
     if not required and bindable:
         return {bindable[0].name: raw_params}
 
-    raise ValueError(f"hook '{spec.name}' 不支持标量参数，请使用 dict 参数")
+    raise ValueError(f"hook '{spec.name}' does not support scalar params; use dict params")
 
 
 async def call_hook(spec: HookSpec, ctx: Context, raw_params: object) -> None:
-    """绑定并执行 hook，忽略非 None 返回值并记录 warning。"""
+    """Bind and execute a hook; warn when a non-None return value is ignored."""
     kwargs = bind_hook_arguments(spec, ctx, raw_params)
     result = spec.func(**kwargs)
     if inspect.isawaitable(result):
@@ -177,7 +177,7 @@ async def call_hook(spec: HookSpec, ctx: Context, raw_params: object) -> None:
 def log(ctx: Context, message: object = "", level: str = "info") -> None:
     level_name = str(level).lower()
     if level_name not in _LOG_LEVELS:
-        raise ValueError(f"不支持的日志级别: {level}")
+        raise ValueError(f"unsupported log level: {level}")
     getattr(logger, level_name)(ctx.render_value(message))
 
 
@@ -219,7 +219,7 @@ def set_vars(ctx: Context, **vars: object) -> None:
 
 
 def discover_hooks(testcase_path: str | Path, cwd: str | Path) -> list[Path]:
-    """从用例目录向上扫描 hooks.py，到 cwd 为止。"""
+    """Scan upward from the testcase directory to cwd for hooks.py files."""
     current = Path(testcase_path).resolve().parent
     root = Path(cwd).resolve()
     hook_files: list[Path] = []
@@ -239,20 +239,20 @@ def discover_hooks(testcase_path: str | Path, cwd: str | Path) -> list[Path]:
 
 
 def _load_hooks_module(path: Path) -> None:
-    """动态加载单个 hooks.py。"""
+    """Dynamically load one hooks.py module."""
     digest = hashlib.sha256(str(path.resolve()).encode("utf-8")).hexdigest()[:16]
     module_name = f"nextgen_user_hooks_{digest}"
     spec = importlib.util.spec_from_file_location(module_name, path)
     if spec is None or spec.loader is None:
-        raise ImportError(f"无法加载 hooks 模块: {path}")
+        raise ImportError(f"unable to load hooks module: {path}")
 
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    logger.debug(f"加载 hooks.py: {path}")
+    logger.debug(f"Loaded hooks.py: {path}")
 
 
 def load_discovered_hooks(testcase_path: str | Path, cwd: str | Path) -> list[Path]:
-    """发现并加载 hooks.py。"""
+    """Discover and load hooks.py files."""
     loaded = discover_hooks(testcase_path, cwd)
     for hook_file in loaded:
         _load_hooks_module(hook_file)

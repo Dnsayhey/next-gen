@@ -1,4 +1,4 @@
-"""HTTP 变量提取"""
+"""HTTP variable extraction."""
 
 from typing import Any
 
@@ -13,12 +13,12 @@ def extract_variables(
     config: dict[str, Any],
     ctx: Context,
 ) -> dict[str, Any]:
-    """从 HTTP 响应中提取变量
+    """Extract variables from an HTTP response.
 
-    支持 JSONPath 语法：
-    - $.data.token → 从 body 提取
-    - $$.status_code → 状态码
-    - $$.headers.xxx → 从 HTTP 响应头提取
+    Supports JSONPath syntax:
+    - $.data.token -> extract from body
+    - $$.status_code -> status code
+    - $$.headers.xxx -> HTTP response header
     """
     extracted = {}
 
@@ -27,10 +27,10 @@ def extract_variables(
             value = http_extract_value(result, rule)
             ctx.set(var_name, value)
             extracted[var_name] = value
-            logger.debug(f"提取变量: {var_name} = {value}")
+            logger.debug(f"Extracted variable: {var_name} = {value}")
 
         except Exception as e:
-            logger.error(f"提取变量失败: {var_name} = {rule}, 错误: {e}")
+            logger.error(f"Failed to extract variable: {var_name} = {rule}, error: {e}")
             extracted[var_name] = None
             ctx.set(var_name, None)
 

@@ -1,4 +1,4 @@
-"""共享比较操作符"""
+"""Shared comparison operators."""
 
 from __future__ import annotations
 
@@ -125,8 +125,8 @@ _OPERATORS: dict[str, Callable[[Any, Any], bool]] = {
 
 
 def evaluate_operator(op: str, left: Any, right: Any) -> bool:
-    """执行共享比较操作符。"""
+    """Execute a shared comparison operator."""
     operator = _OPERATORS.get(op)
     if operator is None:
-        raise ValueError(f"不支持的操作符: {op}")
+        raise ValueError(f"unsupported operator: {op}")
     return operator(left, right)

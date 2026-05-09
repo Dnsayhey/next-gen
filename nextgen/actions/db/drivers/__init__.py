@@ -1,4 +1,4 @@
-"""数据库驱动"""
+"""Database drivers."""
 
 from typing import Any, Awaitable, Callable, Protocol
 
@@ -6,11 +6,11 @@ from nextgen.actions.db.drivers import postgres, mysql, sqlite
 
 
 class DbDriver(Protocol):
-    """数据库驱动模块接口"""
+    """Database driver module protocol."""
 
     execute: Callable[[str, str, list[Any] | None], Awaitable[dict[str, Any]]]
 
-# URL scheme → 驱动映射
+# URL scheme -> driver mapping.
 DRIVERS: dict[str, DbDriver] = {
     "postgres": postgres,
     "postgresql": postgres,
@@ -20,8 +20,8 @@ DRIVERS: dict[str, DbDriver] = {
 
 
 def get_driver(url: str) -> DbDriver:
-    """根据 URL scheme 获取对应的驱动"""
+    """Return the driver for a URL scheme."""
     scheme = url.split("://")[0].lower()
     if scheme not in DRIVERS:
-        raise ValueError(f"不支持的数据库类型: {scheme}，支持: {list(DRIVERS.keys())}")
+        raise ValueError(f"unsupported database type: {scheme}; supported: {list(DRIVERS.keys())}")
     return DRIVERS[scheme]

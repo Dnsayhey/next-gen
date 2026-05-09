@@ -1,4 +1,4 @@
-"""DB action - 统一入口"""
+"""DB action entrypoint."""
 
 from loguru import logger
 
@@ -10,16 +10,16 @@ from nextgen.actions.db.model import DbConfig
 
 
 async def execute_query(config: DbConfig, ctx: Context) -> ActionResult:
-    """执行数据库查询
+    """Execute a database query.
 
     Args:
-        config: db action 配置
-        ctx: 变量上下文
+        config: DB action configuration.
+        ctx: Variable context.
 
     Returns:
         ActionResult with DB result data and reporting snapshots.
     """
-    # 渲染变量
+    # Render variables.
     url = ctx.render(config.url)
     query = ctx.render(config.query)
     params = config.params
@@ -33,7 +33,7 @@ async def execute_query(config: DbConfig, ctx: Context) -> ActionResult:
         "params": params or [],
     }
 
-    logger.info(f"执行查询: {query[:100]}...")
+    logger.info(f"Executing query: {query[:100]}...")
 
     driver = get_driver(url)
     try:
@@ -41,7 +41,7 @@ async def execute_query(config: DbConfig, ctx: Context) -> ActionResult:
     except Exception as exc:
         raise ActionExecutionError(str(exc), action_input) from exc
 
-    logger.info(f"查询完成: 返回 {result['row_count']} 行")
+    logger.info(f"Query completed: returned {result['row_count']} rows")
     return ActionResult(
         data=result,
         action_input=action_input,

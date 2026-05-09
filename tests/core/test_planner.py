@@ -1,4 +1,4 @@
-"""planner.py 单元测试"""
+"""planner.py unit tests"""
 
 import pytest
 
@@ -8,7 +8,7 @@ from nextgen.core.planner import build_graph, detect_cycle, get_execution_order
 
 
 def make_step(name: str, depends_on: list[str] | None = None) -> StepNode:
-    """创建测试用 StepNode"""
+    """Create a test StepNode"""
     return StepNode(
         name=name,
         action=ActionNode(
@@ -20,7 +20,7 @@ def make_step(name: str, depends_on: list[str] | None = None) -> StepNode:
 
 
 class TestBuildGraph:
-    """测试 build_graph"""
+    """Test build_graph"""
 
     def test_parallel_mode_no_dependencies(self):
         testcase = CaseModel(
@@ -73,35 +73,35 @@ class TestBuildGraph:
 
 
 class TestDetectCycle:
-    """测试 detect_cycle"""
+    """Test detect_cycle"""
 
     def test_no_cycle(self):
         graph = {"a": [], "b": ["a"], "c": ["b"]}
-        detect_cycle(graph)  # 不应抛出异常
+        detect_cycle(graph)  # Should not raise.
 
     def test_simple_cycle(self):
         graph = {"a": ["b"], "b": ["a"]}
-        with pytest.raises(ParseError, match="循环依赖"):
+        with pytest.raises(ParseError, match="cycle"):
             detect_cycle(graph)
 
     def test_self_cycle(self):
         graph = {"a": ["a"]}
-        with pytest.raises(ValueError, match="循环依赖"):
+        with pytest.raises(ValueError, match="cycle"):
             detect_cycle(graph)
 
     def test_indirect_cycle(self):
         graph = {"a": ["c"], "b": ["a"], "c": ["b"]}
-        with pytest.raises(ValueError, match="循环依赖"):
+        with pytest.raises(ValueError, match="cycle"):
             detect_cycle(graph)
 
     def test_missing_dependency(self):
         graph = {"a": ["b"]}
-        with pytest.raises(ValueError, match="不存在"):
+        with pytest.raises(ValueError, match="does not exist"):
             detect_cycle(graph)
 
 
 class TestGetExecutionOrder:
-    """测试 get_execution_order"""
+    """Test get_execution_order"""
 
     def test_single_step(self):
         graph = {"a": []}
@@ -122,7 +122,7 @@ class TestGetExecutionOrder:
     def test_mixed(self):
         graph = {"a": [], "b": [], "c": ["a"], "d": ["a", "b"]}
         order = get_execution_order(graph)
-        # 第一层：a, b（可并行）
+        # First layer: a, b (parallelizable)
         assert set(order[0]) == {"a", "b"}
-        # 第二层：c, d（可并行）
+        # Second layer: c, d (parallelizable)
         assert set(order[1]) == {"c", "d"}

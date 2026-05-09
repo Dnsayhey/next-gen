@@ -1,4 +1,4 @@
-"""scheduler.py 单元测试"""
+"""scheduler.py unit tests"""
 
 import asyncio
 import os
@@ -30,7 +30,7 @@ def make_step(
     set_vars: dict[str, str] | None = None,
     config: dict | None = None,
 ) -> StepNode:
-    """创建测试用 StepNode"""
+    """Create a test StepNode"""
     return StepNode(
         name=name,
         action=ActionNode(type="test_scheduler_action", config={"name": name}),
@@ -43,7 +43,7 @@ def make_step(
 
 @pytest.fixture
 def scheduler_action_registry():
-    """注册测试用 action"""
+    """Register a test action"""
     actions = snapshot_actions()
     events: list[str] = []
 
@@ -106,7 +106,7 @@ def hook_registry_snapshot():
 
 
 class TestScheduler:
-    """测试 Scheduler 运行时语义"""
+    """Test Scheduler runtime semantics"""
 
     @pytest.mark.asyncio
     async def test_sequential_mode_runs_one_runnable_step_at_a_time(self, scheduler_action_registry):
@@ -286,7 +286,7 @@ class TestScheduler:
         elapsed = time.time() - start
 
         assert result.steps[0].status == StepStatus.FAILED
-        assert "超时" in (result.steps[0].error or "")
+        assert "timed out" in (result.steps[0].error or "")
         assert scheduler_action_registry == ["execute:flaky"]
         assert elapsed < 0.09
 
@@ -577,14 +577,14 @@ class TestScheduler:
         ))
         scheduler = Scheduler(CaseModel(version=1, steps={"missing": step.node}))
 
-        with pytest.raises(ExecutionError, match="未注册的 action"):
+        with pytest.raises(ExecutionError, match="unregistered action"):
             await scheduler._execute_step_logic(step, scheduler.context.derive())
 
     @pytest.mark.asyncio
     async def test_execute_hooks_uses_hook_error_for_missing_hook(self):
         scheduler = Scheduler(CaseModel(version=1, steps={"one": make_step("one")}))
 
-        with pytest.raises(HookError, match="未注册的 hook"):
+        with pytest.raises(HookError, match="unregistered hook"):
             await scheduler.execute_hooks([HookAction("missingHook", {})], scheduler.context, phase="test")
 
     @pytest.mark.asyncio

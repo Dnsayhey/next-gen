@@ -1,4 +1,4 @@
-"""调度器 - 状态机驱动的 DAG 调度"""
+"""State-machine-driven DAG scheduler."""
 
 import asyncio
 import time
@@ -29,7 +29,7 @@ from nextgen.core.planner import build_graph
 
 
 class StepRuntime:
-    """步骤运行时状态"""
+    """Step runtime state."""
 
     def __init__(self, node: StepNode):
         self.node = node
@@ -50,7 +50,7 @@ class StepRuntime:
 
     @property
     def action_summary(self) -> str:
-        """获取 action 摘要"""
+        """Return the action summary."""
         action = get_action(self.node.action.type)
         if action is None:
             return f"{self.node.action.type}: {self.node.name}"
@@ -58,7 +58,7 @@ class StepRuntime:
 
 
 class Scheduler:
-    """DAG 调度器"""
+    """DAG scheduler."""
 
     def __init__(
         self,
@@ -85,18 +85,18 @@ class Scheduler:
         step: StepRuntime | None = None,
         phase: str,
     ) -> None:
-        """顺序执行一组 hook"""
+        """Execute hooks sequentially."""
         for hook in hooks:
             handler = get_hook(hook.type)
             if handler is None:
-                raise HookError(f"未注册的 hook: {hook.type}")
+                raise HookError(f"unregistered hook: {hook.type}")
 
             params = ctx.render_value(hook.params)
             try:
                 await call_hook(handler, ctx, params)
             except Exception as exc:
                 target = step.node.name if step else "testcase"
-                raise HookError(f"{phase} hook '{hook.type}' 执行失败 ({target}): {exc}") from exc
+                raise HookError(f"{phase} hook '{hook.type}' failed ({target}): {exc}") from exc
 
     async def execute_hooks_best_effort(
         self,
@@ -106,7 +106,7 @@ class Scheduler:
         step: StepRuntime,
         phase: str,
     ) -> None:
-        """顺序执行 hook，HookError 只记录并继续后续 hook"""
+        """Execute hooks sequentially, logging HookError and continuing."""
         for hook in hooks:
             try:
                 await self.execute_hooks([hook], ctx, step=step, phase=phase)
@@ -114,7 +114,7 @@ class Scheduler:
                 logger.warning(str(exc))
 
     def is_runnable(self, step: StepRuntime) -> bool:
-        """判断步骤是否可执行"""
+        """Return whether a step can run."""
         return (
             step.status == StepStatus.PENDING
             and all(
@@ -124,18 +124,18 @@ class Scheduler:
         )
 
     def should_skip(self, step: StepRuntime) -> bool:
-        """判断步骤是否应跳过"""
+        """Return whether a step should be skipped."""
         return any(
             self.steps[d].status in (StepStatus.FAILED, StepStatus.SKIPPED)
             for d in self.graph[step.node.name]
         )
 
     def has_failure(self) -> bool:
-        """判断当前用例是否已有失败步骤"""
+        """Return whether the testcase already has a failed step."""
         return any(s.status == StepStatus.FAILED for s in self.steps.values())
 
     def _build_result(self, start_time: float, errors: list[str] | None = None) -> TestResult:
-        """基于当前运行时状态构建测试结果"""
+        """Build a test result from the current runtime state."""
         total_ms = int((time.time() - start_time) * 1000)
         result_errors = errors or []
         results = []
@@ -168,7 +168,7 @@ class Scheduler:
         )
 
     def _mark_suite_failure(self, error: str) -> None:
-        """将用例级失败映射到一个步骤结果，保证 summary/退出码可见"""
+        """Map a testcase-level failure to one step so summary and exit code are visible."""
         for runtime in self.steps.values():
             if runtime.status in (StepStatus.PENDING, StepStatus.SUCCESS, StepStatus.SKIPPED):
                 runtime.status = StepStatus.FAILED
@@ -176,17 +176,17 @@ class Scheduler:
                 return
 
     async def _execute_step_logic(self, step: StepRuntime, step_ctx: Context) -> None:
-        """执行步骤的核心逻辑"""
-        # 设置变量（在 action 之前）
+        """Execute the core step logic."""
+        # Set variables before action execution.
         if step.node.set_vars:
             for key, value in step.node.set_vars.items():
                 rendered = step_ctx.render(value)
                 step_ctx.set(key, rendered)
 
-        # 条件执行（可使用当前步骤的 set_vars）
+        # Conditional execution can use current step set_vars.
         if not evaluate_condition(step.node.when, step_ctx):
             step.status = StepStatus.SKIPPED
-            logger.info(f"条件不满足，跳过步骤: {step.node.name}")
+            logger.info(f"Condition not satisfied, skipping step: {step.node.name}")
             return
 
         await self.execute_hooks(
@@ -198,19 +198,19 @@ class Scheduler:
 
         action_type = step.node.action.type
 
-        # 检查 action 是否存在
+        # Check whether the action exists.
         action = get_action(action_type)
         if action is None:
-            raise ExecutionError(f"未注册的 action 类型: {action_type}")
+            raise ExecutionError(f"unregistered action type: {action_type}")
 
-        # 执行
+        # Execute.
         result = await action.execute(
             step.node.action.config,
             step_ctx,
         )
         step.result = result
 
-        # 验证
+        # Validate.
         assertions = [
             AssertionNode(
                 op=assertion.op,
@@ -223,7 +223,7 @@ class Scheduler:
         if errors:
             raise ValidationError("; ".join(errors))
 
-        # 提取变量
+        # Extract variables.
         if step.node.extract:
             action.extract(result.data, step.node.extract, step_ctx)
             step.pending_extracts = {key: step_ctx.get(key) for key in step.node.extract}
@@ -249,7 +249,7 @@ class Scheduler:
         )
 
     async def _run_step_with_retry(self, step: StepRuntime) -> None:
-        """执行单个步骤，重试和跳过都在一个生命周期内完成"""
+        """Execute one step with retry and skip handling in one lifecycle."""
         max_retry = step.node.config.get("retry", 0)
         base_step_ctx = self.context.derive()
 
@@ -294,7 +294,7 @@ class Scheduler:
                             step.retry_count += 1
                             step.status = StepStatus.RETRYING
 
-                            # 计算重试延迟
+                            # Compute retry delay.
                             if step.node.config.get("retry_backoff"):
                                 base_delay = step.node.config.get("retry_delay", 1)
                                 max_delay = step.node.config.get("retry_max_delay", 60)
@@ -303,15 +303,15 @@ class Scheduler:
                                 delay = step.node.config.get("retry_delay", 1)
 
                             logger.warning(
-                                f"步骤 {step.node.name} 失败，"
-                                f"重试 {step.retry_count}/{max_retry}，"
-                                f"等待 {delay}秒"
+                                f"Step {step.node.name} failed, "
+                                f"retry {step.retry_count}/{max_retry}, "
+                                f"waiting {delay}s"
                             )
                             await asyncio.sleep(delay)
                             continue
 
                         step.status = StepStatus.FAILED
-                        logger.error(f"步骤 {step.node.name} 失败: {e}")
+                        logger.error(f"Step {step.node.name} failed: {e}")
                         return
         finally:
             if step.status != StepStatus.PENDING:
@@ -335,13 +335,13 @@ class Scheduler:
                 step.pending_exports = {}
 
     async def run_step(self, step: StepRuntime) -> None:
-        """执行单个步骤（步骤级超时覆盖全部重试）"""
+        """Execute one step with a step-level timeout covering all retries."""
         step.start_time = time.time()
 
         try:
             if self.testcase.fail_fast and self.has_failure():
                 step.status = StepStatus.SKIPPED
-                logger.info(f"fail_fast 生效，跳过步骤: {step.node.name}")
+                logger.info(f"fail_fast active, skipping step: {step.node.name}")
                 return
 
             step_timeout = step.node.config.get("timeout")
@@ -355,16 +355,16 @@ class Scheduler:
                 await self._run_step_with_retry(step)
 
         except asyncio.TimeoutError:
-            step.error = f"步骤执行超时（{step.node.config.get('timeout')}秒）"
+            step.error = f"step timed out ({step.node.config.get('timeout')}s)"
             step.status = StepStatus.FAILED
-            logger.error(f"步骤 {step.node.name} 超时")
+            logger.error(f"Step {step.node.name} timed out")
 
         finally:
             step.end_time = time.time()
 
     async def run(self) -> TestResult:
-        """执行测试用例"""
-        logger.info(f"开始执行测试用例，共 {len(self.steps)} 个步骤")
+        """Run the testcase."""
+        logger.info(f"Starting testcase execution with {len(self.steps)} steps")
         start_time = time.time()
 
         if self.testcase.source_path:
@@ -399,7 +399,7 @@ class Scheduler:
                 for s in self.steps.values():
                     if s.status == StepStatus.PENDING:
                         s.status = StepStatus.SKIPPED
-                        logger.info(f"fail_fast 生效，跳过步骤: {s.node.name}")
+                        logger.info(f"fail_fast active, skipping step: {s.node.name}")
                 if not active_tasks:
                     break
 
@@ -411,13 +411,13 @@ class Scheduler:
             if not pending and not active_tasks:
                 break
 
-            # 标记应跳过的步骤
+            # Mark steps that should be skipped.
             for s in pending:
                 if self.should_skip(s):
                     s.status = StepStatus.SKIPPED
-                    logger.info(f"跳过步骤: {s.node.name}")
+                    logger.info(f"Skipping step: {s.node.name}")
 
-            # 找出可执行的步骤
+            # Find runnable steps.
             runnable = [s for s in pending if self.is_runnable(s)]
             if self.testcase.mode == "sequential" and runnable:
                 runnable = [runnable[0]]

@@ -1,4 +1,4 @@
-"""DAG 规划器 - 构建依赖图并检测循环"""
+"""DAG planner for dependency graphs and cycle detection."""
 
 from loguru import logger
 
@@ -7,29 +7,29 @@ from nextgen.core.model import TestCase
 
 
 def build_graph(testcase: TestCase) -> dict[str, list[str]]:
-    """构建依赖图
+    """Build a dependency graph.
 
-    返回: {step_name: [dep1, dep2, ...]}
+    Returns: {step_name: [dep1, dep2, ...]}
     """
     graph = {}
     for name, step in testcase.steps.items():
         graph[name] = step.depends_on or []
 
-    logger.debug(f"构建依赖图: {graph}")
+    logger.debug(f"Built dependency graph: {graph}")
     return graph
 
 
 def detect_cycle(graph: dict[str, list[str]]) -> None:
-    """检测依赖图中的循环
+    """Detect cycles in a dependency graph.
 
-    使用 DFS 检测，发现循环时抛出异常
+    Uses DFS and raises when a cycle is found.
     """
     visited: set[str] = set()
     stack: set[str] = set()
 
     def visit(node: str) -> None:
         if node in stack:
-            raise ParseError(f"检测到循环依赖，涉及节点: {node}")
+            raise ParseError(f"cycle detected involving node: {node}")
         if node in visited:
             return
 
@@ -37,7 +37,7 @@ def detect_cycle(graph: dict[str, list[str]]) -> None:
 
         for dep in graph.get(node, []):
             if dep not in graph:
-                raise ParseError(f"依赖的步骤不存在: {node} -> {dep}")
+                raise ParseError(f"dependency step does not exist: {node} -> {dep}")
             visit(dep)
 
         stack.remove(node)
@@ -46,47 +46,47 @@ def detect_cycle(graph: dict[str, list[str]]) -> None:
     for node in graph:
         visit(node)
 
-    logger.debug("依赖图无循环")
+    logger.debug("Dependency graph has no cycles")
 
 
 def get_execution_order(graph: dict[str, list[str]]) -> list[list[str]]:
-    """获取执行顺序（拓扑排序）
+    """Return execution order via topological sorting.
 
-    返回分层列表，同一层的步骤可并行执行
-    这是 planner 的辅助能力，供 dry-run、可视化和调试使用；
-    当前 scheduler 使用运行时动态调度，不直接依赖该函数。
+    Returns layered lists. Steps in the same layer can run in parallel.
+    This is a planner helper for dry-run, visualization, and debugging;
+    the current scheduler uses runtime dynamic scheduling instead.
     """
-    # 计算入度
+    # Compute indegrees.
     in_degree = {node: 0 for node in graph}
     for node in graph:
         for dep in graph[node]:
             in_degree[node] += 1
 
-    # 分层拓扑排序
+    # Layered topological sort.
     layers: list[list[str]] = []
     remaining = set(graph.keys())
 
     while remaining:
-        # 找出入度为 0 的节点
+        # Find nodes with zero indegree.
         layer = [n for n in remaining if in_degree[n] == 0]
         if not layer:
-            raise ParseError("无法确定执行顺序，可能存在循环")
+            raise ParseError("unable to determine execution order; a cycle may exist")
 
         layers.append(layer)
 
-        # 更新入度
+        # Update indegrees.
         for node in layer:
             remaining.remove(node)
             for other in remaining:
                 if node in graph[other]:
                     in_degree[other] -= 1
 
-    logger.debug(f"执行顺序: {layers}")
+    logger.debug(f"Execution order: {layers}")
     return layers
 
 
 def validate_testcase(testcase: TestCase) -> None:
-    """验证测试用例"""
+    """Validate a testcase."""
     graph = build_graph(testcase)
     detect_cycle(graph)
-    logger.info(f"测试用例验证通过，共 {len(testcase.steps)} 个步骤")
+    logger.info(f"Testcase validation passed with {len(testcase.steps)} steps")

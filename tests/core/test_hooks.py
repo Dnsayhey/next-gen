@@ -1,4 +1,4 @@
-"""hooks.py 单元测试"""
+"""hooks.py unit tests"""
 
 from pathlib import Path
 
@@ -24,7 +24,7 @@ def hook_registry_snapshot():
 
 
 class TestDiscoverHooks:
-    """测试 hooks.py 自动发现"""
+    """Test hooks.py discovery"""
 
     def test_discover_hooks_from_outer_to_inner(self, tmp_path):
         root = tmp_path
@@ -66,7 +66,7 @@ class TestDiscoverHooks:
 
 
 class TestBuiltinHooks:
-    """测试内置 hook 注册"""
+    """Test built-in hook registration"""
 
     def test_builtin_hooks_are_registered(self):
         for name in ["sleep", "log", "get_timestamp", "get_time_str", "get_random_str", "set_vars"]:
@@ -74,12 +74,12 @@ class TestBuiltinHooks:
 
     @pytest.mark.asyncio
     async def test_log_rejects_unknown_level(self):
-        with pytest.raises(ValueError, match="不支持的日志级别"):
+        with pytest.raises(ValueError, match="unsupported log level"):
             await call_hook(HOOK_REGISTRY["log"], Context(), {"level": "__dict__", "message": "hello"})
 
     @pytest.mark.asyncio
     async def test_var_hooks_require_var_param(self):
-        with pytest.raises(ValueError, match="缺少参数: var"):
+        with pytest.raises(ValueError, match="missing required params: var"):
             await call_hook(HOOK_REGISTRY["get_timestamp"], Context(), {})
 
     @pytest.mark.asyncio
@@ -111,14 +111,14 @@ class TestBuiltinHooks:
 
 
 class TestHookBinding:
-    """测试 hook 函数签名绑定"""
+    """Test hook function signature binding"""
 
     def test_duplicate_hook_name_is_rejected_by_default(self):
         @hook("duplicate_name")
         def first():
             return None
 
-        with pytest.raises(ValueError, match="hook 已注册: duplicate_name"):
+        with pytest.raises(ValueError, match="hook already registered: duplicate_name"):
             @hook("duplicate_name")
             def second():
                 return None
@@ -163,7 +163,7 @@ class TestHookBinding:
         def bind_scalar_ambiguous(a, b):
             return None
 
-        with pytest.raises(ValueError, match="不支持标量参数"):
+        with pytest.raises(ValueError, match="does not support scalar params"):
             bind_hook_arguments(HOOK_REGISTRY["bind_scalar_ambiguous"], Context(), "raw")
 
     def test_unknown_dict_param_is_rejected(self):
@@ -171,7 +171,7 @@ class TestHookBinding:
         def bind_unknown_param(message):
             return None
 
-        with pytest.raises(ValueError, match="未知参数: extra"):
+        with pytest.raises(ValueError, match="unknown params: extra"):
             bind_hook_arguments(
                 HOOK_REGISTRY["bind_unknown_param"],
                 Context(),

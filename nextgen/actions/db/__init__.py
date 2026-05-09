@@ -1,4 +1,4 @@
-"""DB action 实现"""
+"""DB action implementation."""
 
 from nextgen.core.actions import ActionSpec, register_action
 

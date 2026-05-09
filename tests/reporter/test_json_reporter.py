@@ -1,4 +1,4 @@
-"""json_reporter.py 单元测试"""
+"""json_reporter.py unit tests"""
 
 import json
 

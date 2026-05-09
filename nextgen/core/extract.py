@@ -1,4 +1,4 @@
-"""通用变量提取工具"""
+"""Common variable extraction utilities."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from nextgen.core.errors import ParseError
 
 @dataclass(frozen=True)
 class ExtractRule:
-    """变量提取规则"""
+    """Variable extraction rule."""
 
     method: str
     expr: str
@@ -23,12 +23,12 @@ class ExtractRule:
 
 
 def parse_extract_rule(raw: str | dict[str, Any]) -> ExtractRule:
-    """解析提取规则，字符串简写按 JSONPath 处理"""
+    """Parse an extraction rule. String shorthand is treated as JSONPath."""
     if isinstance(raw, str):
         return ExtractRule(method="jsonpath", expr=raw)
 
     if not isinstance(raw, dict):
-        raise ParseError(f"extract 规则必须是字符串或 dict，得到 {type(raw).__name__}")
+        raise ParseError(f"extract rule must be a string or dict, got {type(raw).__name__}")
 
     has_default = "default" in raw
     default = raw.get("default")
@@ -43,7 +43,7 @@ def parse_extract_rule(raw: str | dict[str, Any]) -> ExtractRule:
 
     if "regex" in raw:
         if "group" not in raw:
-            raise ParseError("regex extract 必须包含 group 字段")
+            raise ParseError("regex extract must include a group field")
         return ExtractRule(
             method="regex",
             expr=raw["regex"],
@@ -52,11 +52,11 @@ def parse_extract_rule(raw: str | dict[str, Any]) -> ExtractRule:
             has_default=has_default,
         )
 
-    raise ParseError("extract 规则必须包含 jsonpath 或 regex")
+    raise ParseError("extract rule must include jsonpath or regex")
 
 
 def extract_value(source: Any, raw_rule: str | dict[str, Any]) -> Any:
-    """从 source 中按规则提取值"""
+    """Extract a value from source according to a rule."""
     rule = parse_extract_rule(raw_rule)
 
     try:
@@ -65,7 +65,7 @@ def extract_value(source: Any, raw_rule: str | dict[str, Any]) -> Any:
         elif rule.method == "regex":
             value = _extract_regex(source, rule.expr, rule.group)
         else:
-            raise ParseError(f"不支持的 extract 方法: {rule.method}")
+            raise ParseError(f"unsupported extract method: {rule.method}")
     except Exception:
         if rule.has_default:
             return rule.default

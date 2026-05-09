@@ -1,4 +1,4 @@
-"""MySQL 驱动"""
+"""MySQL driver."""
 
 from typing import Any
 from urllib.parse import urlparse, parse_qs
@@ -8,12 +8,12 @@ from loguru import logger
 
 
 async def execute(url: str, query: str, params: list[Any] | None = None) -> dict[str, Any]:
-    """执行 MySQL 查询
+    """Execute a MySQL query.
 
     Args:
-        url: 连接字符串，如 mysql://user:pass@host:3306/dbname
-        query: SQL 查询
-        params: 查询参数
+        url: Connection string, such as mysql://user:pass@host:3306/dbname.
+        query: SQL query.
+        params: Query parameters.
 
     Returns:
         {"rows": [...], "row_count": int, "columns": [...]}
@@ -27,7 +27,7 @@ async def execute(url: str, query: str, params: list[Any] | None = None) -> dict
         "db": parsed.path.lstrip("/"),
     }
 
-    logger.debug(f"连接 MySQL: {db_config['host']}:{db_config['port']}/{db_config['db']}")
+    logger.debug(f"Connecting to MySQL: {db_config['host']}:{db_config['port']}/{db_config['db']}")
 
     conn = await aiomysql.connect(**db_config)
     try:
