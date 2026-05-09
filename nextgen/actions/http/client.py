@@ -179,5 +179,5 @@ async def execute_request(
         data=data,
         action_input=action_input,
         action_output=data,
-        summary_status=response.status_code,
+        metric={"label": "status_code", "value": response.status_code},
     )

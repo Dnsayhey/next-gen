@@ -115,7 +115,7 @@ uv run nextgen examples/hook_demo.yaml --verbose
 
 CLI 会将结果以 JSON 输出到 stdout。每个步骤包含：
 
-- `response_status`：HTTP 状态码（若有）
+- `metric`：该步骤最核心的摘要指标，例如 HTTP 的 `{"label": "status_code", "value": 200}` 或 DB 的 `{"label": "row_count", "value": 1}`；`label` 使用稳定的 snake_case 标识
 - `action_input`：action 收到的已渲染输入（便于排查变量替换与参数问题）
 - `action_output`：action 输出快照（HTTP 为 `status_code/headers/body`，DB 为 `row_count/columns/rows`）
 
@@ -131,7 +131,7 @@ CLI 会将结果以 JSON 输出到 stdout。每个步骤包含：
   "name": "verify_file_uploaded",
   "status": "failed",
   "action": "GET https://fs.example.com/fs",
-  "response_status": 200,
+  "metric": { "label": "status_code", "value": 200 },
   "action_input": {
     "type": "http",
     "method": "GET",

@@ -50,5 +50,5 @@ async def execute_query(config: DbConfig, ctx: Context) -> ActionResult:
             "columns": result.get("columns"),
             "rows": result.get("rows"),
         },
-        summary_status=result.get("row_count"),
+        metric={"label": "row_count", "value": result.get("row_count")},
     )

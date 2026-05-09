@@ -117,7 +117,7 @@ class TestRequestConfig:
             "headers": {"content-type": "application/json"},
             "body": {"code": 0},
         }
-        assert result.summary_status == 200
+        assert result.metric == {"label": "status_code", "value": 200}
 
 
 class TestExtractVariables:

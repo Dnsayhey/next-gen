@@ -27,7 +27,7 @@ class JsonReporter:
                     "status": s.status.value,
                     "duration_ms": s.duration_ms,
                     "action": s.action_summary,
-                    "response_status": s.response_status,
+                    "metric": s.metric,
                     "action_input": s.action_input,
                     "action_output": s.action_output,
                     "error": s.error,

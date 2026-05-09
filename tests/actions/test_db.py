@@ -88,7 +88,7 @@ class TestDbConfig:
             "columns": ["id", "name"],
             "rows": [{"id": 7, "name": "Alice"}],
         }
-        assert result.summary_status == 1
+        assert result.metric == {"label": "row_count", "value": 1}
 
     @pytest.mark.asyncio
     async def test_execute_query_raises_action_execution_error_with_action_input(self, monkeypatch):

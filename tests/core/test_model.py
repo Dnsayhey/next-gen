@@ -44,13 +44,13 @@ class TestActionResult:
             data={"row_count": 2},
             action_input={"type": "db"},
             action_output={"row_count": 2},
-            summary_status=2,
+            metric={"label": "row_count", "value": 2},
         )
 
         assert result.data == {"row_count": 2}
         assert result.action_input == {"type": "db"}
         assert result.action_output == {"row_count": 2}
-        assert result.summary_status == 2
+        assert result.metric == {"label": "row_count", "value": 2}
 
 
 class TestAssertionNode:
@@ -130,7 +130,7 @@ class TestStepResult:
         assert result.name == "test_step"
         assert result.status == StepStatus.SUCCESS
         assert result.duration_ms == 100
-        assert result.response_status is None
+        assert result.metric is None
         assert result.action_input is None
         assert result.action_output is None
         assert result.error is None

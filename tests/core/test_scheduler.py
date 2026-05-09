@@ -67,7 +67,7 @@ def scheduler_action_registry():
                 "body": {"name": name},
                 "headers": {},
             },
-            summary_status=200,
+            metric={"label": "status_code", "value": 200},
         )
 
     def extract(result, config, ctx):
@@ -374,7 +374,7 @@ class TestScheduler:
             if config["name"] == "fast":
                 await asyncio.sleep(0.01)
             events.append((f"end:{config['name']}", time.perf_counter()))
-            return ActionResult(data={}, summary_status=200)
+            return ActionResult(data={}, metric={"label": "status_code", "value": 200})
 
         register_action(ActionSpec(
             name="dynamic_schedule_action",
@@ -495,7 +495,7 @@ class TestScheduler:
                     "body": {"error": "boom"},
                     "headers": {"x-request-id": "req-1"},
                 },
-                summary_status=500,
+                metric={"label": "status_code", "value": 500},
             )
 
         register_action(ActionSpec(

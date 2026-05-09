@@ -12,7 +12,7 @@ from nextgen.reporter import get_reporter, list_reporters
 from nextgen.reporter.json_reporter import JsonReporter
 
 
-def test_json_reporter_includes_testcase_status_errors_and_response_status():
+def test_json_reporter_includes_testcase_status_errors_and_metric():
     result = CaseRunResult(
         testcase="case.yaml",
         total_duration_ms=42,
@@ -24,7 +24,7 @@ def test_json_reporter_includes_testcase_status_errors_and_response_status():
                 status=StepStatus.FAILED,
                 duration_ms=12,
                 action_summary="POST /login",
-                response_status=500,
+                metric={"label": "status_code", "value": 500},
                 action_input={
                     "type": "http",
                     "method": "POST",
@@ -51,7 +51,7 @@ def test_json_reporter_includes_testcase_status_errors_and_response_status():
     assert data["status"] == "failed"
     assert data["errors"] == ["after_all failed"]
     assert data["steps"][0]["action"] == "POST /login"
-    assert data["steps"][0]["response_status"] == 500
+    assert data["steps"][0]["metric"] == {"label": "status_code", "value": 500}
     assert data["steps"][0]["action_input"]["headers"]["Authorization"] == "Bearer abc123"
     assert data["steps"][0]["action_input"]["body"]["password"] == "secret"
     assert data["steps"][0]["action_output"]["status_code"] == 500
@@ -70,7 +70,7 @@ def test_json_reporter_serializes_success_result_with_summary():
                 status=StepStatus.SUCCESS,
                 duration_ms=10,
                 action_summary="GET /health",
-                response_status=200,
+                metric={"label": "status_code", "value": 200},
             )
         ],
     )
@@ -85,6 +85,7 @@ def test_json_reporter_serializes_success_result_with_summary():
         "skipped": 0,
     }
     assert data["steps"][0]["status"] == "success"
+    assert data["steps"][0]["metric"] == {"label": "status_code", "value": 200}
     assert data["steps"][0]["error"] is None
 
 

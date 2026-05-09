@@ -2,7 +2,17 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, TypedDict
+
+
+class ResultMetric(TypedDict):
+    """action/step 结果的核心摘要指标。
+
+    label 使用稳定的 snake_case 标识，value 保持为 JSON 友好的标量值。
+    """
+
+    label: str
+    value: int | float | str | bool | None
 
 
 @dataclass
@@ -12,7 +22,7 @@ class ActionResult:
     data: dict[str, Any]
     action_input: dict[str, Any] | None = None
     action_output: dict[str, Any] | None = None
-    summary_status: int | float | str | None = None
+    metric: ResultMetric | None = None
 
 
 class StepStatus(str, Enum):
@@ -41,7 +51,7 @@ class StepResult:
     status: StepStatus
     duration_ms: int
     action_summary: str  # e.g. "POST /login" / "sqlite: SELECT ..."
-    response_status: int | float | str | None = None
+    metric: ResultMetric | None = None
     action_input: dict[str, Any] | None = None
     action_output: dict[str, Any] | None = None
     error: str | None = None

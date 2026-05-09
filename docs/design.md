@@ -654,7 +654,10 @@ ActionResult(
     data={...},
     action_input={...},    # action 输入快照（已渲染）
     action_output={...},   # action 输出快照（可用于失败定位）
-    summary_status=200,    # 报告中的主要状态/指标
+    metric={
+        "label": "status_code",
+        "value": 200,
+    },                     # 报告中的核心摘要指标
 )
 ```
 

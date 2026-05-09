@@ -144,7 +144,7 @@ class Scheduler:
                 status=runtime.status,
                 duration_ms=runtime.duration_ms,
                 action_summary=runtime.action_summary,
-                response_status=runtime.result.summary_status if runtime.result else None,
+                metric=runtime.result.metric if runtime.result else None,
                 action_input=runtime.result.action_input if runtime.result else None,
                 action_output=runtime.result.action_output if runtime.result else None,
                 error=runtime.error,
