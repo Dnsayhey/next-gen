@@ -11,14 +11,14 @@ steps:
       method: GET
       url: ${base_url}/ip
     validate:
-      - eq: [$.status_code, 200]
+      - eq: [$$.status_code, 200]
 
   get_user_agent:
     request:
       method: GET
       url: ${base_url}/user-agent
     validate:
-      - eq: [$.status_code, 200]
+      - eq: [$$.status_code, 200]
 
   # 依赖两个并行步骤完成后再执行
   after_parallel:

@@ -11,7 +11,7 @@ steps:
       url: ${base_url}/get
       timeout: 10
     validate:
-      - eq: [$.status_code, 200]
+      - eq: [$$.status_code, 200]
 
   # 请求级超时测试（模拟延迟，超时设置较短，预期失败）
   delay_request:
@@ -20,7 +20,7 @@ steps:
       url: ${base_url}/delay/5
       timeout: 2  # 2秒超时，但请求需要5秒
     validate:
-      - eq: [$.status_code, 200]
+      - eq: [$$.status_code, 200]
 
   # 步骤级超时测试
   step_timeout:
@@ -30,4 +30,4 @@ steps:
     config:
       timeout: 10
     validate:
-      - eq: [$.status_code, 200]
+      - eq: [$$.status_code, 200]

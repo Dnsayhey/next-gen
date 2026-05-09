@@ -99,8 +99,8 @@
         }
       },
       "validate": [
-        { "contains": ["$.body.headers.X-Custom-Header", "my-value"] },
-        { "contains": ["$.body.headers.Authorization", "Bearer"] }
+        { "contains": ["$.headers.X-Custom-Header", "my-value"] },
+        { "contains": ["$.headers.Authorization", "Bearer"] }
       ]
     },
     "with_retry": {
@@ -113,7 +113,7 @@
         "retry_delay": 1
       },
       "validate": [
-        { "eq": ["$.status_code", 200] }
+        { "eq": ["$$.status_code", 200] }
       ]
     },
     "with_timeout": {
@@ -126,7 +126,7 @@
         "timeout": 30
       },
       "validate": [
-        { "eq": ["$.status_code", 200] }
+        { "eq": ["$$.status_code", 200] }
       ]
     }
   }

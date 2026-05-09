@@ -515,7 +515,7 @@ class TestScheduler:
                     "failing": StepNode(
                         name="failing",
                         action=ActionNode(type="snapshot_output", config={}),
-                        validate=[AssertionNode(op="eq", left="$.status_code", right=200)],
+                        validate=[AssertionNode(op="eq", left="$$.status_code", right=200)],
                     ),
                 },
             )

@@ -26,4 +26,4 @@ steps:
       headers:
         Authorization: ${auth_header}
     validate:
-      - eq: [$.body.headers.Authorization, "Bearer demo-token"]
+      - eq: [$.headers.Authorization, "Bearer demo-token"]

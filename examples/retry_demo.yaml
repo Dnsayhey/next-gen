@@ -14,7 +14,7 @@ steps:
       retry: 2
       retry_delay: 1
     validate:
-      - eq: [$.status_code, 200]
+      - eq: [$$.status_code, 200]
 
   # 指数退避重试：本步骤同样故意失败，用于观察 1s / 2s / 4s 的退避等待
   backoff_retry:
@@ -27,4 +27,4 @@ steps:
       retry_backoff: true
       retry_max_delay: 10
     validate:
-      - eq: [$.status_code, 200]
+      - eq: [$$.status_code, 200]

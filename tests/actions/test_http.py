@@ -142,33 +142,44 @@ class TestExtractVariables:
             "headers": {},
         }
         ctx = Context()
-        config = {"status": "$.status_code"}
+        config = {"status": "$$.status_code"}
         extracted = extract_variables(result, config, ctx)
         assert extracted["status"] == 200
 
-    def test_extract_from_body_headers(self):
+    def test_extract_from_metadata_headers(self):
         result = {
             "status_code": 200,
             "body": {"headers": {"X-Custom": "body-value"}},
             "headers": {"X-Custom": "header-value"},
         }
         ctx = Context()
-        config = {"custom": "$.headers.X-Custom"}
+        config = {"custom": "$$.headers.X-Custom"}
         extracted = extract_variables(result, config, ctx)
         assert extracted["custom"] == "header-value"
 
-    def test_extract_status_code_prefers_response_metadata_over_body(self):
+    def test_extract_metadata_header_lookup_is_case_insensitive(self):
+        result = {
+            "status_code": 200,
+            "body": {},
+            "headers": {"content-type": "application/json"},
+        }
+        ctx = Context()
+        config = {"content_type": "$$.headers.Content-Type"}
+        extracted = extract_variables(result, config, ctx)
+        assert extracted["content_type"] == "application/json"
+
+    def test_extract_status_code_uses_metadata_prefix(self):
         result = {
             "status_code": 200,
             "body": {"status_code": 500},
             "headers": {},
         }
         ctx = Context()
-        config = {"status": "$.status_code"}
+        config = {"status": "$$.status_code"}
         extracted = extract_variables(result, config, ctx)
         assert extracted["status"] == 200
 
-    def test_extract_can_use_explicit_body_namespace_for_conflicting_keys(self):
+    def test_extract_plain_dollar_reads_body_even_for_metadata_like_keys(self):
         result = {
             "status_code": 200,
             "body": {"status_code": 500, "headers": {"X-Custom": "body-value"}},
@@ -176,8 +187,8 @@ class TestExtractVariables:
         }
         ctx = Context()
         config = {
-            "body_status": "$.body.status_code",
-            "body_header": "$.body.headers.X-Custom",
+            "body_status": "$.status_code",
+            "body_header": "$.headers.X-Custom",
         }
         extracted = extract_variables(result, config, ctx)
         assert extracted["body_status"] == 500
@@ -331,27 +342,27 @@ class TestHttpFileUtils:
             "body": {},
             "headers": {},
         }
-        assertions = [AssertionNode(op="eq", left="$.status_code", right=200)]
+        assertions = [AssertionNode(op="eq", left="$$.status_code", right=200)]
         errors = validate_response(result, assertions)
         assert errors == []
 
-    def test_status_code_prefers_response_metadata_over_body(self):
+    def test_status_code_uses_metadata_prefix(self):
         result = {
             "status_code": 200,
             "body": {"status_code": 500},
             "headers": {},
         }
-        assertions = [AssertionNode(op="eq", left="$.status_code", right=200)]
+        assertions = [AssertionNode(op="eq", left="$$.status_code", right=200)]
         errors = validate_response(result, assertions)
         assert errors == []
 
-    def test_headers_use_response_headers_not_body_headers(self):
+    def test_headers_use_metadata_prefix(self):
         result = {
             "status_code": 200,
             "body": {"headers": {"X-Custom": "body-value"}},
             "headers": {"X-Custom": "header-value"},
         }
-        assertions = [AssertionNode(op="eq", left="$.headers.X-Custom", right="header-value")]
+        assertions = [AssertionNode(op="eq", left="$$.headers.X-Custom", right="header-value")]
         errors = validate_response(result, assertions)
         assert errors == []
 
@@ -361,17 +372,17 @@ class TestHttpFileUtils:
             "body": {},
             "headers": {"content-type": "application/json"},
         }
-        assertions = [AssertionNode(op="eq", left="$.headers.Content-Type", right="application/json")]
+        assertions = [AssertionNode(op="eq", left="$$.headers.Content-Type", right="application/json")]
         errors = validate_response(result, assertions)
         assert errors == []
 
-    def test_explicit_body_namespace_can_validate_conflicting_keys(self):
+    def test_plain_dollar_reads_body_even_for_metadata_like_keys(self):
         result = {
             "status_code": 200,
             "body": {"status_code": 500},
             "headers": {},
         }
-        assertions = [AssertionNode(op="eq", left="$.body.status_code", right=500)]
+        assertions = [AssertionNode(op="eq", left="$.status_code", right=500)]
         errors = validate_response(result, assertions)
         assert errors == []
 

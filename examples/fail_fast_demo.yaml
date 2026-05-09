@@ -12,7 +12,7 @@ steps:
       method: GET
       url: ${base_url}/status/500
     validate:
-      - eq: [$.status_code, 200]
+      - eq: [$$.status_code, 200]
 
   # 依赖失败步骤，因此会被 skipped
   dependent_on_failure:
@@ -21,7 +21,7 @@ steps:
       method: GET
       url: ${base_url}/get
     validate:
-      - eq: [$.status_code, 200]
+      - eq: [$$.status_code, 200]
 
   # 与失败步骤无依赖，因此 fail_fast: false 时会继续执行
   independent_after_failure:

@@ -208,10 +208,9 @@ steps:
 
 **支持的变量来源：**
 - `${var}` — 从全局 vars 或已提取的变量中替换
-- `$.data.token` — 从 response body 提取（JSONPath）
-- `$.status_code` — 提取状态码
-- `$.headers.xxx` — 从 HTTP 响应头提取
-- `$.body.xxx` — 显式从 response body 命名空间提取（适用于 body 中也包含 `status_code` / `headers` 等同名字段时）
+- `$.data.token` — 从 HTTP response body 提取（JSONPath），`$` 表示 body 根
+- `$$.status_code` — 提取状态码
+- `$$.headers.xxx` — 从 HTTP 响应头提取，`$$` 表示 HTTP metadata 根
 - `{jsonpath: "$.data.token"}` — JSONPath 显式写法
 - `{regex: "token=([a-z0-9]+)", group: 1}` — 正则提取，使用 Python `re.search`
 - `default` — 可选，未匹配或提取失败时使用默认值
