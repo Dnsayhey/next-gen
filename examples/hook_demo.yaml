@@ -4,7 +4,7 @@
 #
 # 说明：
 # - 当前目录下的 hooks.py 会被自动发现并加载
-# - before_all 中的自定义 hook 可向全局上下文注入变量
+# - before_all 中的 hook 可向全局上下文注入变量
 # - set_vars / before / after 默认是步骤局部变量
 # - extract 声明出的变量会回写到全局上下文，供后续步骤使用
 
@@ -15,14 +15,14 @@ vars:
 
 hooks:
   before_all:
-    - seedVars:
+    - set_vars:
         env_name: staging
         channel: api
-    - getTimestamp: suite_start
+    - get_timestamp: suite_start
     - log: "测试开始 env=${env_name}, channel=${channel}"
 
   after_all:
-    - getTimestamp: suite_end
+    - get_timestamp: suite_end
     - log: "测试结束 env=${env_name}"
 
   before_each:
@@ -43,10 +43,11 @@ steps:
         env: ${env_name}
     hooks:
       before:
-        - getRandomStr: { var: "request_id", length: 12 }
+        - get_random_str: { var: "request_id", length: 12 }
         - log: "发起登录 user=${user}, request_id=${request_id}"
       after:
-        - log: "登录结束 token=${token}"
+        - mask_token: { source: "token", target: "masked_token" }
+        - log: "登录结束 token=${masked_token}"
     extract:
       token: $.json.user
     validate:

@@ -94,7 +94,7 @@ steps:
   login:
     hooks:
       before:
-        - getRandomStr: { var: "request_id", length: 12 }
+        - get_random_str: { var: "request_id", length: 12 }
         - log: "sending login request"
 ```
 

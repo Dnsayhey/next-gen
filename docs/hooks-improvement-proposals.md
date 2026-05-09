@@ -27,7 +27,7 @@
 **方案：** 执行层检测返回值是否 awaitable——同步函数直接调用，不做 `asyncio.to_thread`。hook 拿到 mutable Context，丢到线程里会引入线程安全问题和顺序感问题。需要阻塞 IO 的 hook 由用户自己写 async 或显式 offload。
 
 ```python
-@register_hook("seedVars")
+@register_hook("seed_vars")
 def seed_vars(ctx, params):       # 同步函数，也能正常工作
     for key, value in params.items():
         ctx.set(key, value)

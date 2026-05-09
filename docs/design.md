@@ -444,7 +444,7 @@ steps:
       url: ${base_url}/post
     hooks:
       before:
-        - getRandomStr: { var: "request_id", length: 12 }
+        - get_random_str: { var: "request_id", length: 12 }
       after:
         - log: "request_id=${request_id}"
 ```
@@ -456,9 +456,12 @@ steps:
 **内置 hook：**
 - `sleep: seconds` 或 `sleep: {seconds: 1}` — 暂停指定秒数
 - `log: message` 或 `log: {message: "...", level: info}` — 输出日志，`level` 支持 `trace/debug/info/success/warning/error/critical`
-- `getTimestamp: var` 或 `getTimestamp: {var: name}` — 写入毫秒时间戳
-- `getTimeStr: var` 或 `getTimeStr: {var: name, format: "%Y-%m-%d %H:%M:%S"}` — 写入格式化时间字符串
-- `getRandomStr: var` 或 `getRandomStr: {var: name, length: 8}` — 写入随机字符串
+- `get_timestamp: var` 或 `get_timestamp: {var: name}` — 写入毫秒时间戳
+- `get_time_str: var` 或 `get_time_str: {var: name, format: "%Y-%m-%d %H:%M:%S"}` — 写入格式化时间字符串
+- `get_random_str: var` 或 `get_random_str: {var: name, length: 8}` — 写入随机字符串
+- `set_vars: {name: value}` — 将变量写入当前 hook 上下文，value 会递归渲染；同一个 `set_vars` 中后面的变量可以引用前面已设置的变量
+
+内置 hook 名统一使用 snake_case。
 
 **步骤内完整顺序：**
 

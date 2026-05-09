@@ -54,7 +54,7 @@ class TestBuiltinHooks:
     """测试内置 hook 注册"""
 
     def test_builtin_hooks_are_registered(self):
-        for name in ["sleep", "log", "getTimestamp", "getTimeStr", "getRandomStr"]:
+        for name in ["sleep", "log", "get_timestamp", "get_time_str", "get_random_str", "set_vars"]:
             assert name in HOOK_REGISTRY
 
     @pytest.mark.asyncio
@@ -65,13 +65,30 @@ class TestBuiltinHooks:
     @pytest.mark.asyncio
     async def test_var_hooks_require_var_param(self):
         with pytest.raises(ValueError, match="必须包含 var"):
-            await HOOK_REGISTRY["getTimestamp"](Context(), {})
+            await HOOK_REGISTRY["get_timestamp"](Context(), {})
 
     @pytest.mark.asyncio
     async def test_get_time_str_sets_formatted_value(self):
         ctx = Context()
 
-        await HOOK_REGISTRY["getTimeStr"](ctx, {"var": "today", "format": "%Y"})
+        await HOOK_REGISTRY["get_time_str"](ctx, {"var": "today", "format": "%Y"})
 
         assert len(ctx.get("today")) == 4
         assert ctx.get("today").isdigit()
+
+    @pytest.mark.asyncio
+    async def test_set_vars_renders_and_sets_values_in_order(self):
+        ctx = Context({"suffix": "abc"})
+
+        await HOOK_REGISTRY["set_vars"](
+            ctx,
+            {
+                "dir": "new_${suffix}",
+                "path": "/${dir}/file.txt",
+                "items": ["${dir}", "${path}"],
+            },
+        )
+
+        assert ctx.get("dir") == "new_abc"
+        assert ctx.get("path") == "/new_abc/file.txt"
+        assert ctx.get("items") == ["new_abc", "/new_abc/file.txt"]

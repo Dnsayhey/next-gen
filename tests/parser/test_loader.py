@@ -134,11 +134,11 @@ class TestParseHookAction:
         assert action.params == {"message": "hello"}
 
     def test_parse_var_shorthand(self):
-        action = parse_hook_action({"getTimestamp": "start"})
+        action = parse_hook_action({"get_timestamp": "start"})
         assert action.params == {"var": "start"}
 
     def test_parse_full_dict(self):
-        action = parse_hook_action({"getRandomStr": {"var": "rid", "length": 12}})
+        action = parse_hook_action({"get_random_str": {"var": "rid", "length": 12}})
         assert action.params == {"var": "rid", "length": 12}
 
     def test_parse_unknown_scalar_hook_uses_value_param(self):

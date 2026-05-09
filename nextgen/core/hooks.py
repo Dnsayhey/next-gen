@@ -78,14 +78,14 @@ async def _hook_sleep_registered(ctx: Context, params: dict) -> None:
     await _hook_sleep(ctx, params)
 
 
-@register_hook("getTimestamp")
+@register_hook("get_timestamp")
 async def _hook_get_timestamp(ctx: Context, params: dict) -> None:
     import time
 
     ctx.set(_required_var(params), int(time.time() * 1000))
 
 
-@register_hook("getTimeStr")
+@register_hook("get_time_str")
 async def _hook_get_time_str(ctx: Context, params: dict) -> None:
     from datetime import datetime
 
@@ -93,7 +93,7 @@ async def _hook_get_time_str(ctx: Context, params: dict) -> None:
     ctx.set(_required_var(params), datetime.now().strftime(fmt))
 
 
-@register_hook("getRandomStr")
+@register_hook("get_random_str")
 async def _hook_get_random_str(ctx: Context, params: dict) -> None:
     import secrets
     import string
@@ -102,6 +102,12 @@ async def _hook_get_random_str(ctx: Context, params: dict) -> None:
     alphabet = string.ascii_letters + string.digits
     value = "".join(secrets.choice(alphabet) for _ in range(length))
     ctx.set(_required_var(params), value)
+
+
+@register_hook("set_vars")
+async def _hook_set_vars(ctx: Context, params: dict) -> None:
+    for key, value in params.items():
+        ctx.set(str(key), ctx.render_value(value))
 
 
 def _required_var(params: dict) -> str:
@@ -121,9 +127,9 @@ def _parse_log_params(raw_params: object) -> dict:
     return {"message": raw_params}
 
 
-@register_hook_param_parser("getTimestamp")
-@register_hook_param_parser("getTimeStr")
-@register_hook_param_parser("getRandomStr")
+@register_hook_param_parser("get_timestamp")
+@register_hook_param_parser("get_time_str")
+@register_hook_param_parser("get_random_str")
 def _parse_var_params(raw_params: object) -> dict:
     return {"var": raw_params}
 
