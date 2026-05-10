@@ -442,8 +442,15 @@ class Scheduler:
                         return_when=asyncio.FIRST_COMPLETED,
                     )
                     for task in done:
-                        active_tasks.pop(task)
-                        task.result()
+                        step = active_tasks.pop(task)
+                        try:
+                            task.result()
+                        except Exception as exc:
+                            error = f"step task failed unexpectedly ({step.node.name}): {exc}"
+                            scheduler_errors.append(error)
+                            step.status = StepStatus.FAILED
+                            step.error = error
+                            logger.exception(error)
                     continue
 
                 if not any(s.status == StepStatus.PENDING for s in self.steps.values()):

@@ -874,6 +874,45 @@ class TestScheduler:
         assert "after_all" in (result.steps[0].error or "")
 
     @pytest.mark.asyncio
+    async def test_unexpected_step_task_failure_still_runs_after_all(
+        self,
+        tmp_path,
+        scheduler_action_registry,
+        monkeypatch,
+    ):
+        trace_file = tmp_path / "unexpected_failure_trace.log"
+
+        @hook("traceAfterUnexpectedFailure")
+        def trace_after_unexpected_failure(file):
+            with open(file, "a", encoding="utf-8") as f:
+                f.write("after_all\n")
+
+        testcase = CaseModel(
+            version=1,
+            mode="parallel",
+            steps={"one": make_step("one")},
+        )
+        testcase.hooks.after_all = [
+            HookAction("traceAfterUnexpectedFailure", {"file": str(trace_file)})
+        ]
+        scheduler = Scheduler(testcase)
+
+        async def broken_run_step(step):
+            raise RuntimeError("internal scheduler boom")
+
+        monkeypatch.setattr(scheduler, "run_step", broken_run_step)
+
+        result = await scheduler.run()
+
+        assert result.status.value == "failed"
+        assert result.steps[0].status == StepStatus.FAILED
+        assert "internal scheduler boom" in (result.steps[0].error or "")
+        assert result.errors == [
+            "step task failed unexpectedly (one): internal scheduler boom"
+        ]
+        assert trace_file.read_text(encoding="utf-8").splitlines() == ["after_all"]
+
+    @pytest.mark.asyncio
     async def test_before_each_failure_marks_current_step_failed(
         self,
         scheduler_action_registry,
