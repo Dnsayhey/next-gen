@@ -11,7 +11,13 @@ from nextgen.core.actions import get_action
 from nextgen.core.condition import evaluate_condition
 from nextgen.core.context import Context
 from nextgen.core.errors import ExecutionError, HookError, ValidationError
-from nextgen.core.hooks import call_hook, get_hook, load_discovered_hooks
+from nextgen.core.hooks import (
+    call_hook,
+    get_hook,
+    load_discovered_hooks,
+    restore_hooks,
+    snapshot_hooks,
+)
 from nextgen.core.model import (
     AssertionNode,
     HookAction,
@@ -367,103 +373,107 @@ class Scheduler:
         """Run the testcase."""
         logger.info(f"Starting testcase execution with {len(self.steps)} steps")
         start_time = time.monotonic()
-
-        if self.testcase.source_path:
-            hook_root = self.testcase.base_dir or "."
-            self.loaded_hook_files = [
-                str(path) for path in load_discovered_hooks(
-                    self.testcase.source_path,
-                    hook_root,
-                )
-            ]
+        hook_snapshot = snapshot_hooks()
 
         try:
-            await self.execute_hooks(
-                self.testcase.hooks.before_all,
-                self.context,
-                phase="before_all",
-            )
-        except Exception as exc:
-            error = str(exc)
-            logger.error(error)
-            self._mark_suite_failure(error)
-            return self._build_result(start_time, [error])
+            if self.testcase.source_path:
+                hook_root = self.testcase.base_dir or "."
+                self.loaded_hook_files = [
+                    str(path) for path in load_discovered_hooks(
+                        self.testcase.source_path,
+                        hook_root,
+                    )
+                ]
 
-        active_tasks: dict[asyncio.Task[None], StepRuntime] = {}
-        scheduler_errors: list[str] = []
+            try:
+                await self.execute_hooks(
+                    self.testcase.hooks.before_all,
+                    self.context,
+                    phase="before_all",
+                )
+            except Exception as exc:
+                error = str(exc)
+                logger.error(error)
+                self._mark_suite_failure(error)
+                return self._build_result(start_time, [error])
 
-        def start_step(step: StepRuntime) -> None:
-            step.status = StepStatus.RUNNING
-            active_tasks[asyncio.create_task(self.run_step(step))] = step
+            active_tasks: dict[asyncio.Task[None], StepRuntime] = {}
+            scheduler_errors: list[str] = []
 
-        while True:
-            if self.testcase.fail_fast and self.has_failure():
-                for s in self.steps.values():
-                    if s.status == StepStatus.PENDING:
-                        s.status = StepStatus.SKIPPED
-                        logger.info(f"fail_fast active, skipping step: {s.node.name}")
-                if not active_tasks:
+            def start_step(step: StepRuntime) -> None:
+                step.status = StepStatus.RUNNING
+                active_tasks[asyncio.create_task(self.run_step(step))] = step
+
+            while True:
+                if self.testcase.fail_fast and self.has_failure():
+                    for s in self.steps.values():
+                        if s.status == StepStatus.PENDING:
+                            s.status = StepStatus.SKIPPED
+                            logger.info(f"fail_fast active, skipping step: {s.node.name}")
+                    if not active_tasks:
+                        break
+
+                pending = [
+                    s for s in self.steps.values()
+                    if s.status == StepStatus.PENDING
+                ]
+
+                if not pending and not active_tasks:
                     break
 
-            pending = [
-                s for s in self.steps.values()
-                if s.status == StepStatus.PENDING
-            ]
+                # Mark steps that should be skipped.
+                for s in pending:
+                    if self.should_skip(s):
+                        s.status = StepStatus.SKIPPED
+                        logger.info(f"Skipping step: {s.node.name}")
 
-            if not pending and not active_tasks:
+                # Find runnable steps.
+                runnable = [s for s in pending if self.is_runnable(s)]
+                if self.testcase.mode == "sequential" and runnable:
+                    runnable = [runnable[0]]
+
+                capacity = self.max_concurrency - len(active_tasks)
+                for step in runnable[:capacity]:
+                    start_step(step)
+
+                if active_tasks:
+                    done, _ = await asyncio.wait(
+                        active_tasks,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    for task in done:
+                        active_tasks.pop(task)
+                        task.result()
+                    continue
+
+                if not any(s.status == StepStatus.PENDING for s in self.steps.values()):
+                    break
+                stuck = [
+                    s.node.name
+                    for s in self.steps.values()
+                    if s.status == StepStatus.PENDING
+                ]
+                error = "scheduler deadlock: pending steps cannot be scheduled: " + ", ".join(stuck)
+                scheduler_errors.append(error)
+                logger.error(error)
+                for s in self.steps.values():
+                    if s.status == StepStatus.PENDING:
+                        s.status = StepStatus.FAILED
+                        s.error = error
                 break
 
-            # Mark steps that should be skipped.
-            for s in pending:
-                if self.should_skip(s):
-                    s.status = StepStatus.SKIPPED
-                    logger.info(f"Skipping step: {s.node.name}")
-
-            # Find runnable steps.
-            runnable = [s for s in pending if self.is_runnable(s)]
-            if self.testcase.mode == "sequential" and runnable:
-                runnable = [runnable[0]]
-
-            capacity = self.max_concurrency - len(active_tasks)
-            for step in runnable[:capacity]:
-                start_step(step)
-
-            if active_tasks:
-                done, _ = await asyncio.wait(
-                    active_tasks,
-                    return_when=asyncio.FIRST_COMPLETED,
+            after_all_errors: list[str] = []
+            try:
+                await self.execute_hooks(
+                    self.testcase.hooks.after_all,
+                    self.context,
+                    phase="after_all",
                 )
-                for task in done:
-                    active_tasks.pop(task)
-                    task.result()
-                continue
+            except Exception as exc:
+                after_all_errors.append(str(exc))
+                logger.error(after_all_errors[-1])
+                self._mark_suite_failure(after_all_errors[-1])
 
-            if not any(s.status == StepStatus.PENDING for s in self.steps.values()):
-                break
-            stuck = [
-                s.node.name
-                for s in self.steps.values()
-                if s.status == StepStatus.PENDING
-            ]
-            error = "scheduler deadlock: pending steps cannot be scheduled: " + ", ".join(stuck)
-            scheduler_errors.append(error)
-            logger.error(error)
-            for s in self.steps.values():
-                if s.status == StepStatus.PENDING:
-                    s.status = StepStatus.FAILED
-                    s.error = error
-            break
-
-        after_all_errors: list[str] = []
-        try:
-            await self.execute_hooks(
-                self.testcase.hooks.after_all,
-                self.context,
-                phase="after_all",
-            )
-        except Exception as exc:
-            after_all_errors.append(str(exc))
-            logger.error(after_all_errors[-1])
-            self._mark_suite_failure(after_all_errors[-1])
-
-        return self._build_result(start_time, scheduler_errors + after_all_errors)
+            return self._build_result(start_time, scheduler_errors + after_all_errors)
+        finally:
+            restore_hooks(hook_snapshot)

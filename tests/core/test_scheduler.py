@@ -702,6 +702,7 @@ class TestScheduler:
             "after_all",
         ]
         assert scheduler.loaded_hook_files == [str(hook_file)]
+        assert "trace" not in HOOK_REGISTRY
 
     @pytest.mark.asyncio
     async def test_before_each_and_after_each_run_once_across_retry(

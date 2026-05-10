@@ -12,6 +12,8 @@ from nextgen.core.hooks import (
     call_hook,
     discover_hooks,
     hook,
+    restore_hooks,
+    snapshot_hooks,
 )
 
 
@@ -69,6 +71,21 @@ class TestBuiltinHooks:
     """Test built-in hook registration"""
 
     def test_builtin_hooks_are_registered(self):
+        for name in ["sleep", "log", "get_timestamp", "get_time_str", "get_random_str", "set_vars"]:
+            assert name in HOOK_REGISTRY
+
+    def test_hook_registry_can_be_snapshotted_and_restored(self):
+        snapshot = snapshot_hooks()
+
+        @hook("temporary_hook")
+        def temporary_hook():
+            return None
+
+        assert "temporary_hook" in HOOK_REGISTRY
+
+        restore_hooks(snapshot)
+
+        assert "temporary_hook" not in HOOK_REGISTRY
         for name in ["sleep", "log", "get_timestamp", "get_time_str", "get_random_str", "set_vars"]:
             assert name in HOOK_REGISTRY
 

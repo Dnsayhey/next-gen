@@ -1,5 +1,8 @@
 """cli.py unit tests"""
 
+from typer.testing import CliRunner
+
+from nextgen.cli import app
 from nextgen.cli import render_terminal_summary
 from nextgen.core.result import (
     StepResult,
@@ -7,6 +10,9 @@ from nextgen.core.result import (
     TestResult as CaseRunResult,
     TestStatus as CaseRunStatus,
 )
+
+
+runner = CliRunner()
 
 
 def test_render_terminal_summary_for_success_result():
@@ -81,3 +87,23 @@ def test_render_terminal_summary_lists_failed_steps_without_metric():
     )
 
     assert "FAILED  verify  GET /health  timeout" in render_terminal_summary(result)
+
+
+def test_run_reports_parse_error_without_traceback(tmp_path):
+    case_file = tmp_path / "bad.yaml"
+    case_file.write_text("version: 1\nsteps: {}\n", encoding="utf-8")
+
+    result = runner.invoke(app, [str(case_file)])
+
+    assert result.exit_code == 2
+    assert "missing steps field or steps is empty" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_run_keeps_stdout_json_clean_when_non_verbose(tmp_path):
+    case_file = tmp_path / "bad.yaml"
+    case_file.write_text("version: 1\nsteps: {}\n", encoding="utf-8")
+
+    result = runner.invoke(app, [str(case_file)])
+
+    assert result.stdout == ""

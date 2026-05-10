@@ -2,11 +2,13 @@
 
 import asyncio
 from pathlib import Path
+import sys
 
 import typer
 from loguru import logger
 
 from nextgen.bootstrap import load_builtin_actions
+from nextgen.core.errors import NextgenError
 from nextgen.core.planner import validate_testcase
 from nextgen.core.scheduler import Scheduler
 from nextgen.core.result import StepResult, StepStatus, TestResult, TestStatus
@@ -67,7 +69,7 @@ def run(
     """Run a testcase."""
     if not verbose:
         logger.remove()
-        logger.add(lambda m: None, level="WARNING")
+        logger.add(sys.stderr, level="WARNING")
 
     try:
         load_builtin_actions()
@@ -92,10 +94,16 @@ def run(
             raise typer.Exit(code=1)
 
     except FileNotFoundError as e:
-        logger.error(str(e))
+        typer.echo(str(e), err=True)
+        raise typer.Exit(code=2)
+    except NextgenError as e:
+        typer.echo(str(e), err=True)
         raise typer.Exit(code=2)
     except ValueError as e:
-        logger.error(f"Invalid testcase format: {e}")
+        typer.echo(f"Invalid testcase format: {e}", err=True)
+        raise typer.Exit(code=2)
+    except RuntimeError as e:
+        typer.echo(str(e), err=True)
         raise typer.Exit(code=2)
 
 

@@ -80,6 +80,17 @@ def get_hook(name: str) -> HookSpec | None:
     return HOOK_REGISTRY.get(name)
 
 
+def snapshot_hooks() -> dict[str, HookSpec]:
+    """Snapshot the hook registry."""
+    return dict(HOOK_REGISTRY)
+
+
+def restore_hooks(snapshot: dict[str, HookSpec]) -> None:
+    """Restore the hook registry."""
+    HOOK_REGISTRY.clear()
+    HOOK_REGISTRY.update(snapshot)
+
+
 def bind_hook_arguments(spec: HookSpec, ctx: Context, raw_params: object) -> dict[str, Any]:
     """Bind YAML parameters according to the hook function signature."""
     params = raw_params if isinstance(raw_params, dict) else _scalar_to_params(spec, raw_params)
