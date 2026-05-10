@@ -1,7 +1,7 @@
 """MySQL driver."""
 
 from typing import Any
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse
 
 import aiomysql
 from loguru import logger

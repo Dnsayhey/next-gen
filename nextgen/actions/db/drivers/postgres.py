@@ -1,6 +1,7 @@
 """PostgreSQL driver."""
 
 from typing import Any
+from urllib.parse import urlparse
 
 import asyncpg
 from loguru import logger
@@ -17,7 +18,11 @@ async def execute(url: str, query: str, params: list[Any] | None = None) -> dict
     Returns:
         {"rows": [...], "row_count": int, "columns": [...]}
     """
-    logger.debug(f"Connecting to PostgreSQL: {url}")
+    parsed = urlparse(url)
+    host = parsed.hostname or "localhost"
+    port = parsed.port or 5432
+    database = parsed.path.lstrip("/")
+    logger.debug(f"Connecting to PostgreSQL: {host}:{port}/{database}")
 
     conn = await asyncpg.connect(url)
     try:

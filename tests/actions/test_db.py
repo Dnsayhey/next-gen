@@ -10,6 +10,7 @@ from nextgen.actions.db.extract import extract_variables
 from nextgen.actions.db.model import DbConfig
 from nextgen.actions.db.validate import validate_result
 from nextgen.actions.db.drivers import get_driver
+from nextgen.actions.db.drivers import postgres
 from nextgen.actions.db.drivers.sqlite import resolve_db_path
 
 
@@ -141,6 +142,33 @@ class TestGetDriver:
     def test_unsupported(self):
         with pytest.raises(ValueError, match="unsupported database type"):
             get_driver("mongodb://localhost/test")
+
+
+class TestPostgresDriver:
+    """Test PostgreSQL driver behavior."""
+
+    @pytest.mark.asyncio
+    async def test_connection_debug_log_omits_credentials(self, monkeypatch):
+        messages = []
+
+        class FakeConnection:
+            async def fetch(self, query):
+                return []
+
+            async def close(self):
+                return None
+
+        async def fake_connect(url):
+            return FakeConnection()
+
+        monkeypatch.setattr(postgres.asyncpg, "connect", fake_connect)
+        monkeypatch.setattr(postgres.logger, "debug", messages.append)
+
+        await postgres.execute("postgres://user:secret@db.example.com:15432/app", "SELECT 1")
+
+        assert messages == ["Connecting to PostgreSQL: db.example.com:15432/app"]
+        assert "secret" not in messages[0]
+        assert "user" not in messages[0]
 
 
 class TestSqliteDriver:
