@@ -25,7 +25,7 @@ from nextgen.core.result import (
     TestResult,
     TestStatus,
 )
-from nextgen.core.planner import build_graph
+from nextgen.core.planner import build_graph, detect_cycle
 
 
 class StepRuntime:
@@ -70,6 +70,7 @@ class Scheduler:
         self.context = Context(testcase.vars, metadata=metadata)
         self.max_concurrency = max_concurrency
         self.graph = build_graph(testcase)
+        detect_cycle(self.graph)
         self.loaded_hook_files: list[str] = []
 
         self.steps: dict[str, StepRuntime] = {
@@ -136,7 +137,7 @@ class Scheduler:
 
     def _build_result(self, start_time: float, errors: list[str] | None = None) -> TestResult:
         """Build a test result from the current runtime state."""
-        total_ms = int((time.time() - start_time) * 1000)
+        total_ms = int((time.monotonic() - start_time) * 1000)
         result_errors = errors or []
         results = []
         for name, runtime in self.steps.items():
@@ -336,7 +337,7 @@ class Scheduler:
 
     async def run_step(self, step: StepRuntime) -> None:
         """Execute one step with a step-level timeout covering all retries."""
-        step.start_time = time.time()
+        step.start_time = time.monotonic()
 
         try:
             if self.testcase.fail_fast and self.has_failure():
@@ -360,12 +361,12 @@ class Scheduler:
             logger.error(f"Step {step.node.name} timed out")
 
         finally:
-            step.end_time = time.time()
+            step.end_time = time.monotonic()
 
     async def run(self) -> TestResult:
         """Run the testcase."""
         logger.info(f"Starting testcase execution with {len(self.steps)} steps")
-        start_time = time.time()
+        start_time = time.monotonic()
 
         if self.testcase.source_path:
             hook_root = self.testcase.base_dir or "."
@@ -389,6 +390,7 @@ class Scheduler:
             return self._build_result(start_time, [error])
 
         active_tasks: dict[asyncio.Task[None], StepRuntime] = {}
+        scheduler_errors: list[str] = []
 
         def start_step(step: StepRuntime) -> None:
             step.status = StepStatus.RUNNING
@@ -438,6 +440,18 @@ class Scheduler:
 
             if not any(s.status == StepStatus.PENDING for s in self.steps.values()):
                 break
+            stuck = [
+                s.node.name
+                for s in self.steps.values()
+                if s.status == StepStatus.PENDING
+            ]
+            error = "scheduler deadlock: pending steps cannot be scheduled: " + ", ".join(stuck)
+            scheduler_errors.append(error)
+            logger.error(error)
+            for s in self.steps.values():
+                if s.status == StepStatus.PENDING:
+                    s.status = StepStatus.FAILED
+                    s.error = error
             break
 
         after_all_errors: list[str] = []
@@ -452,4 +466,4 @@ class Scheduler:
             logger.error(after_all_errors[-1])
             self._mark_suite_failure(after_all_errors[-1])
 
-        return self._build_result(start_time, after_all_errors)
+        return self._build_result(start_time, scheduler_errors + after_all_errors)

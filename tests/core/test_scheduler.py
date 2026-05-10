@@ -7,7 +7,7 @@ import time
 import pytest
 
 from nextgen.core.actions import ActionSpec, register_action, restore_actions, snapshot_actions
-from nextgen.core.errors import ExecutionError, HookError, ValidationError
+from nextgen.core.errors import ExecutionError, HookError, ParseError, ValidationError
 from nextgen.core.errors import ActionExecutionError
 from nextgen.core.model import (
     ActionNode,
@@ -195,6 +195,52 @@ class TestScheduler:
             StepStatus.SKIPPED,
         ]
         assert scheduler_action_registry == ["execute:boom"]
+
+    def test_scheduler_validates_missing_dependencies_when_used_directly(self):
+        testcase = CaseModel(
+            version=1,
+            steps={
+                "after": make_step("after", depends_on=["missing"]),
+            },
+        )
+
+        with pytest.raises(ParseError, match="dependency step does not exist"):
+            Scheduler(testcase)
+
+    def test_scheduler_validates_cycles_when_used_directly(self):
+        testcase = CaseModel(
+            version=1,
+            steps={
+                "a": make_step("a", depends_on=["b"]),
+                "b": make_step("b", depends_on=["a"]),
+            },
+        )
+
+        with pytest.raises(ParseError, match="cycle detected"):
+            Scheduler(testcase)
+
+    @pytest.mark.asyncio
+    async def test_scheduler_marks_unschedulable_pending_steps_failed(self, monkeypatch, scheduler_action_registry):
+        testcase = CaseModel(
+            version=1,
+            mode="parallel",
+            steps={
+                "stuck": make_step("stuck"),
+            },
+        )
+
+        scheduler = Scheduler(testcase)
+        monkeypatch.setattr(scheduler, "is_runnable", lambda step: False)
+
+        result = await scheduler.run()
+
+        assert result.status.value == "failed"
+        assert result.errors == [
+            "scheduler deadlock: pending steps cannot be scheduled: stuck"
+        ]
+        assert result.steps[0].status == StepStatus.FAILED
+        assert result.steps[0].error == result.errors[0]
+        assert scheduler_action_registry == []
 
     @pytest.mark.asyncio
     async def test_fail_fast_skips_parallel_steps_waiting_for_concurrency_slot(
