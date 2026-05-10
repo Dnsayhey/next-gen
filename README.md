@@ -74,9 +74,30 @@ uv run nextgen demo.yaml --parallel=5
 # 显示详细日志
 uv run nextgen demo.yaml --verbose
 
+# 从环境文件加载变量（可传多个，后者覆盖前者）
+uv run nextgen demo.yaml --env env/base.yaml --env env/staging.yaml
+
 # 或使用 python -m 方式
 uv run python -m nextgen.cli demo.yaml
 ```
+
+## 环境文件
+
+`--env` / `-e` 可从 YAML 或 JSON 文件加载变量，并覆盖 testcase 中的 `vars`。多个环境文件按传入顺序合并，后面的文件覆盖前面的同名变量。
+
+```yaml
+# env/staging.yaml
+base_url: https://staging.example.com
+db_url: postgres://user:pass@localhost:5432/app
+timeout: 5
+debug: false
+```
+
+```bash
+uv run nextgen examples/full_demo.yaml --env env/staging.yaml
+```
+
+环境文件顶层必须是对象，key 必须是字符串。建议将本地私密配置放在未提交的文件中，例如 `env/local.yaml` 或 `*.local.yaml`。
 
 ## 示例
 

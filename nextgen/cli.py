@@ -12,6 +12,7 @@ from nextgen.core.errors import NextgenError
 from nextgen.core.planner import validate_testcase
 from nextgen.core.scheduler import Scheduler
 from nextgen.core.result import StepResult, StepStatus, TestResult, TestStatus
+from nextgen.parser.env_loader import load_env_files
 from nextgen.parser.loader import load_testcase
 from nextgen.reporter.json_reporter import JsonReporter
 
@@ -63,6 +64,12 @@ def format_failed_step(step: StepResult) -> str:
 @app.command()
 def run(
     file: Path = typer.Argument(..., help="Testcase YAML file path"),
+    env_files: list[Path] | None = typer.Option(
+        None,
+        "--env",
+        "-e",
+        help="Environment variable file, YAML or JSON. Can be passed multiple times.",
+    ),
     parallel: int = typer.Option(10, "--parallel", "-p", help="Maximum concurrency"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show verbose logs"),
 ) -> None:
@@ -76,6 +83,10 @@ def run(
 
         # Load testcase.
         testcase = load_testcase(file)
+        testcase.vars = {
+            **testcase.vars,
+            **load_env_files(env_files or []),
+        }
 
         # Validate DAG.
         validate_testcase(testcase)

@@ -107,3 +107,90 @@ def test_run_keeps_stdout_json_clean_when_non_verbose(tmp_path):
     result = runner.invoke(app, [str(case_file)])
 
     assert result.stdout == ""
+
+
+def test_run_env_file_overrides_testcase_vars(tmp_path, monkeypatch):
+    case_file = tmp_path / "case.yaml"
+    case_file.write_text(
+        "\n".join([
+            "version: 1",
+            "vars:",
+            "  base_url: https://default.example.com",
+            "steps:",
+            "  one:",
+            "    request:",
+            "      method: GET",
+            "      url: ${base_url}/get",
+        ]),
+        encoding="utf-8",
+    )
+    env_file = tmp_path / "staging.yaml"
+    env_file.write_text("base_url: https://staging.example.com\n", encoding="utf-8")
+    captured = {}
+
+    class FakeScheduler:
+        def __init__(self, testcase, max_concurrency=10):
+            captured["vars"] = testcase.vars
+
+        async def run(self):
+            return CaseRunResult(
+                testcase="case.yaml",
+                total_duration_ms=1,
+                status=CaseRunStatus.SUCCESS,
+                steps=[],
+            )
+
+    monkeypatch.setattr("nextgen.cli.Scheduler", FakeScheduler)
+
+    result = runner.invoke(app, [str(case_file), "--env", str(env_file)])
+
+    assert result.exit_code == 0
+    assert captured["vars"] == {"base_url": "https://staging.example.com"}
+
+
+def test_run_multiple_env_files_apply_in_order(tmp_path, monkeypatch):
+    case_file = tmp_path / "case.yaml"
+    case_file.write_text(
+        "\n".join([
+            "version: 1",
+            "steps:",
+            "  one:",
+            "    request:",
+            "      method: GET",
+            "      url: ${base_url}/get",
+        ]),
+        encoding="utf-8",
+    )
+    base_env = tmp_path / "base.yaml"
+    override_env = tmp_path / "override.yaml"
+    base_env.write_text("base_url: https://base.example.com\ntimeout: 3\n", encoding="utf-8")
+    override_env.write_text("base_url: https://override.example.com\n", encoding="utf-8")
+    captured = {}
+
+    class FakeScheduler:
+        def __init__(self, testcase, max_concurrency=10):
+            captured["vars"] = testcase.vars
+
+        async def run(self):
+            return CaseRunResult(
+                testcase="case.yaml",
+                total_duration_ms=1,
+                status=CaseRunStatus.SUCCESS,
+                steps=[],
+            )
+
+    monkeypatch.setattr("nextgen.cli.Scheduler", FakeScheduler)
+
+    result = runner.invoke(app, [
+        str(case_file),
+        "--env",
+        str(base_env),
+        "--env",
+        str(override_env),
+    ])
+
+    assert result.exit_code == 0
+    assert captured["vars"] == {
+        "base_url": "https://override.example.com",
+        "timeout": 3,
+    }
