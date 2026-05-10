@@ -10,6 +10,8 @@ from jsonpath_ng.ext import parse as jsonpath_parse
 
 from nextgen.core.errors import ParseError
 
+MISSING = object()
+
 
 @dataclass(frozen=True)
 class ExtractRule:
@@ -61,7 +63,7 @@ def extract_value(source: Any, raw_rule: str | dict[str, Any]) -> Any:
 
     try:
         if rule.method == "jsonpath":
-            value = jsonpath_value(source, rule.expr)
+            value = jsonpath_value(source, rule.expr, default=MISSING)
         elif rule.method == "regex":
             value = _extract_regex(source, rule.expr, rule.group)
         else:
@@ -71,16 +73,20 @@ def extract_value(source: Any, raw_rule: str | dict[str, Any]) -> Any:
             return rule.default
         raise
 
-    if value is None and rule.has_default:
+    if value is MISSING:
+        if rule.has_default:
+            return rule.default
+        return None
+    if rule.method == "regex" and value is None and rule.has_default:
         return rule.default
     return value
 
 
-def jsonpath_value(source: Any, expr: str) -> Any:
+def jsonpath_value(source: Any, expr: str, default: Any = None) -> Any:
     """Return the JSONPath match value, or all values when multiple paths match."""
     matches = jsonpath_parse(expr).find(source)
     if not matches:
-        return None
+        return default
     if len(matches) == 1:
         return matches[0].value
     return [match.value for match in matches]

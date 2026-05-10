@@ -5,6 +5,7 @@ from typing import Any
 from loguru import logger
 
 from nextgen.core.context import Context
+from nextgen.core.errors import ActionExecutionError
 from nextgen.actions.http.path import http_extract_value
 
 
@@ -30,8 +31,8 @@ def extract_variables(
             logger.debug(f"Extracted variable: {var_name} = {value}")
 
         except Exception as e:
-            logger.error(f"Failed to extract variable: {var_name} = {rule}, error: {e}")
-            extracted[var_name] = None
-            ctx.set(var_name, None)
+            message = f"Failed to extract variable: {var_name} = {rule}, error: {e}"
+            logger.error(message)
+            raise ActionExecutionError(message, {"type": "http_extract", "variable": var_name, "rule": rule}) from e
 
     return extracted

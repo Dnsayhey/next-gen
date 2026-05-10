@@ -34,6 +34,10 @@ class TestExtractValue:
 
         assert value is None
 
+    def test_jsonpath_default_only_applies_to_missing_match(self):
+        assert extract_value({"users": []}, {"jsonpath": "$.users[0].name", "default": "anon"}) == "anon"
+        assert extract_value({"users": [{"name": None}]}, {"jsonpath": "$.users[0].name", "default": "anon"}) is None
+
 
 class TestJsonpathValue:
     """Test shared JSONPath extraction helper"""

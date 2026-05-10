@@ -3,6 +3,7 @@
 import pytest
 
 from nextgen.core.context import Context
+from nextgen.core.errors import ActionExecutionError
 from nextgen.core.files import load_file_content, resolve_case_path
 from nextgen.core.model import AssertionNode
 from nextgen.actions.http.client import execute_request
@@ -118,6 +119,56 @@ class TestRequestConfig:
             "body": {"code": 0},
         }
         assert result.metric == {"label": "status_code", "value": 200}
+
+    @pytest.mark.asyncio
+    async def test_execute_request_renders_body_once_for_snapshot_and_request(self, monkeypatch):
+        captured = {}
+
+        class CountingContext(Context):
+            def __init__(self, initial):
+                super().__init__(initial)
+                self.rendered_password_count = 0
+
+            def render(self, value, _depth=0):
+                if value == "${password}":
+                    self.rendered_password_count += 1
+                return super().render(value, _depth)
+
+        class FakeResponse:
+            status_code = 200
+            headers = {}
+
+            def json(self):
+                return {"ok": True}
+
+        class FakeClient:
+            def __init__(self, timeout=None):
+                return None
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return None
+
+            async def request(self, **kwargs):
+                captured.update(kwargs)
+                return FakeResponse()
+
+        monkeypatch.setattr("nextgen.actions.http.client.httpx.AsyncClient", FakeClient)
+
+        request = RequestConfig(
+            method="POST",
+            url="https://example.com/login",
+            json={"password": "${password}"},
+        )
+        ctx = CountingContext({"password": "secret"})
+
+        result = await execute_request(request, ctx)
+
+        assert captured["json"] == {"password": "secret"}
+        assert result.action_input["body"] == {"password": "secret"}
+        assert ctx.rendered_password_count == 1
 
 
 class TestExtractVariables:
@@ -255,7 +306,7 @@ class TestExtractVariables:
         extracted = extract_variables(result, config, ctx)
         assert extracted["csrf"] == ""
 
-    def test_extract_failure_sets_none_consistent_with_db(self):
+    def test_extract_failure_raises_action_execution_error(self):
         result = {
             "status_code": 200,
             "body": "not json",
@@ -263,9 +314,21 @@ class TestExtractVariables:
         }
         ctx = Context()
         config = {"bad": {"regex": r"(", "group": 1}}
-        extracted = extract_variables(result, config, ctx)
-        assert extracted["bad"] is None
+        with pytest.raises(ActionExecutionError, match="Failed to extract variable"):
+            extract_variables(result, config, ctx)
         assert ctx.get("bad") is None
+
+    def test_jsonpath_default_only_applies_to_missing_path_not_none_value(self):
+        result = {
+            "status_code": 200,
+            "body": {"data": {"token": None}},
+            "headers": {},
+        }
+        ctx = Context()
+        config = {"token": {"jsonpath": "$.data.token", "default": "fallback"}}
+        extracted = extract_variables(result, config, ctx)
+        assert extracted["token"] is None
+        assert ctx.get("token") is None
 
 
 class TestValidateResponse:

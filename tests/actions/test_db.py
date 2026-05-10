@@ -190,7 +190,7 @@ class TestExtractVariables:
         extracted = extract_variables(result, config, ctx)
         assert extracted["value"] is None
 
-    def test_extract_failure_sets_none_and_clears_old_context_value(self):
+    def test_extract_failure_raises_action_execution_error_and_keeps_old_context_value(self):
         result = {
             "rows": [{"id": 1}],
             "row_count": 1,
@@ -198,9 +198,9 @@ class TestExtractVariables:
         }
         ctx = Context({"value": "old"})
         config = {"value": {"regex": r"(", "group": 1}}
-        extracted = extract_variables(result, config, ctx)
-        assert extracted["value"] is None
-        assert ctx.get("value") is None
+        with pytest.raises(ActionExecutionError, match="Failed to extract variable"):
+            extract_variables(result, config, ctx)
+        assert ctx.get("value") == "old"
 
     def test_extract_with_jsonpath_object_rule(self):
         result = {

@@ -5,6 +5,7 @@ from typing import Any
 from loguru import logger
 
 from nextgen.core.context import Context
+from nextgen.core.errors import ActionExecutionError
 from nextgen.core.extract import extract_value
 
 
@@ -37,8 +38,8 @@ def extract_variables(
             ctx.set(var_name, value)
             logger.debug(f"Extracted variable: {var_name} = {value}")
         except Exception as e:
-            logger.warning(f"Failed to extract variable: {var_name} ({rule}): {e}")
-            extracted[var_name] = None
-            ctx.set(var_name, None)
+            message = f"Failed to extract variable: {var_name} ({rule}): {e}"
+            logger.error(message)
+            raise ActionExecutionError(message, {"type": "db_extract", "variable": var_name, "rule": rule}) from e
 
     return extracted

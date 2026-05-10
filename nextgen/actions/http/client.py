@@ -15,26 +15,30 @@ from .model import RequestConfig
 from .utils import check_content_type_conflict
 
 
-def _body_preview(body_type: str | None, request: RequestConfig, ctx: Context) -> Any:
+def _render_body(body_type: str | None, request: RequestConfig, ctx: Context) -> Any:
     if body_type == "json":
         return ctx.render_dict(request.json or {})
     if body_type == "form":
         return ctx.render_dict(request.form or {})
     if body_type == "multipart":
-        multipart_data = ctx.render_dict(request.multipart or {})
+        return ctx.render_dict(request.multipart or {})
+    if body_type == "raw":
+        return ctx.render(request.body)
+    return None
+
+
+def _body_preview(body_type: str | None, rendered_body: Any) -> Any:
+    if body_type == "multipart" and isinstance(rendered_body, dict):
         preview = {}
-        for key, value in multipart_data.items():
+        for key, value in rendered_body.items():
             if isinstance(value, str) and value.startswith("@"):
                 preview[key] = {"source": value}
             else:
                 preview[key] = value
         return preview
-    if body_type == "raw":
-        rendered_body = ctx.render(request.body)
-        if isinstance(rendered_body, str) and rendered_body.startswith("@"):
-            return {"source": rendered_body}
-        return rendered_body
-    return None
+    if body_type == "raw" and isinstance(rendered_body, str) and rendered_body.startswith("@"):
+        return {"source": rendered_body}
+    return rendered_body
 
 
 def _build_action_input(
@@ -43,6 +47,7 @@ def _build_action_input(
     headers: dict[str, Any],
     params: dict[str, Any],
     body_type: str | None,
+    rendered_body: Any,
 ) -> dict[str, Any]:
     return {
         "type": "http",
@@ -51,7 +56,7 @@ def _build_action_input(
         "headers": headers,
         "params": params,
         "body_type": body_type,
-        "body": _body_preview(body_type, request, ctx),
+        "body": _body_preview(body_type, rendered_body),
         "timeout": request.timeout,
     }
 
@@ -72,6 +77,7 @@ async def execute_request(
     headers = ctx.render_dict(request.headers)
     params = ctx.render_dict(request.params)
     body_type = request.body_type()
+    rendered_body = _render_body(body_type, request, ctx)
 
     # Check header conflicts.
     check_content_type_conflict(request)
@@ -80,7 +86,7 @@ async def execute_request(
     if request.content_type and "content-type" not in {k.lower() for k in headers}:
         headers["content-type"] = request.content_type
 
-    action_input = _build_action_input(request, ctx, headers, params, body_type)
+    action_input = _build_action_input(request, ctx, headers, params, body_type, rendered_body)
     logger.info(f"Sending request: {request.method} {url}")
 
     # Configure timeout.
@@ -90,32 +96,29 @@ async def execute_request(
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             if body_type == "json":
-                json_body = ctx.render_dict(request.json)
                 response = await client.request(
                     method=request.method,
                     url=url,
                     headers=headers,
                     params=params,
-                    json=json_body,
+                    json=rendered_body,
                 )
 
             elif body_type == "form":
-                form_data = ctx.render_dict(request.form)
                 response = await client.request(
                     method=request.method,
                     url=url,
                     headers=headers,
                     params=params,
-                    data=form_data,
+                    data=rendered_body,
                 )
 
             elif body_type == "multipart":
                 # Multipart data needs special handling for @-prefixed files.
                 files = {}
                 form_fields = {}
-                multipart_data = ctx.render_dict(request.multipart)
 
-                for key, value in multipart_data.items():
+                for key, value in (rendered_body or {}).items():
                     if isinstance(value, str) and value.startswith("@"):
                         # File upload.
                         file_content = load_file_content(value, base_dir)
@@ -139,7 +142,7 @@ async def execute_request(
 
             elif body_type == "raw":
                 # Handle @-prefixed files.
-                raw_content = load_file_content(request.body, base_dir)
+                raw_content = load_file_content(rendered_body, base_dir)
                 if isinstance(raw_content, str):
                     raw_content = ctx.render(raw_content)
 

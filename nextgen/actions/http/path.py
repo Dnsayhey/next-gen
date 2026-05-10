@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from nextgen.core.extract import extract_value, jsonpath_value, parse_extract_rule
+from nextgen.core.extract import MISSING, extract_value, jsonpath_value, parse_extract_rule
 
 _HTTP_META_PREFIX = "$$."
 
@@ -19,13 +19,15 @@ def http_extract_value(result: dict[str, Any], rule: str | dict[str, Any]) -> An
         if parsed.method == "regex":
             return extract_value(result.get("body", {}), rule)
         try:
-            value = _http_jsonpath_value(result, parsed.expr)
+            value = _http_jsonpath_value(result, parsed.expr, default=MISSING)
         except Exception:
             if parsed.has_default:
                 return parsed.default
             raise
-        if value is None and parsed.has_default:
-            return parsed.default
+        if value is MISSING:
+            if parsed.has_default:
+                return parsed.default
+            return None
         return value
 
     return extract_value(result.get("body", {}), rule)
@@ -36,11 +38,11 @@ def http_jsonpath_value(result: dict[str, Any], expr: str) -> Any:
     return _http_jsonpath_value(result, expr)
 
 
-def _http_jsonpath_value(result: dict[str, Any], expr: str) -> Any:
+def _http_jsonpath_value(result: dict[str, Any], expr: str, default: Any = None) -> Any:
     if expr.startswith(_HTTP_META_PREFIX):
         meta_expr = "$." + expr[len(_HTTP_META_PREFIX):]
-        return jsonpath_value(_metadata_source(result), _normalize_header_path(meta_expr))
-    return jsonpath_value(result.get("body", {}), expr)
+        return jsonpath_value(_metadata_source(result), _normalize_header_path(meta_expr), default=default)
+    return jsonpath_value(result.get("body", {}), expr, default=default)
 
 
 def _metadata_source(result: dict[str, Any]) -> dict[str, Any]:

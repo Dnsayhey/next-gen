@@ -22,19 +22,31 @@ def _op_ne(left: Any, right: Any) -> bool:
 
 
 def _op_gt(left: Any, right: Any) -> bool:
-    return left > right
+    try:
+        return left > right
+    except TypeError:
+        return False
 
 
 def _op_lt(left: Any, right: Any) -> bool:
-    return left < right
+    try:
+        return left < right
+    except TypeError:
+        return False
 
 
 def _op_gte(left: Any, right: Any) -> bool:
-    return left >= right
+    try:
+        return left >= right
+    except TypeError:
+        return False
 
 
 def _op_lte(left: Any, right: Any) -> bool:
-    return left <= right
+    try:
+        return left <= right
+    except TypeError:
+        return False
 
 
 def _op_contains(left: Any, right: Any) -> bool:

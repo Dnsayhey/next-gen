@@ -43,6 +43,10 @@ class TestEvaluateOperator:
         assert evaluate_operator("in", "a", 1) is False
         assert evaluate_operator("not_in", "a", 1) is False
 
+    @pytest.mark.parametrize("op", ["gt", "lt", "gte", "lte"])
+    def test_ordering_operators_return_false_for_incompatible_types(self, op):
+        assert evaluate_operator(op, "a", 1) is False
+
     def test_unknown_operator(self):
         with pytest.raises(ValueError, match="unsupported operator"):
             evaluate_operator("unknown", 1, 1)
