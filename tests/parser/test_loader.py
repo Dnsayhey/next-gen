@@ -21,6 +21,7 @@ from nextgen.parser.loader import (
     parse_hook_action,
     parse_assertions,
     parse_step_hooks,
+    parse_tags,
     parse_suite,
     parse_testcase_hooks,
     parse_step,
@@ -285,6 +286,22 @@ class TestParseStep:
         assert step.hooks.before[0].params == "before"
         assert step.hooks.after[0].params == {"message": "after", "level": "warning"}
 
+    def test_step_with_tags(self):
+        data = {
+            "request": {"method": "GET", "url": "http://test.com"},
+            "tags": ["auth", "smoke"],
+        }
+        step = parse_step("test", data)
+        assert step.tags == ["auth", "smoke"]
+
+    def test_parse_tags_rejects_non_list(self):
+        with pytest.raises(ParseError, match="tags must be a list"):
+            parse_tags("smoke", "test")
+
+    def test_parse_tags_rejects_empty_tag(self):
+        with pytest.raises(ParseError, match="non-empty strings"):
+            parse_tags([""], "test")
+
 
 class TestParseTestcase:
     """Test parse_testcase"""
@@ -309,6 +326,7 @@ class TestParseTestcase:
             "version": 1,
             "steps": {
                 "login": {
+                    "tags": ["auth"],
                     "matrix": {
                         "user": ["admin", "user1"],
                     },
@@ -341,6 +359,8 @@ class TestParseTestcase:
             "login[user=admin]",
             "login[user=user1]",
         ]
+        assert testcase.steps["login[user=admin]"].tags == ["auth"]
+        assert testcase.steps["login[user=user1]"].tags == ["auth"]
 
     def test_matrix_cartesian_product(self):
         data = {

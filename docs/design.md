@@ -596,9 +596,49 @@ Dry-run 是严格计划校验器：任意 testcase 解析失败或 DAG 校验失
 
 ---
 
-## 7. AST 设计
+## 7. Tags / Step Filtering
 
-### 7.1 StepNode
+Step 可以声明标签：
+
+```yaml
+steps:
+  login:
+    tags: [auth]
+    request: ...
+
+  profile:
+    tags: [smoke]
+    depends_on: [login]
+    request: ...
+```
+
+CLI：
+
+```bash
+nextgen case.yaml --tags smoke
+nextgen case.yaml --tags smoke --skip-tags slow
+```
+
+过滤发生在解析、matrix 展开、原始 DAG 校验之后，scheduler 之前。过滤后的 testcase 会再次校验 DAG。
+
+语义：
+
+- 未传 `--tags` / `--skip-tags` 时不做过滤
+- 多个 `--tags` 是 OR 关系
+- 被 include tag 选中的 step 会递归包含所有依赖
+- 多个 `--skip-tags` 是 OR 关系
+- `--skip-tags` 优先级高于 `--tags`
+- target step 自己同时被 include 和 skip 时会被静默排除
+- 被选中的 step 依赖 skipped step 时会报错
+- 过滤后没有任何 step 时会报错
+- suite setup testcase 和普通 testcase 都应用同一套 tag filter；过滤 setup step 可能影响 setup exports
+- testcase 级 hooks、vars、source_path、base_dir 等元数据会保留
+
+---
+
+## 8. AST 设计
+
+### 8.1 StepNode
 
 ```python
 @dataclass
@@ -619,9 +659,10 @@ class StepNode:
     set_vars: dict[str, str]      # 设置变量
     config: dict[str, Any]
     hooks: StepHooks
+    tags: list[str]
 ```
 
-### 7.2 Suite
+### 8.2 Suite
 
 ```python
 @dataclass
@@ -636,7 +677,7 @@ class Suite:
 
 ---
 
-### 7.3 AssertionNode
+### 8.3 AssertionNode
 
 ```python
 @dataclass
@@ -646,7 +687,7 @@ class AssertionNode:
     right: Any   # 期望值
 ```
 
-### 7.4 HookAction / Hooks
+### 8.4 HookAction / Hooks
 
 ```python
 @dataclass
@@ -669,7 +710,7 @@ class TestCaseHooks:
     after_each: list[HookAction]
 ```
 
-### 7.5 TestCase
+### 8.5 TestCase
 
 ```python
 @dataclass
@@ -686,9 +727,9 @@ class TestCase:
 
 ---
 
-## 8. 核心模块
+## 9. 核心模块
 
-### 8.1 Parser（DSL → AST）
+### 9.1 Parser（DSL → AST）
 
 **职责：**
 - 加载 YAML/JSON 文件
@@ -710,7 +751,7 @@ def register_action(spec: ActionSpec) -> None: ...
 def get_action(name: str) -> ActionSpec | None: ...
 ```
 
-### 8.2 Context（变量系统）
+### 9.2 Context（变量系统）
 
 **职责：**
 - 管理全局变量和提取的变量
@@ -732,7 +773,7 @@ class Context:
 - `set_vars` 和 step hooks 的局部可见性
 - `extract` / `export` 成功后再回写全局上下文
 
-### 8.3 Planner（DAG 规划）
+### 9.3 Planner（DAG 规划）
 
 **职责：**
 - 构建依赖图
@@ -747,7 +788,7 @@ def get_execution_order(graph: dict[str, list[str]]) -> list[list[str]]: ...
 
 `get_execution_order` 是 planner 的辅助能力，用于 dry-run、可视化和调试分层拓扑顺序；当前 scheduler 采用运行时动态调度，不直接依赖该函数。
 
-### 8.4 Scheduler（调度器）
+### 9.4 Scheduler（调度器）
 
 **职责：**
 - 状态机驱动的 DAG 调度
@@ -759,7 +800,7 @@ def get_execution_order(graph: dict[str, list[str]]) -> list[list[str]]: ...
 
 Scheduler 从 Action 注册表读取 `execute / extract / validate / summarize`，不再维护独立 action 实现注册表。
 
-### 8.5 Hooks（hook 注册表）
+### 9.5 Hooks（hook 注册表）
 
 ```python
 @dataclass(frozen=True)
@@ -785,7 +826,7 @@ Hook 函数通过签名绑定 YAML 参数。声明 `ctx` 或 `context` 时自动
 返回非 `None` 值会被忽略并记录 warning，写变量应显式调用 `ctx.set(...)`。
 同名 hook 默认禁止重复注册，需要覆盖时必须显式传入 `override=True`。
 
-### 8.6 Action
+### 9.6 Action
 
 action 实现通过 `ActionSpec` 注册到 action 注册表：
 ```python
@@ -817,7 +858,7 @@ ActionResult(
 当 action 在拿到业务结果前失败（如网络/连接异常）时，建议抛出 `ActionExecutionError(message, action_input)`，
 调度器会将 `action_input` 带入步骤报告，便于排查。
 
-### 8.7 DB Action
+### 9.7 DB Action
 
 支持 PostgreSQL、MySQL、SQLite 三种数据库。
 
@@ -866,7 +907,7 @@ steps:
 
 ---
 
-## 9. 状态机设计
+## 10. 状态机设计
 
 ### 状态流转
 
@@ -892,7 +933,7 @@ class StepStatus(str, Enum):
 
 ---
 
-## 10. 项目结构
+## 11. 项目结构
 
 ```text
 nextgen/
@@ -906,6 +947,7 @@ nextgen/
 │   ├── condition.py    # 条件评估器
 │   ├── operators.py    # 通用断言操作符
 │   ├── extract.py      # 通用提取规则
+│   ├── filtering.py    # tag 过滤
 │   ├── files.py        # 文件路径辅助
 │   ├── result.py       # 执行结果模型
 │   ├── dry_run.py      # Dry-run 执行计划序列化
@@ -941,7 +983,7 @@ nextgen/
 
 ---
 
-## 11. 扩展新 Action 类型
+## 12. 扩展新 Action 类型
 
 ```python
 from dataclasses import dataclass, field
@@ -980,7 +1022,7 @@ register_action(ActionSpec(
 
 ---
 
-## 12. CLI 使用
+## 13. CLI 使用
 
 ```bash
 # 基本执行
@@ -1007,6 +1049,9 @@ nextgen smoke.yaml --report junit --output reports/junit.xml
 # 只生成执行计划，不执行 action 或 hook
 nextgen smoke.yaml --dry-run
 
+# 按 step tag 过滤
+nextgen smoke.yaml --tags smoke --skip-tags slow
+
 # 执行 suite 文件
 nextgen smoke.yaml
 
@@ -1022,7 +1067,7 @@ uv run nextgen demo.yaml
 
 ---
 
-## 13. 迭代路线
+## 14. 迭代路线
 
 ### 已完成
 
@@ -1045,16 +1090,16 @@ uv run nextgen demo.yaml
 * [x] fail-fast 策略
 * [x] Suite / 多文件执行 v1
 * [x] Dry-run / execution plan
+* [x] Tags / step filtering
 
 ### 待实现
 
-* [ ] Tags / step filtering
 * [ ] HTTP session reuse
 * [ ] 目录发现
 
 ---
 
-## 14. 关键设计原则
+## 15. 关键设计原则
 
 * **DSL ≠ 执行逻辑**：DSL 只描述"做什么"，不描述"怎么做"
 * **AST ≠ Runtime**：AST 是静态描述，Runtime 是动态执行

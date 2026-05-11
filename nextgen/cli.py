@@ -12,6 +12,7 @@ from nextgen.bootstrap import load_builtin_actions
 from nextgen.core.dry_run import dry_run_inputs
 from nextgen.core.errors import NextgenError, ReporterError
 from nextgen.core.files import dedupe_paths
+from nextgen.core.filtering import filter_testcase_by_tags
 from nextgen.core.planner import validate_testcase
 from nextgen.core.scheduler import Scheduler
 from nextgen.core.suite import SuiteRunner
@@ -115,6 +116,8 @@ def run(
     report: str = typer.Option("json", "--report", help="Report format"),
     output: Path | None = typer.Option(None, "--output", "-o", help="Write report to a file"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print execution plan without running actions"),
+    tags: list[str] | None = typer.Option(None, "--tags", help="Run steps with tag. Can be repeated."),
+    skip_tags: list[str] | None = typer.Option(None, "--skip-tags", help="Skip steps with tag. Can be repeated."),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show verbose logs"),
 ) -> None:
     """Run a testcase or suite."""
@@ -124,9 +127,11 @@ def run(
 
     try:
         load_builtin_actions()
+        include_tag_set = set(tags or [])
+        skip_tag_set = set(skip_tags or [])
 
         if dry_run:
-            plan = dry_run_inputs(files, env_files or [])
+            plan = dry_run_inputs(files, env_files or [], include_tag_set, skip_tag_set)
             rendered_plan = json.dumps(plan, indent=2, ensure_ascii=False)
             if output is None:
                 print(rendered_plan)
@@ -135,7 +140,13 @@ def run(
                 output.write_text(rendered_plan, encoding="utf-8")
             return
 
-        result = asyncio.run(run_inputs(files, env_files or [], parallel))
+        result = asyncio.run(run_inputs(
+            files,
+            env_files or [],
+            parallel,
+            include_tag_set,
+            skip_tag_set,
+        ))
 
         # Output report.
         rendered = render_report(result, report)
@@ -177,6 +188,8 @@ async def run_inputs(
     files: list[Path],
     env_files: list[Path],
     parallel: int,
+    include_tags: set[str] | None = None,
+    skip_tags: set[str] | None = None,
 ) -> TestResult | SuiteResult:
     """Run CLI inputs and return either a testcase or suite result."""
     # Keep these input classification rules aligned with dry_run_inputs.
@@ -190,8 +203,10 @@ async def run_inputs(
                 load_suite(files[0]),
                 cli_env_files=env_files,
                 max_concurrency=parallel,
+                include_tags=include_tags,
+                skip_tags=skip_tags,
             ).run()
-        return await run_single_testcase(files[0], env_files, parallel)
+        return await run_single_testcase(files[0], env_files, parallel, include_tags, skip_tags)
 
     kinds = [classify_file(file) for file in files]
     if any(kind == FileKind.SUITE for kind in kinds):
@@ -208,6 +223,8 @@ async def run_inputs(
         suite,
         cli_env_files=env_files,
         max_concurrency=parallel,
+        include_tags=include_tags,
+        skip_tags=skip_tags,
     ).run()
 
 
@@ -215,6 +232,8 @@ async def run_single_testcase(
     file: Path,
     env_files: list[Path],
     parallel: int,
+    include_tags: set[str] | None = None,
+    skip_tags: set[str] | None = None,
 ) -> TestResult:
     """Run one testcase file."""
     testcase = load_testcase(file)
@@ -223,6 +242,7 @@ async def run_single_testcase(
         **load_env_files(env_files),
     }
     validate_testcase(testcase)
+    testcase = filter_testcase_by_tags(testcase, include_tags, skip_tags)
 
     result = await Scheduler(testcase, max_concurrency=parallel).run()
     result.testcase = str(file)

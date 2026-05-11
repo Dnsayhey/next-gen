@@ -87,6 +87,12 @@ uv run nextgen smoke.yaml --report junit --output reports/junit.xml
 # 只生成执行计划，不真正执行 HTTP/DB action 或 hooks
 uv run nextgen smoke.yaml --dry-run
 
+# 只运行带 smoke 标签的步骤，并自动包含它们的依赖
+uv run nextgen smoke.yaml --tags smoke
+
+# 跳过 slow 标签步骤
+uv run nextgen smoke.yaml --skip-tags slow
+
 # 执行 suite 文件
 uv run nextgen smoke.yaml
 
@@ -181,6 +187,45 @@ uv run nextgen examples/hook_demo.yaml --verbose
 ```
 
 `examples/hook_demo.yaml` 会自动加载同目录下的 `examples/hooks.py`，用来演示自定义 hook 的发现与注册。
+
+## Tags / Step Filtering
+
+Step 可以声明标签：
+
+```yaml
+steps:
+  login:
+    tags: [auth]
+    request: ...
+
+  profile:
+    tags: [smoke]
+    depends_on: [login]
+    request: ...
+
+  audit:
+    tags: [slow]
+    request: ...
+```
+
+CLI 可以按标签选择或排除步骤：
+
+```bash
+uv run nextgen case.yaml --tags smoke
+uv run nextgen case.yaml --tags smoke --skip-tags slow
+```
+
+过滤语义：
+
+- 多个 `--tags` 是 OR 关系，选中带任一 include tag 的 step
+- 被选中的 step 会自动递归包含所有 `depends_on` 依赖
+- 多个 `--skip-tags` 是 OR 关系，带任一 skip tag 的 step 会被排除
+- `--skip-tags` 优先级高于 `--tags`
+- 如果被选中的 step 依赖了被 skip 的 step，会报错并返回 exit code 2
+- 如果 target step 自己同时被 include 和 skip，v1 会静默排除它
+- 过滤后没有任何 step 会报错
+- suite 中 setup testcase 和普通 testcase 都会应用同一套 tag filter；如果 setup 中负责 `export` 的 step 被过滤掉，后续普通 testcase 可能缺少对应变量
+- dry-run 会展示过滤后的 steps、execution order 和 filters
 
 ## Dry-run / 执行计划
 
@@ -325,7 +370,7 @@ nextgen/
 
 ## 扩展新 Action 类型
 
-完整扩展示例见 [设计文档 §11](docs/design.md#11-扩展新-action-类型)。注册入口是 `ActionSpec`：
+完整扩展示例见 [设计文档 §12](docs/design.md#12-扩展新-action-类型)。注册入口是 `ActionSpec`：
 
 ```python
 from nextgen import ActionSpec, register_action

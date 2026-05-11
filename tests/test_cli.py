@@ -244,10 +244,19 @@ def test_run_suite_file_uses_suite_runner(tmp_path, monkeypatch):
     suite_file.write_text("name: smoke\ntests:\n  - case.yaml\n", encoding="utf-8")
 
     class FakeSuiteRunner:
-        def __init__(self, suite, cli_env_files=None, max_concurrency=10):
+        def __init__(
+            self,
+            suite,
+            cli_env_files=None,
+            max_concurrency=10,
+            include_tags=None,
+            skip_tags=None,
+        ):
             assert suite.name == "smoke"
             assert cli_env_files == []
             assert max_concurrency == 10
+            assert include_tags == set()
+            assert skip_tags == set()
 
         async def run(self):
             return SuiteResult(
@@ -280,9 +289,18 @@ def test_run_multiple_files_returns_suite_result(tmp_path, monkeypatch):
     case_two.write_text(content, encoding="utf-8")
 
     class FakeSuiteRunner:
-        def __init__(self, suite, cli_env_files=None, max_concurrency=10):
+        def __init__(
+            self,
+            suite,
+            cli_env_files=None,
+            max_concurrency=10,
+            include_tags=None,
+            skip_tags=None,
+        ):
             assert suite.name == "cli"
             assert suite.tests == [str(case_one.resolve()), str(case_two.resolve())]
+            assert include_tags == set()
+            assert skip_tags == set()
 
         async def run(self):
             return SuiteResult(
@@ -504,3 +522,126 @@ def test_run_dry_run_reports_parse_error_without_traceback(tmp_path):
     assert result.exit_code == 2
     assert "missing steps field or steps is empty" in result.stderr
     assert "Traceback" not in result.stderr
+
+
+def test_run_applies_tag_filters_before_scheduler(tmp_path, monkeypatch):
+    case_file = tmp_path / "case.yaml"
+    case_file.write_text(
+        "\n".join([
+            "version: 1",
+            "steps:",
+            "  login:",
+            "    tags: [auth]",
+            "    request:",
+            "      method: GET",
+            "      url: https://example.com/login",
+            "  profile:",
+            "    tags: [smoke]",
+            "    depends_on: [login]",
+            "    request:",
+            "      method: GET",
+            "      url: https://example.com/profile",
+            "  audit:",
+            "    tags: [slow]",
+            "    request:",
+            "      method: GET",
+            "      url: https://example.com/audit",
+        ]),
+        encoding="utf-8",
+    )
+    captured = {}
+
+    class FakeScheduler:
+        def __init__(self, testcase, max_concurrency=10):
+            captured["steps"] = list(testcase.steps)
+
+        async def run(self):
+            return CaseRunResult(
+                testcase="case.yaml",
+                total_duration_ms=1,
+                status=CaseRunStatus.SUCCESS,
+                steps=[],
+            )
+
+    monkeypatch.setattr("nextgen.cli.Scheduler", FakeScheduler)
+
+    result = runner.invoke(app, [
+        str(case_file),
+        "--tags",
+        "smoke",
+        "--skip-tags",
+        "slow",
+    ])
+
+    assert result.exit_code == 0
+    assert captured["steps"] == ["login", "profile"]
+
+
+def test_run_suite_passes_tag_filters_to_suite_runner(tmp_path, monkeypatch):
+    suite_file = tmp_path / "suite.yaml"
+    suite_file.write_text("name: smoke\ntests:\n  - case.yaml\n", encoding="utf-8")
+
+    class FakeSuiteRunner:
+        def __init__(
+            self,
+            suite,
+            cli_env_files=None,
+            max_concurrency=10,
+            include_tags=None,
+            skip_tags=None,
+        ):
+            assert include_tags == {"smoke"}
+            assert skip_tags == {"slow"}
+
+        async def run(self):
+            return SuiteResult(
+                suite="smoke",
+                total_duration_ms=1,
+                status=CaseRunStatus.SUCCESS,
+                tests=[],
+            )
+
+    monkeypatch.setattr("nextgen.cli.SuiteRunner", FakeSuiteRunner)
+
+    result = runner.invoke(app, [
+        str(suite_file),
+        "--tags",
+        "smoke",
+        "--skip-tags",
+        "slow",
+    ])
+
+    assert result.exit_code == 0
+
+
+def test_run_tag_filter_conflict_exits_with_error(tmp_path):
+    case_file = tmp_path / "case.yaml"
+    case_file.write_text(
+        "\n".join([
+            "version: 1",
+            "steps:",
+            "  login:",
+            "    tags: [auth]",
+            "    request:",
+            "      method: GET",
+            "      url: https://example.com/login",
+            "  profile:",
+            "    tags: [smoke]",
+            "    depends_on: [login]",
+            "    request:",
+            "      method: GET",
+            "      url: https://example.com/profile",
+        ]),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(app, [
+        str(case_file),
+        "--tags",
+        "smoke",
+        "--skip-tags",
+        "auth",
+    ])
+
+    assert result.exit_code == 2
+    assert "requires skipped dependency 'login'" in result.stderr

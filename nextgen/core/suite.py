@@ -3,6 +3,7 @@
 import time
 from pathlib import Path
 
+from nextgen.core.filtering import filter_testcase_by_tags
 from nextgen.core.model import Suite
 from nextgen.core.planner import validate_testcase
 from nextgen.core.result import StepResult, StepStatus, SuiteResult, TestResult, TestStatus
@@ -20,10 +21,14 @@ class SuiteRunner:
         *,
         cli_env_files: list[Path] | None = None,
         max_concurrency: int = 10,
+        include_tags: set[str] | None = None,
+        skip_tags: set[str] | None = None,
     ):
         self.suite = suite
         self.cli_env_files = cli_env_files or []
         self.max_concurrency = max_concurrency
+        self.include_tags = include_tags or set()
+        self.skip_tags = skip_tags or set()
 
     async def run(self) -> SuiteResult:
         """Run the suite sequentially."""
@@ -56,6 +61,7 @@ class SuiteRunner:
             testcase = load_testcase(path)
             testcase.vars = {**testcase.vars, **env}
             validate_testcase(testcase)
+            testcase = filter_testcase_by_tags(testcase, self.include_tags, self.skip_tags)
 
             result = await Scheduler(testcase, max_concurrency=self.max_concurrency).run()
             result.testcase = str(path)

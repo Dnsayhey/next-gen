@@ -82,6 +82,7 @@ class StepNode:
     set_vars: dict[str, str] = field(default_factory=dict)  # Variables to set.
     config: dict[str, Any] = field(default_factory=dict)
     hooks: StepHooks = field(default_factory=StepHooks)
+    tags: list[str] = field(default_factory=list)
 
 
 @dataclass

@@ -198,6 +198,8 @@ Output includes:
 
 ### 4. Tags / Step Filtering
 
+Status: **implemented in v1**.
+
 Tags improve day-to-day authoring and selective execution.
 
 Example:
@@ -216,14 +218,19 @@ nextgen case.yaml --tags smoke
 nextgen case.yaml --tags auth --skip-tags slow
 ```
 
-Design decisions:
+Implemented decisions:
 
-- Add `tags: list[str]` to `StepNode`.
+- `tags: list[str]` on `StepNode`.
 - Filtering should happen after parsing and graph validation but before scheduling.
 - Default behavior should include dependencies of selected steps.
+- `--skip-tags` takes precedence over `--tags`.
+- If a selected step requires a skipped dependency, filtering fails with exit code 2.
+- If a selected target step is itself skipped, it is silently excluded.
+- Suite setup testcases and normal testcases both receive the same tag filter; filtering setup steps can affect setup exports.
+- Dry-run shows the filtered step set and active filters.
 - Avoid putting tag filtering directly in the scheduler main loop.
 
-Open design point:
+Deferred:
 
 - Add an option later for strict filtering where missing selected dependencies are reported instead of auto-included.
 
@@ -254,4 +261,4 @@ These are valuable, but should wait until suite/reporting/filtering foundations 
 
 ## Near-Term Recommendation
 
-Start with **tags / step filtering** next. Suite execution, JUnit reporting, and dry-run planning now cover the core team-scale and CI-facing workflow.
+Start with **HTTP session reuse** next. Suite execution, JUnit reporting, dry-run planning, and step filtering now cover the core team-scale and CI-facing workflow.

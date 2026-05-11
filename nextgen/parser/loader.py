@@ -263,6 +263,21 @@ def parse_step_hooks(data: dict[str, Any] | None) -> StepHooks:
     )
 
 
+def parse_tags(data: Any, step_name: str) -> list[str]:
+    """Parse step tags."""
+    if data is None:
+        return []
+    if not isinstance(data, list):
+        raise ParseError(f"step '{step_name}' tags must be a list")
+
+    tags: list[str] = []
+    for tag in data:
+        if not isinstance(tag, str) or not tag:
+            raise ParseError(f"step '{step_name}' tags must contain non-empty strings")
+        tags.append(tag)
+    return tags
+
+
 def parse_testcase_hooks(data: dict[str, Any] | None) -> TestCaseHooks:
     """Parse testcase-level hooks."""
     if data is None:
@@ -323,6 +338,7 @@ def parse_step(name: str, data: dict[str, Any]) -> StepNode:
         set_vars=data.get("set_vars", {}),
         config=data.get("config", {}),
         hooks=parse_step_hooks(data.get("hooks")),
+        tags=parse_tags(data.get("tags"), name),
     )
 
 

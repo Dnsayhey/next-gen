@@ -2,7 +2,7 @@
 
 import pytest
 
-from nextgen.core.model import Suite, TestCase as CaseModel
+from nextgen.core.model import ActionNode, StepNode, Suite, TestCase as CaseModel
 from nextgen.core.result import (
     StepResult,
     StepStatus,
@@ -182,3 +182,62 @@ async def test_suite_runner_keeps_running_after_normal_testcase_error(monkeypatc
     ]
     assert result.tests[0].errors == ["bad testcase"]
     assert result.tests[0].steps[0].status == StepStatus.FAILED
+
+
+@pytest.mark.asyncio
+async def test_suite_runner_applies_tag_filters_to_setup_and_tests(monkeypatch):
+    seen_steps = []
+
+    def fake_load_testcase(path):
+        return CaseModel(
+            version=1,
+            source_path=str(path),
+            steps={
+                "login": StepNode(
+                    name="login",
+                    action=ActionNode(type="request", config={"method": "GET", "url": "https://example.com/login"}),
+                    tags=["auth"],
+                ),
+                "profile": StepNode(
+                    name="profile",
+                    action=ActionNode(type="request", config={"method": "GET", "url": "https://example.com/profile"}),
+                    depends_on=["login"],
+                    tags=["smoke"],
+                ),
+                "audit": StepNode(
+                    name="audit",
+                    action=ActionNode(type="request", config={"method": "GET", "url": "https://example.com/audit"}),
+                    tags=["slow"],
+                ),
+            },
+        )
+
+    class FakeScheduler:
+        def __init__(self, testcase, max_concurrency=10):
+            self.testcase = testcase
+            seen_steps.append(list(testcase.steps))
+
+        async def run(self):
+            return CaseRunResult(
+                testcase=self.testcase.source_path or "",
+                total_duration_ms=1,
+                status=CaseRunStatus.SUCCESS,
+                steps=[],
+            )
+
+    monkeypatch.setattr("nextgen.core.suite.load_testcase", fake_load_testcase)
+    monkeypatch.setattr("nextgen.core.suite.Scheduler", FakeScheduler)
+    suite = Suite(
+        name="smoke",
+        setup=["/tmp/setup.yaml"],
+        tests=["/tmp/case.yaml"],
+    )
+
+    result = await SuiteRunner(
+        suite,
+        include_tags={"smoke"},
+        skip_tags={"slow"},
+    ).run()
+
+    assert result.status == CaseRunStatus.SUCCESS
+    assert seen_steps == [["login", "profile"], ["login", "profile"]]

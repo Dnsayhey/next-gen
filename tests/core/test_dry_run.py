@@ -23,6 +23,7 @@ def write_case(path: Path, extra_step_lines: list[str] | None = None) -> None:
         "  base_url: https://default.example.com",
         "steps:",
         "  login:",
+        "    tags: [auth]",
         "    request:",
         "      method: POST",
         "      url: ${base_url}/login",
@@ -40,6 +41,7 @@ def test_dry_run_testcase_serializes_plan_without_rendering_values(tmp_path):
     write_case(case_file, [
         "  profile:",
         "    depends_on: [login]",
+        "    tags: [smoke]",
         "    when:",
         "      - eq: ['${env}', staging]",
         "    hooks:",
@@ -62,10 +64,12 @@ def test_dry_run_testcase_serializes_plan_without_rendering_values(tmp_path):
     assert plan["declared_export_keys"] == ["token"]
     assert plan["execution_order"] == [["login"], ["profile"]]
     assert plan["steps"][0]["summary"] == "POST ${base_url}/login"
+    assert plan["steps"][0]["tags"] == ["auth"]
     assert plan["steps"][1]["has_when"] is True
     assert plan["steps"][1]["hooks"] == {"before": 1, "after": 0}
     assert plan["steps"][1]["retry"] == 2
     assert plan["steps"][1]["timeout"] == 5
+    assert plan["filters"] == {"tags": [], "skip_tags": []}
 
 
 def test_dry_run_matrix_uses_expanded_step_names(tmp_path):
@@ -160,3 +164,25 @@ def test_dry_run_suite_parse_error_fails_fast(tmp_path):
 
     with pytest.raises(ParseError, match="missing steps field"):
         dry_run_suite(suite, [])
+
+
+def test_dry_run_applies_tag_filters(tmp_path):
+    case_file = tmp_path / "case.yaml"
+    write_case(case_file, [
+        "  profile:",
+        "    depends_on: [login]",
+        "    tags: [smoke]",
+        "    request:",
+        "      method: GET",
+        "      url: ${base_url}/profile",
+        "  audit:",
+        "    tags: [slow]",
+        "    request:",
+        "      method: GET",
+        "      url: ${base_url}/audit",
+    ])
+
+    plan = dry_run_testcase(case_file, [], include_tags={"smoke"}, skip_tags={"slow"})
+
+    assert [step["name"] for step in plan["steps"]] == ["login", "profile"]
+    assert plan["filters"] == {"tags": ["smoke"], "skip_tags": ["slow"]}
