@@ -1,5 +1,7 @@
 """cli.py unit tests"""
 
+import json
+
 from typer.testing import CliRunner
 
 from nextgen.cli import app
@@ -435,3 +437,70 @@ def test_run_prints_junit_to_stdout(tmp_path, monkeypatch):
     assert result.exit_code == 0
     assert result.stdout.startswith("<?xml")
     assert "<testsuites>" in result.stdout
+
+
+def test_run_dry_run_prints_plan_without_executing_scheduler(tmp_path, monkeypatch):
+    case_file = tmp_path / "case.yaml"
+    case_file.write_text(
+        "\n".join([
+            "version: 1",
+            "steps:",
+            "  one:",
+            "    request:",
+            "      method: GET",
+            "      url: https://example.com",
+        ]),
+        encoding="utf-8",
+    )
+
+    class ForbiddenScheduler:
+        def __init__(self, testcase, max_concurrency=10):
+            raise AssertionError("scheduler should not run during dry-run")
+
+    monkeypatch.setattr("nextgen.cli.Scheduler", ForbiddenScheduler)
+
+    result = runner.invoke(app, [str(case_file), "--dry-run"])
+
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert data["testcase"] == str(case_file.resolve())
+    assert data["steps"][0]["name"] == "one"
+    assert result.stderr == ""
+
+
+def test_run_dry_run_writes_plan_to_output_file(tmp_path):
+    case_file = tmp_path / "case.yaml"
+    output_file = tmp_path / "plans" / "plan.json"
+    case_file.write_text(
+        "\n".join([
+            "version: 1",
+            "steps:",
+            "  one:",
+            "    request:",
+            "      method: GET",
+            "      url: https://example.com",
+        ]),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(app, [
+        str(case_file),
+        "--dry-run",
+        "--output",
+        str(output_file),
+    ])
+
+    assert result.exit_code == 0
+    assert result.stdout == ""
+    assert json.loads(output_file.read_text(encoding="utf-8"))["testcase"] == str(case_file.resolve())
+
+
+def test_run_dry_run_reports_parse_error_without_traceback(tmp_path):
+    case_file = tmp_path / "bad.yaml"
+    case_file.write_text("version: 1\nsteps: {}\n", encoding="utf-8")
+
+    result = runner.invoke(app, [str(case_file), "--dry-run"])
+
+    assert result.exit_code == 2
+    assert "missing steps field or steps is empty" in result.stderr
+    assert "Traceback" not in result.stderr

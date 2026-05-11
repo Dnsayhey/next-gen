@@ -24,3 +24,16 @@ def load_file_content(path_str: str, base_dir: str | Path | None = None) -> byte
     if file_path.suffix.lower() in text_exts:
         return file_path.read_text(encoding="utf-8")
     return file_path.read_bytes()
+
+
+def dedupe_paths(files: list[Path]) -> list[Path]:
+    """De-duplicate paths by resolved location while preserving first occurrence."""
+    seen: set[Path] = set()
+    deduped: list[Path] = []
+    for file in files:
+        resolved = file.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        deduped.append(resolved)
+    return deduped

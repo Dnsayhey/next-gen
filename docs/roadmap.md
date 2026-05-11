@@ -168,9 +168,11 @@ Implemented behavior:
 
 ### 3. Dry-Run / Execution Plan
 
-Dry-run should use the same discovery and planning code as suite execution.
+Status: **implemented**.
 
-Expected behavior:
+Dry-run uses the same loading and planning code as suite execution, then stops before scheduler/action execution.
+
+Implemented behavior:
 
 - Load testcase or suite.
 - Load env files.
@@ -178,8 +180,12 @@ Expected behavior:
 - Validate DAGs.
 - Discover hook files.
 - Print execution plan without running actions.
+- Do not load or execute hooks.
+- Output env variable keys, not values.
+- Keep action summaries unresolved/raw, such as `POST ${base_url}/login`.
+- Fail fast with exit code 2 on parse or DAG validation errors.
 
-Useful output:
+Output includes:
 
 - testcase file paths
 - mode and fail_fast
@@ -187,6 +193,8 @@ Useful output:
 - matrix-expanded step names
 - env variable keys, not values
 - discovered hook files
+- declared export keys
+- suite setup export keys and `runtime_setup_exports`
 
 ### 4. Tags / Step Filtering
 
@@ -246,4 +254,4 @@ These are valuable, but should wait until suite/reporting/filtering foundations 
 
 ## Near-Term Recommendation
 
-Start with **dry-run / execution plan** next. Suite / multi-file execution and JUnit reporting now provide the aggregate model and first CI-facing report format.
+Start with **tags / step filtering** next. Suite execution, JUnit reporting, and dry-run planning now cover the core team-scale and CI-facing workflow.

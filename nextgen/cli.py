@@ -1,6 +1,7 @@
 """CLI entrypoint."""
 
 import asyncio
+import json
 from pathlib import Path
 import sys
 
@@ -8,7 +9,9 @@ import typer
 from loguru import logger
 
 from nextgen.bootstrap import load_builtin_actions
+from nextgen.core.dry_run import dry_run_inputs
 from nextgen.core.errors import NextgenError, ReporterError
+from nextgen.core.files import dedupe_paths
 from nextgen.core.planner import validate_testcase
 from nextgen.core.scheduler import Scheduler
 from nextgen.core.suite import SuiteRunner
@@ -111,6 +114,7 @@ def run(
     parallel: int = typer.Option(10, "--parallel", "-p", help="Maximum concurrency"),
     report: str = typer.Option("json", "--report", help="Report format"),
     output: Path | None = typer.Option(None, "--output", "-o", help="Write report to a file"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Print execution plan without running actions"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show verbose logs"),
 ) -> None:
     """Run a testcase or suite."""
@@ -120,6 +124,16 @@ def run(
 
     try:
         load_builtin_actions()
+
+        if dry_run:
+            plan = dry_run_inputs(files, env_files or [])
+            rendered_plan = json.dumps(plan, indent=2, ensure_ascii=False)
+            if output is None:
+                print(rendered_plan)
+            else:
+                output.parent.mkdir(parents=True, exist_ok=True)
+                output.write_text(rendered_plan, encoding="utf-8")
+            return
 
         result = asyncio.run(run_inputs(files, env_files or [], parallel))
 
@@ -165,6 +179,7 @@ async def run_inputs(
     parallel: int,
 ) -> TestResult | SuiteResult:
     """Run CLI inputs and return either a testcase or suite result."""
+    # Keep these input classification rules aligned with dry_run_inputs.
     if not files:
         raise ValueError("at least one file is required")
 
@@ -212,20 +227,5 @@ async def run_single_testcase(
     result = await Scheduler(testcase, max_concurrency=parallel).run()
     result.testcase = str(file)
     return result
-
-
-def dedupe_paths(files: list[Path]) -> list[Path]:
-    """De-duplicate paths by resolved location while preserving first occurrence."""
-    seen: set[Path] = set()
-    deduped: list[Path] = []
-    for file in files:
-        resolved = file.resolve()
-        if resolved in seen:
-            continue
-        seen.add(resolved)
-        deduped.append(resolved)
-    return deduped
-
-
 if __name__ == "__main__":
     app()

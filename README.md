@@ -84,6 +84,9 @@ uv run nextgen demo.yaml --report junit
 # 写报告到文件，终端摘要仍输出到 stderr
 uv run nextgen smoke.yaml --report junit --output reports/junit.xml
 
+# 只生成执行计划，不真正执行 HTTP/DB action 或 hooks
+uv run nextgen smoke.yaml --dry-run
+
 # 执行 suite 文件
 uv run nextgen smoke.yaml
 
@@ -178,6 +181,28 @@ uv run nextgen examples/hook_demo.yaml --verbose
 ```
 
 `examples/hook_demo.yaml` 会自动加载同目录下的 `examples/hooks.py`，用来演示自定义 hook 的发现与注册。
+
+## Dry-run / 执行计划
+
+`--dry-run` 会完整加载 testcase 或 suite、合并 env 文件、展开 matrix、校验 DAG、发现 `hooks.py`，然后输出 JSON 执行计划，但不会执行 action，也不会加载或执行 hook。
+
+```bash
+uv run nextgen smoke.yaml --dry-run
+uv run nextgen tests/user/profile.yaml --dry-run --env env/staging.yaml
+```
+
+Dry-run 输出只包含 env key，不输出 env value，避免泄露 token/password 等敏感配置。步骤里的 `summary` 来自动作的原始配置摘要，变量模板不会被渲染，例如 `POST ${base_url}/login`。
+
+单 testcase 计划包含：
+
+- `testcase`、`mode`、`fail_fast`
+- `env_keys`
+- `hook_files`
+- `declared_export_keys`
+- `steps`
+- `execution_order`
+
+Suite 计划还会包含 `setup`、`tests`、`setup_export_keys` 和 `runtime_setup_exports: true`。其中 setup export 的实际值只有运行时才能知道，dry-run 只静态列出声明的 export key。
 
 ## 执行语义（mode / depends_on / fail_fast）
 
@@ -300,7 +325,7 @@ nextgen/
 
 ## 扩展新 Action 类型
 
-完整扩展示例见 [设计文档 §10](docs/design.md#10-扩展新-action-类型)。注册入口是 `ActionSpec`：
+完整扩展示例见 [设计文档 §11](docs/design.md#11-扩展新-action-类型)。注册入口是 `ActionSpec`：
 
 ```python
 from nextgen import ActionSpec, register_action

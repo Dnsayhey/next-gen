@@ -559,9 +559,46 @@ Setup testcase 成功后，会收集成功步骤的 `exported` 变量作为 suit
 
 ---
 
-## 6. AST 设计
+## 6. Dry-run / 执行计划
 
-### 6.1 StepNode
+`--dry-run` 复用正常执行的加载和规划链路，但在 scheduler/action 之前停止：
+
+- 加载 testcase 或 suite
+- 加载并合并 env 文件
+- 展开 matrix steps
+- 校验 DAG
+- 发现 `hooks.py`
+- 输出 JSON plan
+
+Dry-run 不会执行 action，不会加载或执行 hook，也不会输出 env value。输出中的 `summary` 是基于未渲染 action config 生成的原始摘要，例如 `POST ${base_url}/login`。
+
+单 testcase 计划包含：
+
+- `testcase`
+- `mode`
+- `fail_fast`
+- `env_keys`
+- `hook_files`
+- `declared_export_keys`
+- `steps`
+- `execution_order`
+
+Suite 计划包含：
+
+- `suite`
+- `env_keys`
+- `setup_export_keys`
+- `runtime_setup_exports`
+- `setup`
+- `tests`
+
+Dry-run 是严格计划校验器：任意 testcase 解析失败或 DAG 校验失败都会让 dry-run 失败并返回 exit code 2。
+
+---
+
+## 7. AST 设计
+
+### 7.1 StepNode
 
 ```python
 @dataclass
@@ -584,7 +621,7 @@ class StepNode:
     hooks: StepHooks
 ```
 
-### 6.2 Suite
+### 7.2 Suite
 
 ```python
 @dataclass
@@ -599,7 +636,7 @@ class Suite:
 
 ---
 
-### 6.3 AssertionNode
+### 7.3 AssertionNode
 
 ```python
 @dataclass
@@ -609,7 +646,7 @@ class AssertionNode:
     right: Any   # 期望值
 ```
 
-### 6.4 HookAction / Hooks
+### 7.4 HookAction / Hooks
 
 ```python
 @dataclass
@@ -632,7 +669,7 @@ class TestCaseHooks:
     after_each: list[HookAction]
 ```
 
-### 6.5 TestCase
+### 7.5 TestCase
 
 ```python
 @dataclass
@@ -649,9 +686,9 @@ class TestCase:
 
 ---
 
-## 7. 核心模块
+## 8. 核心模块
 
-### 7.1 Parser（DSL → AST）
+### 8.1 Parser（DSL → AST）
 
 **职责：**
 - 加载 YAML/JSON 文件
@@ -673,7 +710,7 @@ def register_action(spec: ActionSpec) -> None: ...
 def get_action(name: str) -> ActionSpec | None: ...
 ```
 
-### 7.2 Context（变量系统）
+### 8.2 Context（变量系统）
 
 **职责：**
 - 管理全局变量和提取的变量
@@ -695,7 +732,7 @@ class Context:
 - `set_vars` 和 step hooks 的局部可见性
 - `extract` / `export` 成功后再回写全局上下文
 
-### 7.3 Planner（DAG 规划）
+### 8.3 Planner（DAG 规划）
 
 **职责：**
 - 构建依赖图
@@ -710,7 +747,7 @@ def get_execution_order(graph: dict[str, list[str]]) -> list[list[str]]: ...
 
 `get_execution_order` 是 planner 的辅助能力，用于 dry-run、可视化和调试分层拓扑顺序；当前 scheduler 采用运行时动态调度，不直接依赖该函数。
 
-### 7.4 Scheduler（调度器）
+### 8.4 Scheduler（调度器）
 
 **职责：**
 - 状态机驱动的 DAG 调度
@@ -722,7 +759,7 @@ def get_execution_order(graph: dict[str, list[str]]) -> list[list[str]]: ...
 
 Scheduler 从 Action 注册表读取 `execute / extract / validate / summarize`，不再维护独立 action 实现注册表。
 
-### 7.5 Hooks（hook 注册表）
+### 8.5 Hooks（hook 注册表）
 
 ```python
 @dataclass(frozen=True)
@@ -748,7 +785,7 @@ Hook 函数通过签名绑定 YAML 参数。声明 `ctx` 或 `context` 时自动
 返回非 `None` 值会被忽略并记录 warning，写变量应显式调用 `ctx.set(...)`。
 同名 hook 默认禁止重复注册，需要覆盖时必须显式传入 `override=True`。
 
-### 7.6 Action
+### 8.6 Action
 
 action 实现通过 `ActionSpec` 注册到 action 注册表：
 ```python
@@ -780,7 +817,7 @@ ActionResult(
 当 action 在拿到业务结果前失败（如网络/连接异常）时，建议抛出 `ActionExecutionError(message, action_input)`，
 调度器会将 `action_input` 带入步骤报告，便于排查。
 
-### 7.7 DB Action
+### 8.7 DB Action
 
 支持 PostgreSQL、MySQL、SQLite 三种数据库。
 
@@ -829,7 +866,7 @@ steps:
 
 ---
 
-## 8. 状态机设计
+## 9. 状态机设计
 
 ### 状态流转
 
@@ -855,7 +892,7 @@ class StepStatus(str, Enum):
 
 ---
 
-## 9. 项目结构
+## 10. 项目结构
 
 ```text
 nextgen/
@@ -871,6 +908,7 @@ nextgen/
 │   ├── extract.py      # 通用提取规则
 │   ├── files.py        # 文件路径辅助
 │   ├── result.py       # 执行结果模型
+│   ├── dry_run.py      # Dry-run 执行计划序列化
 │   ├── errors.py       # 通用错误层级
 │   ├── hooks.py        # hook 注册表与发现逻辑
 │   ├── scheduler.py    # 单 testcase 调度器
@@ -903,7 +941,7 @@ nextgen/
 
 ---
 
-## 10. 扩展新 Action 类型
+## 11. 扩展新 Action 类型
 
 ```python
 from dataclasses import dataclass, field
@@ -942,7 +980,7 @@ register_action(ActionSpec(
 
 ---
 
-## 11. CLI 使用
+## 12. CLI 使用
 
 ```bash
 # 基本执行
@@ -966,6 +1004,9 @@ nextgen demo.yaml --report junit
 # 写报告到文件
 nextgen smoke.yaml --report junit --output reports/junit.xml
 
+# 只生成执行计划，不执行 action 或 hook
+nextgen smoke.yaml --dry-run
+
 # 执行 suite 文件
 nextgen smoke.yaml
 
@@ -981,7 +1022,7 @@ uv run nextgen demo.yaml
 
 ---
 
-## 12. 迭代路线
+## 13. 迭代路线
 
 ### 已完成
 
@@ -1003,17 +1044,17 @@ uv run nextgen demo.yaml
 * [x] 指数退避重试
 * [x] fail-fast 策略
 * [x] Suite / 多文件执行 v1
+* [x] Dry-run / execution plan
 
 ### 待实现
 
-* [ ] Dry-run / execution plan
 * [ ] Tags / step filtering
 * [ ] HTTP session reuse
 * [ ] 目录发现
 
 ---
 
-## 13. 关键设计原则
+## 14. 关键设计原则
 
 * **DSL ≠ 执行逻辑**：DSL 只描述"做什么"，不描述"怎么做"
 * **AST ≠ Runtime**：AST 是静态描述，Runtime 是动态执行
