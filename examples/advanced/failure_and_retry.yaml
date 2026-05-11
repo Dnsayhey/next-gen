@@ -1,0 +1,33 @@
+version: 1
+fail_fast: false
+
+vars:
+  base_url: https://httpbin.org
+
+steps:
+  retry_then_fail:
+    request:
+      method: GET
+      url: ${base_url}/status/500
+    config:
+      retry: 2
+      retry_delay: 1
+    validate:
+      - eq: [$$.status_code, 200]
+
+  independent_still_runs:
+    request:
+      method: GET
+      url: ${base_url}/get
+      params:
+        still_runs: true
+    validate:
+      - eq: [$.args.still_runs, "true"]
+
+  skipped_dependency:
+    depends_on: [retry_then_fail]
+    request:
+      method: GET
+      url: ${base_url}/get
+    validate:
+      - eq: [$$.status_code, 200]

@@ -27,5 +27,6 @@ Thumbs.db
 .coverage
 htmlcov/
 examples/*.db
+examples/**/*.db
 
 private_examples

@@ -1,0 +1,34 @@
+version: 1
+
+vars:
+  base_url: https://httpbin.org
+  demo_user: guide-user
+
+steps:
+  create_session:
+    tags: [auth, smoke]
+    request:
+      method: POST
+      url: ${base_url}/post
+      json:
+        username: ${demo_user}
+        token: demo-token
+    extract:
+      username: $.json.username
+      token: $.json.token
+    export:
+      auth_header: Bearer ${token}
+    validate:
+      - eq: [$.json.username, "${demo_user}"]
+
+  use_session:
+    depends_on: [create_session]
+    tags: [smoke]
+    request:
+      method: GET
+      url: ${base_url}/headers
+      headers:
+        Authorization: ${auth_header}
+    validate:
+      - eq: [$$.status_code, 200]
+      - eq: [$.headers.Authorization, Bearer demo-token]

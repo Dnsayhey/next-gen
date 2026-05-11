@@ -1,0 +1,25 @@
+version: 1
+
+vars:
+  base_url: https://httpbin.org
+
+hooks:
+  before_all:
+    - get_random_str: { var: "run_id", length: 8 }
+    - log: "advanced hooks run_id=${run_id}"
+
+steps:
+  create_token:
+    request:
+      method: POST
+      url: ${base_url}/post
+      json:
+        token: token-${run_id}
+    hooks:
+      after:
+        - mask_value: { source: "token", target: "masked_token" }
+        - log: "masked token=${masked_token}"
+    extract:
+      token: $.json.token
+    validate:
+      - contains: [$.json.token, token]

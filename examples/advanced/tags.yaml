@@ -1,0 +1,39 @@
+version: 1
+
+vars:
+  base_url: https://httpbin.org
+
+steps:
+  login:
+    tags: [auth]
+    request:
+      method: POST
+      url: ${base_url}/post
+      json:
+        token: tag-token
+    extract:
+      token: $.json.token
+    validate:
+      - eq: [$.json.token, tag-token]
+
+  profile:
+    depends_on: [login]
+    tags: [smoke, profile]
+    request:
+      method: GET
+      url: ${base_url}/get
+      params:
+        token: ${token}
+    validate:
+      - eq: [$.args.token, tag-token]
+
+  slow_audit:
+    depends_on: [login]
+    tags: [slow]
+    request:
+      method: GET
+      url: ${base_url}/get
+      params:
+        audit: true
+    validate:
+      - eq: [$.args.audit, "true"]

@@ -1,0 +1,15 @@
+version: 1
+
+vars:
+  base_url: https://httpbin.org
+
+steps:
+  upload_file:
+    request:
+      method: POST
+      url: ${base_url}/post
+      multipart:
+        file: "@../assets/test_upload.csv"
+        description: guide upload
+    validate:
+      - eq: [$.form.description, guide upload]

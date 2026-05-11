@@ -1,0 +1,11 @@
+name: guide_smoke
+
+env:
+  - env/local.yaml
+
+setup:
+  - setup/login.yaml
+
+tests:
+  - tests/profile.yaml
+  - tests/orders.yaml

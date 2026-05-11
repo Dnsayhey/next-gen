@@ -1,0 +1,16 @@
+version: 1
+
+vars:
+  base_url: https://httpbin.org
+
+steps:
+  health_check:
+    tags: [smoke]
+    request:
+      method: GET
+      url: ${base_url}/get
+      params:
+        source: first-test
+    validate:
+      - eq: [$$.status_code, 200]
+      - eq: [$.args.source, first-test]

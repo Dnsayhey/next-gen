@@ -122,7 +122,7 @@ debug: false
 ```
 
 ```bash
-uv run nextgen examples/full_demo.yaml --env env/staging.yaml
+uv run nextgen examples/guide/01_first_test.yaml --env examples/guide/env/local.yaml
 ```
 
 环境文件顶层必须是对象，key 必须是字符串。建议将本地私密配置放在未提交的文件中，例如 `env/local.yaml` 或 `*.local.yaml`。
@@ -180,31 +180,37 @@ uv run nextgen "tests/**/*.yaml"
 
 显式 suite 文件暂不允许和其他 CLI 输入混用。
 
-## 示例
+## 示例 / 用户指南
 
-可以直接从 `examples/` 里的 DSL 开始试跑：
+`examples/` 现在按用户旅程组织，而不是按单个功能堆 demo：
 
-- `examples/full_demo.yaml`：HTTP DSL 的完整示例，覆盖 GET/POST、提取、断言、依赖和重试
-- `examples/full_demo.json`：JSON 版完整示例
-- `examples/conditional_demo.yaml`：`when` 条件执行示例
-- `examples/set_vars_demo.yaml`：`set_vars` 与 `extract` 的作用域示例
-- `examples/export_demo.yaml`：`extract` 后用 `export` 显式导出拼接变量的示例
-- `examples/matrix_demo.yaml`：`matrix` 参数化示例，包含单维展开和笛卡尔积展开
-- `examples/parallel_demo.yaml`：`mode: parallel` 并行调度示例
-- `examples/fail_fast_demo.yaml`：`fail_fast: false` 与依赖失败跳过语义示例
-- `examples/hook_demo.yaml`：`before_all / after_all / before_each / after_each / before / after` 与自定义 hook 示例
-- `examples/retry_demo.yaml`：固定间隔和指数退避重试示例
-- `examples/timeout_demo.yaml`：请求级和步骤级超时示例
-- `examples/db_demo.yaml`：SQLite 查询、提取和跨步骤引用示例
+- `examples/guide/`：推荐从这里开始。覆盖单文件 testcase、变量提取、suite setup、目录发现、dry-run、tag filtering 和 JUnit 输出。
+- `examples/advanced/`：独立功能示例，包括 tags、matrix、hooks、SQLite、上传、retry/fail-fast 和 timeout。部分文件是故意失败示例，文件名和 README 会说明用途。
+- `examples/assets/`：示例用静态文件，例如 multipart 上传 CSV。
 
-例如：
+推荐顺序：
 
 ```bash
-uv run nextgen examples/full_demo.yaml --verbose
-uv run nextgen examples/hook_demo.yaml --verbose
+# 1. 第一个 testcase
+uv run nextgen examples/guide/01_first_test.yaml
+
+# 2. 变量提取与跨步骤复用
+uv run nextgen examples/guide/02_variables_and_extract.yaml
+
+# 3. suite setup 登录并向普通 testcase 显式 export 变量
+uv run nextgen examples/guide/suite.yaml
+
+# 4. 先 review 执行计划
+uv run nextgen examples/guide/suite.yaml --dry-run
+
+# 5. 目录发现：跳过 suite.yaml，收集 testcase 文件
+uv run nextgen examples/guide/ --dry-run
+
+# 6. CI 报告
+uv run nextgen examples/guide/suite.yaml --report junit --output reports/junit.xml
 ```
 
-`examples/hook_demo.yaml` 会自动加载同目录下的 `examples/hooks.py`，用来演示自定义 hook 的发现与注册。
+更多说明见 `examples/guide/README.md` 和 `examples/advanced/README.md`。
 
 ## Tags / Step Filtering
 

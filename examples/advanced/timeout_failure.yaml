@@ -1,0 +1,13 @@
+version: 1
+
+vars:
+  base_url: https://httpbin.org
+
+steps:
+  delay_request:
+    request:
+      method: GET
+      url: ${base_url}/delay/5
+      timeout: 2
+    validate:
+      - eq: [$$.status_code, 200]

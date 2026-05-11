@@ -1,0 +1,19 @@
+version: 1
+
+vars:
+  base_url: https://httpbin.org
+
+steps:
+  search:
+    matrix:
+      keyword: [book, laptop]
+      region: [us, eu]
+    request:
+      method: GET
+      url: ${base_url}/get
+      params:
+        q: ${keyword}
+        region: ${region}
+    validate:
+      - eq: [$.args.q, "${keyword}"]
+      - eq: [$.args.region, "${region}"]

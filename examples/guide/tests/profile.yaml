@@ -1,0 +1,20 @@
+version: 1
+
+vars:
+  base_url: https://httpbin.org
+  auth_header: Bearer standalone-token
+  logged_in_user: standalone-user
+
+steps:
+  fetch_profile:
+    tags: [smoke, profile]
+    request:
+      method: GET
+      url: ${base_url}/headers
+      headers:
+        Authorization: ${auth_header}
+        X-User: ${logged_in_user}
+    validate:
+      - eq: [$$.status_code, 200]
+      - contains: [$.headers.Authorization, Bearer]
+      - eq: [$.headers.X-User, "${logged_in_user}"]

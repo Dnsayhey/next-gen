@@ -1,0 +1,35 @@
+version: 1
+
+vars:
+  base_url: https://httpbin.org
+  auth_header: Bearer standalone-token
+  order_id: demo-order-001
+
+steps:
+  create_order:
+    tags: [orders, smoke]
+    request:
+      method: POST
+      url: ${base_url}/post
+      headers:
+        Authorization: ${auth_header}
+      json:
+        order_id: ${order_id}
+        amount: 42
+    extract:
+      created_order_id: $.json.order_id
+    validate:
+      - eq: [$.json.order_id, "${order_id}"]
+
+  fetch_order:
+    depends_on: [create_order]
+    tags: [orders]
+    request:
+      method: GET
+      url: ${base_url}/get
+      headers:
+        Authorization: ${auth_header}
+      params:
+        order_id: ${created_order_id}
+    validate:
+      - eq: [$.args.order_id, "${order_id}"]

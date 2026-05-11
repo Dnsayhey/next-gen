@@ -1,0 +1,22 @@
+version: 1
+
+vars:
+  base_url: https://httpbin.org
+  demo_user: guide-user
+
+steps:
+  login:
+    tags: [auth, smoke]
+    request:
+      method: POST
+      url: ${base_url}/post
+      json:
+        username: ${demo_user}
+        token: suite-token
+    extract:
+      token: $.json.token
+    export:
+      auth_header: Bearer ${token}
+      logged_in_user: ${demo_user}
+    validate:
+      - eq: [$.json.username, "${demo_user}"]
