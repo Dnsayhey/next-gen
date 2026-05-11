@@ -62,6 +62,14 @@ def load_file(path: str | Path) -> dict[str, Any]:
 
 def classify_loaded_file(data: dict[str, Any]) -> FileKind:
     """Classify a loaded YAML/JSON file as testcase or suite."""
+    kind = classify_loaded_file_optional(data)
+    if kind is None:
+        raise ParseError("unrecognized file format: expected 'steps' or 'tests'")
+    return kind
+
+
+def classify_loaded_file_optional(data: dict[str, Any]) -> FileKind | None:
+    """Classify a loaded YAML/JSON file, returning None for non-runnable files."""
     has_steps = "steps" in data
     has_tests = "tests" in data
 
@@ -71,7 +79,7 @@ def classify_loaded_file(data: dict[str, Any]) -> FileKind:
         return FileKind.TESTCASE
     if has_tests:
         return FileKind.SUITE
-    raise ParseError("unrecognized file format: expected 'steps' or 'tests'")
+    return None
 
 
 def classify_file(path: str | Path) -> FileKind:

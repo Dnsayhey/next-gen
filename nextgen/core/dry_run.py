@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from nextgen.core.actions import get_action
+from nextgen.core.discovery import resolve_cli_inputs
 from nextgen.core.files import dedupe_paths
 from nextgen.core.filtering import filter_testcase_by_tags
 from nextgen.core.hooks import discover_hooks
@@ -18,13 +19,15 @@ def dry_run_inputs(
     env_files: list[Path],
     include_tags: set[str] | None = None,
     skip_tags: set[str] | None = None,
+    force_suite: bool = False,
 ) -> dict[str, Any]:
     """Build a dry-run plan for CLI inputs."""
     # Keep these input classification rules aligned with cli.run_inputs.
-    if not files:
-        raise ValueError("at least one file is required")
+    resolved_inputs = resolve_cli_inputs(files)
+    files = resolved_inputs.files
+    force_suite = force_suite or resolved_inputs.used_discovery
 
-    if len(files) == 1:
+    if len(files) == 1 and not force_suite:
         kind = classify_file(files[0])
         if kind == FileKind.SUITE:
             return dry_run_suite(load_suite(files[0]), env_files, include_tags, skip_tags)

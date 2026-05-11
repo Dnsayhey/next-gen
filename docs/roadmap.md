@@ -110,17 +110,23 @@ Input discovery and output shape:
 - Explicit single testcase file -> run as one testcase and output `TestResult`.
 - Explicit suite file -> run as suite and output `SuiteResult`.
 - Multiple explicit testcase files -> output `SuiteResult`.
+- Directory or glob discovery -> output `SuiteResult`, even when only one testcase is found.
 - Explicit files are classified by content:
   - only `steps` -> testcase
   - only `tests` -> suite
   - both `steps` and `tests` -> error: ambiguous file format
   - neither -> error: unrecognized file format
+- Directory/glob-discovered files are classified by content:
+  - only `steps` -> collect as testcase
+  - only `tests` -> warn and skip; suite files must be passed explicitly
+  - both `steps` and `tests` -> error: ambiguous file format
+  - neither -> ignore, so env/example YAML files do not break directory runs
 - Do not allow suite files to be mixed with other CLI inputs in the first version.
 - De-duplicate testcase files by resolved path while preserving first occurrence.
 - Execution order:
   - CLI multiple files: user-provided order
   - suite setup/tests: order in the suite file
-  - shell-expanded globs: treated as CLI multiple files in the order received
+  - discovered directories/globs: stable path ordering
 
 Setup example:
 
@@ -143,10 +149,13 @@ steps:
 
 Then normal suite tests can use `${token}` without repeating the login step in every file.
 
-Deferred from v1:
+Directory / glob discovery implemented after suite v1:
 
-- Directory discovery, including recursive YAML/JSON scanning and stable sorted ordering.
-- A discovered batch result shape for directory runs.
+- Directory input recursively scans `.yaml`, `.yml`, and `.json`.
+- Nextgen expands glob patterns itself, including `**`.
+- Glob patterns with no matches fail with exit code 2.
+- Directory or glob discovery with no testcase files fails with exit code 2.
+- Discovery is testcase collection, not suite orchestration; no directory-level env/setup/hooks are introduced.
 
 ### 2. JUnit XML Reporter
 
@@ -258,7 +267,6 @@ Design notes:
 
 These are valuable, but should wait until suite/reporting/filtering foundations are stable:
 
-- Directory and glob-based test discovery
 - Better `ParseError` paths, such as `steps.login.validate[0].eq`
 - Shell/exec action for non-Python setup workflows
 - JSON Schema or OpenAPI validation
@@ -268,4 +276,4 @@ These are valuable, but should wait until suite/reporting/filtering foundations 
 
 ## Near-Term Recommendation
 
-Start with **directory and glob-based test discovery** next. Suite execution, CI reporting, dry-run planning, tag filtering, and testcase-scoped HTTP session reuse now cover the main team-scale workflow; discovery is the next authoring and CI ergonomics gap.
+Start with **better `ParseError` paths** next. Suite execution, CI reporting, dry-run planning, tag filtering, testcase-scoped HTTP session reuse, and directory/glob discovery now cover the main team-scale workflow; precise error locations are the next biggest authoring ergonomics gap.

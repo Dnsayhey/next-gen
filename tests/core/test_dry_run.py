@@ -155,6 +155,34 @@ def test_dry_run_inputs_multiple_files_returns_cli_suite_plan(tmp_path):
     ]
 
 
+def test_dry_run_inputs_directory_returns_cli_suite_plan(tmp_path):
+    first = tmp_path / "first.yaml"
+    second = tmp_path / "nested" / "second.yaml"
+    second.parent.mkdir()
+    write_case(first)
+    write_case(second)
+    (tmp_path / "env.yaml").write_text("base_url: https://ignored.example.com\n", encoding="utf-8")
+    (tmp_path / "all.yaml").write_text("name: all\ntests:\n  - first.yaml\n", encoding="utf-8")
+
+    plan = dry_run_inputs([tmp_path], [])
+
+    assert plan["suite"] == "cli"
+    assert [test["testcase"] for test in plan["tests"]] == [
+        str(first.resolve()),
+        str(second.resolve()),
+    ]
+
+
+def test_dry_run_inputs_directory_with_one_testcase_returns_cli_suite_plan(tmp_path):
+    case_file = tmp_path / "case.yaml"
+    write_case(case_file)
+
+    plan = dry_run_inputs([tmp_path], [])
+
+    assert plan["suite"] == "cli"
+    assert [test["testcase"] for test in plan["tests"]] == [str(case_file.resolve())]
+
+
 def test_dry_run_suite_parse_error_fails_fast(tmp_path):
     good = tmp_path / "good.yaml"
     bad = tmp_path / "bad.yaml"

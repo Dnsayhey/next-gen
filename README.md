@@ -99,6 +99,12 @@ uv run nextgen smoke.yaml
 # 执行多个 testcase 文件，输出聚合 suite 结果
 uv run nextgen tests/user/profile.yaml tests/order/create.yaml
 
+# 递归发现目录下的 testcase 文件
+uv run nextgen tests/
+
+# 使用 glob pattern 发现 testcase 文件
+uv run nextgen "tests/**/*.yaml"
+
 # 或使用 python -m 方式
 uv run python -m nextgen.cli demo.yaml
 ```
@@ -158,9 +164,21 @@ CLI 也支持直接传多个 testcase 文件：
 
 ```bash
 uv run nextgen tests/user/profile.yaml tests/order/create.yaml
+uv run nextgen tests/
+uv run nextgen "tests/**/*.yaml"
 ```
 
-这会按传入顺序执行，按解析后的绝对路径去重，并输出聚合的 `SuiteResult`。显式 suite 文件暂不允许和其他 CLI 输入混用。
+显式传多个 testcase 文件时，会按传入顺序执行，按解析后的绝对路径去重，并输出聚合的 `SuiteResult`。
+
+目录和 glob 输入会递归发现 `.yaml`、`.yml`、`.json` testcase 文件，按稳定路径顺序执行，并输出聚合的 `SuiteResult`。目录发现是 testcase 批量收集，不是 suite 编排：
+
+- 只有 `steps` 的文件会作为 testcase 收集
+- 只有 `tests` 的 suite 文件会 warning 并跳过；suite 文件需要显式传入
+- 同时包含 `steps` 和 `tests` 的文件会报错
+- 二者都没有的 YAML/JSON 会被忽略，便于把 env/example 文件放在测试目录里
+- 发现后没有任何 testcase 会报错
+
+显式 suite 文件暂不允许和其他 CLI 输入混用。
 
 ## 示例
 
@@ -234,6 +252,7 @@ uv run nextgen case.yaml --tags smoke --skip-tags slow
 ```bash
 uv run nextgen smoke.yaml --dry-run
 uv run nextgen tests/user/profile.yaml --dry-run --env env/staging.yaml
+uv run nextgen tests/ --dry-run
 ```
 
 Dry-run 输出只包含 env key，不输出 env value，避免泄露 token/password 等敏感配置。步骤里的 `summary` 来自动作的原始配置摘要，变量模板不会被渲染，例如 `POST ${base_url}/login`。
@@ -377,6 +396,7 @@ nextgen/
 │   ├── context.py      # 变量系统
 │   ├── actions.py      # action 注册表
 │   ├── hooks.py        # hook 注册表与发现
+│   ├── discovery.py    # CLI 目录 / glob 输入发现
 │   ├── planner.py      # DAG 规划
 │   ├── condition.py    # when 条件评估
 │   ├── operators.py    # 通用断言操作符
@@ -397,7 +417,7 @@ nextgen/
 
 ## 扩展新 Action 类型
 
-完整扩展示例见 [设计文档 §13](docs/design.md#13-扩展新-action-类型)。注册入口是 `ActionSpec`：
+完整扩展示例见 [设计文档 §14](docs/design.md#14-扩展新-action-类型)。注册入口是 `ActionSpec`：
 
 ```python
 from nextgen import ActionSpec, register_action

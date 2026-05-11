@@ -9,6 +9,7 @@ import typer
 from loguru import logger
 
 from nextgen.bootstrap import load_builtin_actions
+from nextgen.core.discovery import resolve_cli_inputs
 from nextgen.core.dry_run import dry_run_inputs
 from nextgen.core.errors import NextgenError, ReporterError
 from nextgen.core.files import dedupe_paths
@@ -131,7 +132,12 @@ def run(
         skip_tag_set = set(skip_tags or [])
 
         if dry_run:
-            plan = dry_run_inputs(files, env_files or [], include_tag_set, skip_tag_set)
+            plan = dry_run_inputs(
+                files,
+                env_files or [],
+                include_tag_set,
+                skip_tag_set,
+            )
             rendered_plan = json.dumps(plan, indent=2, ensure_ascii=False)
             if output is None:
                 print(rendered_plan)
@@ -190,13 +196,15 @@ async def run_inputs(
     parallel: int,
     include_tags: set[str] | None = None,
     skip_tags: set[str] | None = None,
+    force_suite: bool = False,
 ) -> TestResult | SuiteResult:
     """Run CLI inputs and return either a testcase or suite result."""
     # Keep these input classification rules aligned with dry_run_inputs.
-    if not files:
-        raise ValueError("at least one file is required")
+    resolved_inputs = resolve_cli_inputs(files)
+    files = resolved_inputs.files
+    force_suite = force_suite or resolved_inputs.used_discovery
 
-    if len(files) == 1:
+    if len(files) == 1 and not force_suite:
         kind = classify_file(files[0])
         if kind == FileKind.SUITE:
             return await SuiteRunner(

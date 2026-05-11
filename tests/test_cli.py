@@ -318,6 +318,151 @@ def test_run_multiple_files_returns_suite_result(tmp_path, monkeypatch):
     assert '"suite": "cli"' in result.stdout
 
 
+def test_run_directory_discovers_testcases_and_skips_auxiliary_files(tmp_path, monkeypatch):
+    case_one = tmp_path / "one.yaml"
+    case_two = tmp_path / "nested" / "two.yaml"
+    case_two.parent.mkdir()
+    content = "\n".join([
+        "version: 1",
+        "steps:",
+        "  one:",
+        "    request:",
+        "      method: GET",
+        "      url: https://example.com",
+    ])
+    case_one.write_text(content, encoding="utf-8")
+    case_two.write_text(content, encoding="utf-8")
+    (tmp_path / "env.yaml").write_text("base_url: https://example.com\n", encoding="utf-8")
+    (tmp_path / "all.yaml").write_text("name: all\ntests:\n  - one.yaml\n", encoding="utf-8")
+
+    class FakeSuiteRunner:
+        def __init__(
+            self,
+            suite,
+            cli_env_files=None,
+            max_concurrency=10,
+            include_tags=None,
+            skip_tags=None,
+        ):
+            assert suite.name == "cli"
+            assert suite.tests == [str(case_two.resolve()), str(case_one.resolve())]
+
+        async def run(self):
+            return SuiteResult(
+                suite="cli",
+                total_duration_ms=1,
+                status=CaseRunStatus.SUCCESS,
+                tests=[],
+            )
+
+    monkeypatch.setattr("nextgen.cli.SuiteRunner", FakeSuiteRunner)
+
+    result = runner.invoke(app, [str(tmp_path)])
+
+    assert result.exit_code == 0
+    assert '"suite": "cli"' in result.stdout
+    assert "skipping suite file discovered by directory/glob input" in result.stderr
+
+
+def test_run_directory_errors_when_no_testcases_found(tmp_path):
+    (tmp_path / "env.yaml").write_text("base_url: https://example.com\n", encoding="utf-8")
+
+    result = runner.invoke(app, [str(tmp_path)])
+
+    assert result.exit_code == 2
+    assert "no testcase files found" in result.stderr
+
+
+def test_run_glob_errors_when_no_files_match(tmp_path):
+    result = runner.invoke(app, [str(tmp_path / "*.yaml")])
+
+    assert result.exit_code == 2
+    assert "glob pattern matched no files" in result.stderr
+
+
+def test_run_directory_with_one_testcase_still_returns_suite_result(tmp_path, monkeypatch):
+    case_file = tmp_path / "case.yaml"
+    case_file.write_text(
+        "\n".join([
+            "version: 1",
+            "steps:",
+            "  one:",
+            "    request:",
+            "      method: GET",
+            "      url: https://example.com",
+        ]),
+        encoding="utf-8",
+    )
+
+    class FakeSuiteRunner:
+        def __init__(
+            self,
+            suite,
+            cli_env_files=None,
+            max_concurrency=10,
+            include_tags=None,
+            skip_tags=None,
+        ):
+            assert suite.name == "cli"
+            assert suite.tests == [str(case_file.resolve())]
+
+        async def run(self):
+            return SuiteResult(
+                suite="cli",
+                total_duration_ms=1,
+                status=CaseRunStatus.SUCCESS,
+                tests=[],
+            )
+
+    monkeypatch.setattr("nextgen.cli.SuiteRunner", FakeSuiteRunner)
+
+    result = runner.invoke(app, [str(tmp_path)])
+
+    assert result.exit_code == 0
+    assert '"suite": "cli"' in result.stdout
+
+
+def test_run_glob_discovers_testcases(tmp_path, monkeypatch):
+    case_one = tmp_path / "one.yaml"
+    case_two = tmp_path / "two.yaml"
+    content = "\n".join([
+        "version: 1",
+        "steps:",
+        "  one:",
+        "    request:",
+        "      method: GET",
+        "      url: https://example.com",
+    ])
+    case_one.write_text(content, encoding="utf-8")
+    case_two.write_text(content, encoding="utf-8")
+
+    class FakeSuiteRunner:
+        def __init__(
+            self,
+            suite,
+            cli_env_files=None,
+            max_concurrency=10,
+            include_tags=None,
+            skip_tags=None,
+        ):
+            assert suite.tests == [str(case_one.resolve()), str(case_two.resolve())]
+
+        async def run(self):
+            return SuiteResult(
+                suite="cli",
+                total_duration_ms=1,
+                status=CaseRunStatus.SUCCESS,
+                tests=[],
+            )
+
+    monkeypatch.setattr("nextgen.cli.SuiteRunner", FakeSuiteRunner)
+
+    result = runner.invoke(app, [str(tmp_path / "*.yaml")])
+
+    assert result.exit_code == 0
+    assert '"suite": "cli"' in result.stdout
+
+
 def test_render_report_rejects_unknown_reporter():
     result = CaseRunResult(
         testcase="case.yaml",

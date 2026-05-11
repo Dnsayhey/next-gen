@@ -622,3 +622,10 @@ class TestLoadSuite:
 
         with pytest.raises(ParseError, match="ambiguous file format"):
             classify_file(file)
+
+    def test_classify_file_rejects_non_runnable_format(self, tmp_path):
+        file = tmp_path / "env.yaml"
+        file.write_text("base_url: https://example.com\n", encoding="utf-8")
+
+        with pytest.raises(ParseError, match="unrecognized file format"):
+            classify_file(file)
