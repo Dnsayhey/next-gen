@@ -8,6 +8,7 @@
 - DAG（依赖图）执行模型
 - 变量系统（Context）
 - 异步并发执行（asyncio）
+- Suite / 多文件执行
 - 插件化 action（HTTP / DB / 自定义）
 - 状态机驱动调度器（支持 retry）
 
@@ -77,6 +78,12 @@ uv run nextgen demo.yaml --verbose
 # 从环境文件加载变量（可传多个，后者覆盖前者）
 uv run nextgen demo.yaml --env env/base.yaml --env env/staging.yaml
 
+# 执行 suite 文件
+uv run nextgen smoke.yaml
+
+# 执行多个 testcase 文件，输出聚合 suite 结果
+uv run nextgen tests/user/profile.yaml tests/order/create.yaml
+
 # 或使用 python -m 方式
 uv run python -m nextgen.cli demo.yaml
 ```
@@ -98,6 +105,47 @@ uv run nextgen examples/full_demo.yaml --env env/staging.yaml
 ```
 
 环境文件顶层必须是对象，key 必须是字符串。建议将本地私密配置放在未提交的文件中，例如 `env/local.yaml` 或 `*.local.yaml`。
+
+## Suite / 多文件执行
+
+单个 suite 文件可以组织多个 testcase，并在普通测试前运行可选的 setup testcase：
+
+```yaml
+# smoke.yaml
+name: smoke
+env:
+  - env/base.yaml
+  - env/staging.yaml
+setup:
+  - tests/_setup/login.yaml
+tests:
+  - tests/user/profile.yaml
+  - tests/order/create.yaml
+```
+
+```bash
+uv run nextgen smoke.yaml
+```
+
+Suite 语义：
+
+- `tests` 必填，且至少包含一个 testcase 路径
+- `env`、`setup`、`tests` 路径都相对 suite 文件解析
+- setup testcase 是普通 testcase 文件，按顺序先运行
+- setup 成功后，每个成功步骤的 `export` 会作为 suite 变量提供给普通 tests
+- 变量优先级：setup testcase 为 `testcase.vars < suite env < CLI --env`；普通 testcase 为 `testcase.vars < suite env < setup exports < CLI --env`
+- setup 失败会让 suite 失败，普通 tests 不再执行，并在报告中显示为 testcase 级 `skipped`
+- 普通 testcase 失败不会阻止后续普通 testcase 执行，suite 会尽量产出完整报告
+- 多个 setup 文件导出同名变量时，后面的 setup 覆盖前面的 setup
+- suite 内 testcase 的 context、hooks、result 彼此隔离；不支持跨 testcase `depends_on`
+
+CLI 也支持直接传多个 testcase 文件：
+
+```bash
+uv run nextgen tests/user/profile.yaml tests/order/create.yaml
+```
+
+这会按传入顺序执行，按解析后的绝对路径去重，并输出聚合的 `SuiteResult`。显式 suite 文件暂不允许和其他 CLI 输入混用。
 
 ## 示例
 
@@ -135,7 +183,9 @@ uv run nextgen examples/hook_demo.yaml --verbose
 
 ## 执行结果（JSON）
 
-CLI 会将结果以 JSON 输出到 stdout。每个步骤包含：
+CLI 会将结果以 JSON 输出到 stdout。单个 testcase 输出 `TestResult`；suite 文件或多个 testcase 输入输出 `SuiteResult`，其中 `tests` 包含每个 testcase 的 `TestResult`。
+
+每个步骤包含：
 
 - `metric`：该步骤最核心的摘要指标，例如 HTTP 的 `{"label": "status_code", "value": 200}` 或 DB 的 `{"label": "row_count", "value": 1}`；`label` 使用稳定的 snake_case 标识
 - `action_input`：action 收到的已渲染输入（便于排查变量替换与参数问题）
@@ -216,7 +266,8 @@ nextgen/
 │   ├── operators.py    # 通用断言操作符
 │   ├── extract.py      # 通用提取规则
 │   ├── result.py       # 执行结果模型
-│   └── scheduler.py    # 调度器
+│   ├── scheduler.py    # 调度器
+│   └── suite.py        # Suite / 多文件执行编排
 ├── parser/
 │   └── loader.py       # YAML/JSON 解析
 ├── actions/
@@ -229,7 +280,7 @@ nextgen/
 
 ## 扩展新 Action 类型
 
-完整扩展示例见 [设计文档 §9](docs/design.md#9-扩展新-action-类型)。注册入口是 `ActionSpec`：
+完整扩展示例见 [设计文档 §10](docs/design.md#10-扩展新-action-类型)。注册入口是 `ActionSpec`：
 
 ```python
 from nextgen import ActionSpec, register_action

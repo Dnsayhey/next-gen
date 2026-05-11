@@ -12,12 +12,16 @@ from nextgen.core.errors import ParseError
 from nextgen.core.model import AndCondition, ExprCondition, OrCondition, StepNode, TestCase as CaseModel
 from nextgen.actions.http.model import RequestConfig
 from nextgen.parser.loader import (
+    FileKind,
+    classify_file,
     find_action_type,
     load_file,
+    load_suite,
     load_testcase,
     parse_hook_action,
     parse_assertions,
     parse_step_hooks,
+    parse_suite,
     parse_testcase_hooks,
     parse_step,
     parse_testcase,
@@ -522,3 +526,79 @@ class TestLoadTestcase:
             "login[user=admin]",
             "login[user=user1]",
         ]
+
+
+class TestParseSuite:
+    """Test suite parsing."""
+
+    def test_valid_suite(self):
+        suite = parse_suite({
+            "name": "smoke",
+            "env": ["env/base.yaml"],
+            "setup": ["tests/_setup/login.yaml"],
+            "tests": ["tests/user/profile.yaml"],
+        })
+
+        assert suite.name == "smoke"
+        assert suite.env == ["env/base.yaml"]
+        assert suite.setup == ["tests/_setup/login.yaml"]
+        assert suite.tests == ["tests/user/profile.yaml"]
+
+    def test_suite_requires_tests(self):
+        with pytest.raises(ParseError, match="tests"):
+            parse_suite({"name": "smoke"})
+
+    def test_suite_rejects_empty_tests(self):
+        with pytest.raises(ParseError, match="tests is empty"):
+            parse_suite({"name": "smoke", "tests": []})
+
+    def test_suite_rejects_non_string_paths(self):
+        with pytest.raises(ParseError, match="expected str"):
+            parse_suite({"name": "smoke", "tests": [1]})
+
+    def test_suite_rejects_empty_path(self):
+        with pytest.raises(ParseError, match="non-empty str"):
+            parse_suite({"name": "smoke", "tests": [""]})
+
+
+class TestLoadSuite:
+    """Test suite loading."""
+
+    def test_load_suite_resolves_paths_relative_to_suite_file(self, tmp_path):
+        suite_file = tmp_path / "suite.yaml"
+        suite_file.write_text(
+            "\n".join([
+                "name: smoke",
+                "env:",
+                "  - env/base.yaml",
+                "setup:",
+                "  - tests/_setup/login.yaml",
+                "tests:",
+                "  - tests/user/profile.yaml",
+            ]),
+            encoding="utf-8",
+        )
+
+        suite = load_suite(suite_file)
+
+        assert suite.source_path == str(suite_file.resolve())
+        assert suite.base_dir == str(tmp_path.resolve())
+        assert suite.env == [str((tmp_path / "env/base.yaml").resolve())]
+        assert suite.setup == [str((tmp_path / "tests/_setup/login.yaml").resolve())]
+        assert suite.tests == [str((tmp_path / "tests/user/profile.yaml").resolve())]
+
+    def test_classify_file_detects_testcase_and_suite(self, tmp_path):
+        testcase = tmp_path / "case.yaml"
+        testcase.write_text("version: 1\nsteps:\n  one: {}\n", encoding="utf-8")
+        suite = tmp_path / "suite.yaml"
+        suite.write_text("name: smoke\ntests:\n  - case.yaml\n", encoding="utf-8")
+
+        assert classify_file(testcase) == FileKind.TESTCASE
+        assert classify_file(suite) == FileKind.SUITE
+
+    def test_classify_file_rejects_ambiguous_format(self, tmp_path):
+        file = tmp_path / "ambiguous.yaml"
+        file.write_text("steps: {}\ntests: []\n", encoding="utf-8")
+
+        with pytest.raises(ParseError, match="ambiguous file format"):
+            classify_file(file)

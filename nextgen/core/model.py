@@ -95,3 +95,15 @@ class TestCase:
     hooks: TestCaseHooks = field(default_factory=TestCaseHooks)
     source_path: str | None = None
     base_dir: str | None = None
+
+
+@dataclass
+class Suite:
+    """Suite model."""
+
+    name: str
+    tests: list[str]
+    env: list[str] = field(default_factory=list)
+    setup: list[str] = field(default_factory=list)
+    source_path: str | None = None
+    base_dir: str | None = None

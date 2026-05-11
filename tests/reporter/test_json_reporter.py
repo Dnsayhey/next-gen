@@ -5,6 +5,7 @@ import json
 from nextgen.core.result import (
     StepResult,
     StepStatus,
+    SuiteResult,
     TestResult as CaseRunResult,
     TestStatus as CaseRunStatus,
 )
@@ -105,3 +106,31 @@ def test_json_reporter_implements_reporter_interface():
     assert data["testcase"] == "case.yaml"
     assert "json" in list_reporters()
     assert get_reporter("json") is not None
+
+
+def test_json_reporter_serializes_suite_result():
+    result = SuiteResult(
+        suite="smoke",
+        total_duration_ms=25,
+        status=CaseRunStatus.SUCCESS,
+        tests=[
+            CaseRunResult(
+                testcase="case.yaml",
+                total_duration_ms=10,
+                status=CaseRunStatus.SUCCESS,
+                steps=[],
+            )
+        ],
+    )
+
+    data = json.loads(JsonReporter().render(result))
+
+    assert data["suite"] == "smoke"
+    assert data["status"] == "success"
+    assert data["summary"] == {
+        "total": 1,
+        "success": 1,
+        "failed": 0,
+        "skipped": 0,
+    }
+    assert data["tests"][0]["testcase"] == "case.yaml"

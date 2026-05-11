@@ -1,6 +1,7 @@
 """DSL parser for YAML and JSON formats."""
 
 from copy import deepcopy
+from enum import Enum
 from itertools import product
 import json
 from pathlib import Path
@@ -21,11 +22,19 @@ from nextgen.core.model import (
     OrCondition,
     StepNode,
     StepHooks,
+    Suite,
     TestCase,
     TestCaseHooks,
 )
 
 SUPPORTED_EXTENSIONS = {".yaml", ".yml", ".json"}
+
+
+class FileKind(str, Enum):
+    """Supported runnable file kinds."""
+
+    TESTCASE = "testcase"
+    SUITE = "suite"
 
 
 def load_file(path: str | Path) -> dict[str, Any]:
@@ -49,6 +58,81 @@ def load_file(path: str | Path) -> dict[str, Any]:
 
     logger.debug(f"Loaded file: {path}")
     return data
+
+
+def classify_loaded_file(data: dict[str, Any]) -> FileKind:
+    """Classify a loaded YAML/JSON file as testcase or suite."""
+    has_steps = "steps" in data
+    has_tests = "tests" in data
+
+    if has_steps and has_tests:
+        raise ParseError("ambiguous file format: contains both 'steps' and 'tests'")
+    if has_steps:
+        return FileKind.TESTCASE
+    if has_tests:
+        return FileKind.SUITE
+    raise ParseError("unrecognized file format: expected 'steps' or 'tests'")
+
+
+def classify_file(path: str | Path) -> FileKind:
+    """Load and classify a YAML/JSON file."""
+    return classify_loaded_file(load_file(path))
+
+
+def normalize_path_list(data: Any, field: str) -> list[str]:
+    """Parse a suite path list field."""
+    if data is None:
+        return []
+    if not isinstance(data, list):
+        raise ParseError(f"invalid suite {field} format: expected list")
+
+    paths: list[str] = []
+    for item in data:
+        if not isinstance(item, str):
+            raise ParseError(f"invalid suite {field} path: expected str, got {type(item).__name__}")
+        if not item:
+            raise ParseError(f"invalid suite {field} path: expected non-empty str")
+        paths.append(item)
+    return paths
+
+
+def parse_suite(data: dict[str, Any]) -> Suite:
+    """Parse a suite file."""
+    if "tests" not in data:
+        raise ParseError("missing tests field")
+
+    tests = normalize_path_list(data["tests"], "tests")
+    if not tests:
+        raise ParseError("missing tests field or tests is empty")
+
+    name = data.get("name", "suite")
+    if not isinstance(name, str) or not name:
+        raise ParseError("invalid suite name: expected non-empty str")
+
+    return Suite(
+        name=name,
+        env=normalize_path_list(data.get("env"), "env"),
+        setup=normalize_path_list(data.get("setup"), "setup"),
+        tests=tests,
+    )
+
+
+def load_suite(path: str | Path) -> Suite:
+    """Load a suite from a YAML/JSON file."""
+    path = Path(path).resolve()
+    data = load_file(path)
+    kind = classify_loaded_file(data)
+    if kind != FileKind.SUITE:
+        raise ParseError(f"not a suite file: {path}")
+
+    suite = parse_suite(data)
+    suite.source_path = str(path)
+    suite.base_dir = str(path.parent)
+    suite.env = [str((path.parent / env_path).resolve()) for env_path in suite.env]
+    suite.setup = [str((path.parent / setup_path).resolve()) for setup_path in suite.setup]
+    suite.tests = [str((path.parent / test_path).resolve()) for test_path in suite.tests]
+    logger.info(f"Parsed suite: {path}, tests={len(suite.tests)}, setup={len(suite.setup)}")
+    return suite
 
 
 def find_action_type(data: dict[str, Any]) -> str | None:

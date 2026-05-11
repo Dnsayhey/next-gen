@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from nextgen.core.result import TestResult
+from nextgen.core.result import SuiteResult, TestResult
 
 
 class Reporter(Protocol):
@@ -12,7 +12,7 @@ class Reporter(Protocol):
 
     name: str
 
-    def render(self, result: TestResult) -> str:
+    def render(self, result: TestResult | SuiteResult) -> str:
         ...
 
 

@@ -41,6 +41,7 @@ class TestStatus(str, Enum):
 
     SUCCESS = "success"
     FAILED = "failed"
+    SKIPPED = "skipped"
 
 
 @dataclass
@@ -76,4 +77,24 @@ class TestResult:
             "success": sum(1 for s in self.steps if s.status == StepStatus.SUCCESS),
             "failed": sum(1 for s in self.steps if s.status == StepStatus.FAILED),
             "skipped": sum(1 for s in self.steps if s.status == StepStatus.SKIPPED),
+        }
+
+
+@dataclass
+class SuiteResult:
+    """Suite execution result."""
+
+    suite: str
+    total_duration_ms: int
+    tests: list[TestResult]
+    status: TestStatus
+    errors: list[str] = field(default_factory=list)
+
+    @property
+    def summary(self) -> dict[str, int]:
+        return {
+            "total": len(self.tests),
+            "success": sum(1 for t in self.tests if t.status == TestStatus.SUCCESS),
+            "failed": sum(1 for t in self.tests if t.status == TestStatus.FAILED),
+            "skipped": sum(1 for t in self.tests if t.status == TestStatus.SKIPPED),
         }

@@ -3,7 +3,7 @@
 import json
 from dataclasses import dataclass
 
-from nextgen.core.result import TestResult
+from nextgen.core.result import SuiteResult, TestResult
 from nextgen.reporter.base import register_reporter
 
 
@@ -14,8 +14,23 @@ class JsonReporter:
     indent: int = 2
     name: str = "json"
 
-    def render(self, result: TestResult) -> str:
-        data = {
+    def render(self, result: TestResult | SuiteResult) -> str:
+        if isinstance(result, SuiteResult):
+            data = {
+                "suite": result.suite,
+                "status": result.status.value,
+                "total_duration_ms": result.total_duration_ms,
+                "summary": result.summary,
+                "errors": result.errors,
+                "tests": [self._render_test(test) for test in result.tests],
+            }
+        else:
+            data = self._render_test(result)
+
+        return json.dumps(data, indent=self.indent, ensure_ascii=False)
+
+    def _render_test(self, result: TestResult) -> dict:
+        return {
             "testcase": result.testcase,
             "status": result.status.value if result.status else None,
             "total_duration_ms": result.total_duration_ms,
@@ -37,8 +52,6 @@ class JsonReporter:
                 for s in result.steps
             ],
         }
-
-        return json.dumps(data, indent=self.indent, ensure_ascii=False)
 
 
 register_reporter(JsonReporter())

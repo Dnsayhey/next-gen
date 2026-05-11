@@ -7,6 +7,7 @@ from nextgen.cli import render_terminal_summary
 from nextgen.core.result import (
     StepResult,
     StepStatus,
+    SuiteResult,
     TestResult as CaseRunResult,
     TestStatus as CaseRunStatus,
 )
@@ -194,3 +195,102 @@ def test_run_multiple_env_files_apply_in_order(tmp_path, monkeypatch):
         "base_url": "https://override.example.com",
         "timeout": 3,
     }
+
+
+def test_render_terminal_summary_for_suite_result():
+    result = SuiteResult(
+        suite="smoke",
+        total_duration_ms=99,
+        status=CaseRunStatus.FAILED,
+        tests=[
+            CaseRunResult(
+                testcase="/tmp/pass.yaml",
+                total_duration_ms=1,
+                status=CaseRunStatus.SUCCESS,
+                steps=[],
+            ),
+            CaseRunResult(
+                testcase="/tmp/fail.yaml",
+                total_duration_ms=1,
+                status=CaseRunStatus.FAILED,
+                steps=[],
+            ),
+            CaseRunResult(
+                testcase="/tmp/skip.yaml",
+                total_duration_ms=0,
+                status=CaseRunStatus.SKIPPED,
+                steps=[],
+            ),
+        ],
+    )
+
+    assert render_terminal_summary(result) == "\n".join([
+        "-- suite result --",
+        "  smoke  failed  99ms",
+        "  testcases: 1 passed, 1 failed, 1 skipped",
+        "",
+        "  FAILED  fail.yaml",
+        "",
+        "  SKIPPED  skip.yaml",
+    ])
+
+
+def test_run_suite_file_uses_suite_runner(tmp_path, monkeypatch):
+    suite_file = tmp_path / "suite.yaml"
+    suite_file.write_text("name: smoke\ntests:\n  - case.yaml\n", encoding="utf-8")
+
+    class FakeSuiteRunner:
+        def __init__(self, suite, cli_env_files=None, max_concurrency=10):
+            assert suite.name == "smoke"
+            assert cli_env_files == []
+            assert max_concurrency == 10
+
+        async def run(self):
+            return SuiteResult(
+                suite="smoke",
+                total_duration_ms=1,
+                status=CaseRunStatus.SUCCESS,
+                tests=[],
+            )
+
+    monkeypatch.setattr("nextgen.cli.SuiteRunner", FakeSuiteRunner)
+
+    result = runner.invoke(app, [str(suite_file)])
+
+    assert result.exit_code == 0
+    assert '"suite": "smoke"' in result.stdout
+
+
+def test_run_multiple_files_returns_suite_result(tmp_path, monkeypatch):
+    case_one = tmp_path / "one.yaml"
+    case_two = tmp_path / "two.yaml"
+    content = "\n".join([
+        "version: 1",
+        "steps:",
+        "  one:",
+        "    request:",
+        "      method: GET",
+        "      url: https://example.com",
+    ])
+    case_one.write_text(content, encoding="utf-8")
+    case_two.write_text(content, encoding="utf-8")
+
+    class FakeSuiteRunner:
+        def __init__(self, suite, cli_env_files=None, max_concurrency=10):
+            assert suite.name == "cli"
+            assert suite.tests == [str(case_one.resolve()), str(case_two.resolve())]
+
+        async def run(self):
+            return SuiteResult(
+                suite="cli",
+                total_duration_ms=1,
+                status=CaseRunStatus.SUCCESS,
+                tests=[],
+            )
+
+    monkeypatch.setattr("nextgen.cli.SuiteRunner", FakeSuiteRunner)
+
+    result = runner.invoke(app, [str(case_one), str(case_two)])
+
+    assert result.exit_code == 0
+    assert '"suite": "cli"' in result.stdout

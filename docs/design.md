@@ -8,6 +8,7 @@
 * DAG（依赖图）执行模型
 * 变量系统（Context）
 * 异步并发执行（asyncio）
+* Suite / 多文件执行
 * 插件化 action（HTTP / DB / 自定义）
 * 状态机驱动调度器（支持 retry）
 
@@ -30,9 +31,10 @@
 
 * **变量作用域**：`set_vars` 和大部分 step hook 默认只在当前步骤内可见，`extract` 声明的变量会回写全局上下文
 * **断言操作符**：基础比较、字符串、集合、正则、长度等通用操作符，`validate` 和 `when` 共用同一套语义
-* **报告格式**：JSON 输出到 stdout，步骤报告包含 `action_input / action_output`
+* **报告格式**：JSON 输出到 stdout，支持单 testcase 结果与 suite 聚合结果，步骤报告包含 `action_input / action_output`
 * **DSL 格式**：支持 YAML 和 JSON 两种格式
 * **Action / Hook 架构**：注册表模式，支持扩展 action 和自定义 hook
+* **Suite 优先于 include**：多文件执行保持 testcase 边界清晰；暂不引入 YAML `include` 合并语义
 
 ---
 
@@ -499,9 +501,67 @@ before_each -> set_vars -> when -> before -> action -> validate -> extract -> ex
 
 ---
 
-## 5. AST 设计
+## 5. Suite / 多文件执行
 
-### 5.1 StepNode
+Suite 文件用于组织多个独立 testcase：
+
+```yaml
+name: smoke
+env:
+  - env/base.yaml
+  - env/staging.yaml
+setup:
+  - tests/_setup/login.yaml
+tests:
+  - tests/user/profile.yaml
+  - tests/order/create.yaml
+```
+
+**文件识别规则：**
+
+- 只有 `steps`：testcase 文件
+- 只有 `tests`：suite 文件
+- 同时包含 `steps` 和 `tests`：格式不明确，报错
+- 二者都没有：无法识别，报错
+
+**路径与执行顺序：**
+
+- Suite `env`、`setup`、`tests` 路径都相对 suite 文件解析
+- `tests` 必填，且至少包含一个非空路径
+- setup testcase 与普通 testcase 都是完整 testcase 文件
+- setup 按 suite 文件顺序先运行，普通 tests 按 suite 文件顺序后运行
+- CLI 传多个 testcase 文件时，按传入顺序执行，并按解析后的绝对路径去重
+- 显式 suite 文件不能和其他 CLI 输入混用
+
+**变量优先级：**
+
+```text
+setup testcase: testcase.vars < suite env files < CLI --env files
+normal testcase: testcase.vars < suite env files < setup exports < CLI --env files
+```
+
+Setup testcase 成功后，会收集成功步骤的 `exported` 变量作为 suite 级变量供普通 tests 使用。多个 setup 文件导出同名变量时，后执行的 setup 覆盖先执行的 setup；CLI `--env` 始终优先级最高。
+
+**隔离与失败语义：**
+
+- 每个 testcase 都有独立 parser、scheduler、hooks、context 和 result
+- 普通 tests 可读取 setup exports，但普通 tests 之间不共享运行时 context
+- 不支持跨 testcase `depends_on`
+- setup 失败会让 suite 失败，并把所有普通 tests 记录为 testcase 级 `skipped`
+- 普通 testcase 失败不会阻止后续普通 testcase 执行，suite 尽量产出完整报告
+- suite v1 不包含 suite hooks、teardown、文件级并行或目录发现
+
+**结果模型：**
+
+- 显式单 testcase 文件输出 `TestResult`
+- 显式 suite 文件输出 `SuiteResult`
+- 多个 testcase 文件输出 `SuiteResult`
+
+---
+
+## 6. AST 设计
+
+### 6.1 StepNode
 
 ```python
 @dataclass
@@ -524,7 +584,22 @@ class StepNode:
     hooks: StepHooks
 ```
 
-### 5.2 AssertionNode
+### 6.2 Suite
+
+```python
+@dataclass
+class Suite:
+    name: str
+    tests: list[str]
+    env: list[str]
+    setup: list[str]
+    source_path: str | None
+    base_dir: str | None
+```
+
+---
+
+### 6.3 AssertionNode
 
 ```python
 @dataclass
@@ -534,7 +609,7 @@ class AssertionNode:
     right: Any   # 期望值
 ```
 
-### 5.3 HookAction / Hooks
+### 6.4 HookAction / Hooks
 
 ```python
 @dataclass
@@ -557,7 +632,7 @@ class TestCaseHooks:
     after_each: list[HookAction]
 ```
 
-### 5.4 TestCase
+### 6.5 TestCase
 
 ```python
 @dataclass
@@ -574,9 +649,9 @@ class TestCase:
 
 ---
 
-## 6. 核心模块
+## 7. 核心模块
 
-### 6.1 Parser（DSL → AST）
+### 7.1 Parser（DSL → AST）
 
 **职责：**
 - 加载 YAML/JSON 文件
@@ -598,7 +673,7 @@ def register_action(spec: ActionSpec) -> None: ...
 def get_action(name: str) -> ActionSpec | None: ...
 ```
 
-### 6.2 Context（变量系统）
+### 7.2 Context（变量系统）
 
 **职责：**
 - 管理全局变量和提取的变量
@@ -620,7 +695,7 @@ class Context:
 - `set_vars` 和 step hooks 的局部可见性
 - `extract` / `export` 成功后再回写全局上下文
 
-### 6.3 Planner（DAG 规划）
+### 7.3 Planner（DAG 规划）
 
 **职责：**
 - 构建依赖图
@@ -635,7 +710,7 @@ def get_execution_order(graph: dict[str, list[str]]) -> list[list[str]]: ...
 
 `get_execution_order` 是 planner 的辅助能力，用于 dry-run、可视化和调试分层拓扑顺序；当前 scheduler 采用运行时动态调度，不直接依赖该函数。
 
-### 6.4 Scheduler（调度器）
+### 7.4 Scheduler（调度器）
 
 **职责：**
 - 状态机驱动的 DAG 调度
@@ -647,7 +722,7 @@ def get_execution_order(graph: dict[str, list[str]]) -> list[list[str]]: ...
 
 Scheduler 从 Action 注册表读取 `execute / extract / validate / summarize`，不再维护独立 action 实现注册表。
 
-### 6.5 Hooks（hook 注册表）
+### 7.5 Hooks（hook 注册表）
 
 ```python
 @dataclass(frozen=True)
@@ -673,7 +748,7 @@ Hook 函数通过签名绑定 YAML 参数。声明 `ctx` 或 `context` 时自动
 返回非 `None` 值会被忽略并记录 warning，写变量应显式调用 `ctx.set(...)`。
 同名 hook 默认禁止重复注册，需要覆盖时必须显式传入 `override=True`。
 
-### 6.6 Action
+### 7.6 Action
 
 action 实现通过 `ActionSpec` 注册到 action 注册表：
 ```python
@@ -705,7 +780,7 @@ ActionResult(
 当 action 在拿到业务结果前失败（如网络/连接异常）时，建议抛出 `ActionExecutionError(message, action_input)`，
 调度器会将 `action_input` 带入步骤报告，便于排查。
 
-### 6.7 DB Action
+### 7.7 DB Action
 
 支持 PostgreSQL、MySQL、SQLite 三种数据库。
 
@@ -754,7 +829,7 @@ steps:
 
 ---
 
-## 7. 状态机设计
+## 8. 状态机设计
 
 ### 状态流转
 
@@ -780,7 +855,7 @@ class StepStatus(str, Enum):
 
 ---
 
-## 8. 项目结构
+## 9. 项目结构
 
 ```text
 nextgen/
@@ -798,7 +873,8 @@ nextgen/
 │   ├── result.py       # 执行结果模型
 │   ├── errors.py       # 通用错误层级
 │   ├── hooks.py        # hook 注册表与发现逻辑
-│   └── scheduler.py    # 调度器（action 注册表）
+│   ├── scheduler.py    # 单 testcase 调度器
+│   └── suite.py        # Suite / 多文件执行编排
 ├── parser/
 │   └── loader.py       # YAML/JSON 解析（action 注册表）
 ├── actions/
@@ -826,7 +902,7 @@ nextgen/
 
 ---
 
-## 9. 扩展新 Action 类型
+## 10. 扩展新 Action 类型
 
 ```python
 from dataclasses import dataclass, field
@@ -865,7 +941,7 @@ register_action(ActionSpec(
 
 ---
 
-## 10. CLI 使用
+## 11. CLI 使用
 
 ```bash
 # 基本执行
@@ -879,6 +955,15 @@ nextgen demo.yaml --verbose
 
 # 支持 JSON 格式
 nextgen demo.json
+
+# 从环境文件加载变量
+nextgen demo.yaml --env env/base.yaml --env env/staging.yaml
+
+# 执行 suite 文件
+nextgen smoke.yaml
+
+# 执行多个 testcase 文件，输出 SuiteResult
+nextgen tests/user/profile.yaml tests/order/create.yaml
 ```
 
 也可以通过 `uv` 运行：
@@ -889,7 +974,7 @@ uv run nextgen demo.yaml
 
 ---
 
-## 11. 迭代路线
+## 12. 迭代路线
 
 ### 已完成
 
@@ -909,16 +994,19 @@ uv run nextgen demo.yaml
 * [x] 超时配置
 * [x] 指数退避重试
 * [x] fail-fast 策略
+* [x] Suite / 多文件执行 v1
 
 ### 待实现
 
-* [ ] 彩色终端报告
-* [ ] HTML 报告
-* [ ] 分布式执行
+* [ ] JUnit XML 报告
+* [ ] Dry-run / execution plan
+* [ ] Tags / step filtering
+* [ ] HTTP session reuse
+* [ ] 目录发现
 
 ---
 
-## 12. 关键设计原则
+## 13. 关键设计原则
 
 * **DSL ≠ 执行逻辑**：DSL 只描述"做什么"，不描述"怎么做"
 * **AST ≠ Runtime**：AST 是静态描述，Runtime 是动态执行

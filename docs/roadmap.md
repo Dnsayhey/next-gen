@@ -14,10 +14,11 @@ The core engine is already usable for internal API and database testing:
 - Matrix expansion
 - Lifecycle hooks and discovered `hooks.py`
 - Environment files via `--env`
-- JSON reporter and terminal summary
+- Suite / multi-file execution v1
+- JSON reporter and terminal summary for both testcase and suite results
 - Structured CLI error handling
 
-The next work should focus on team-scale execution, CI integration, and authoring ergonomics rather than adding many new action types.
+The next work should focus on CI integration, execution planning, and authoring ergonomics rather than adding many new action types.
 
 ## Suite Before Include
 
@@ -47,13 +48,15 @@ Decision: do **not** implement include in the near term. Revisit only if there i
 
 ### 1. Suite / Multi-File Execution
 
-Do this before JUnit XML and dry-run so those features can be designed against the aggregate run model from the beginning.
+Status: **implemented in v1**.
 
-First version scope:
+This was done before JUnit XML and dry-run so those features can be designed against the aggregate run model from the beginning.
 
-- Add `SuiteResult` containing multiple `TestResult` objects.
-- Add `TestStatus.SKIPPED` so setup failures can produce skipped testcase-level results.
-- Add a suite file format:
+Implemented scope:
+
+- `SuiteResult` containing multiple `TestResult` objects.
+- `TestStatus.SKIPPED` for skipped testcase-level results.
+- Suite file format:
 
 ```yaml
 name: smoke
@@ -67,7 +70,7 @@ tests:
   - tests/order/create.yaml
 ```
 
-- `tests` is required and must contain at least one testcase path.
+- `tests` is required and must contain at least one non-empty testcase path.
 - Suite `setup`, `tests`, and `env` paths are resolved relative to the suite file.
 - Suite-level `env` applies to all testcases.
 - CLI `--env` still applies and overrides suite env.
@@ -93,9 +96,9 @@ If CLI env files define the same key as setup exports, the CLI value wins. For e
 - Normal tests can read setup exports, but they do not share runtime contexts with each other.
 - Multiple setup files may export the same variable; later setup exports override earlier ones.
 - Setup failure makes the suite failed and prevents normal tests from running.
-- Normal tests skipped because of setup failure should appear as synthetic skipped `TestResult` entries so reports preserve the full planned test list.
+- Normal tests skipped because of setup failure appear as synthetic skipped `TestResult` entries so reports preserve the full planned test list.
 - Any failed testcase makes the suite failed.
-- Continue running all testcase files by default to produce a complete report.
+- Normal testcase load, parse, validation, or execution errors become failed `TestResult` entries, and later normal testcases continue running to produce a complete report.
 - No cross-testcase `depends_on`.
 - No suite hooks in the first version.
 - No teardown in the first version.
@@ -105,23 +108,16 @@ Input discovery and output shape:
 
 - Explicit single testcase file -> run as one testcase and output `TestResult`.
 - Explicit suite file -> run as suite and output `SuiteResult`.
-- Multiple files, directories, or any discovered batch -> output `SuiteResult`, even if discovery finds only one testcase. This keeps CI JSON shape stable.
+- Multiple explicit testcase files -> output `SuiteResult`.
 - Explicit files are classified by content:
   - only `steps` -> testcase
   - only `tests` -> suite
   - both `steps` and `tests` -> error: ambiguous file format
   - neither -> error: unrecognized file format
-- Directory discovery recursively scans YAML/JSON files but only runs testcase files:
-  - only `steps` -> collect as testcase
-  - only `tests` -> warn and skip; suite files must be passed explicitly
-  - both `steps` and `tests` -> error
-  - neither -> ignore, so env/example YAML files do not break directory runs
-- If directory discovery finds no testcase files, return `no testcase files found`.
 - Do not allow suite files to be mixed with other CLI inputs in the first version.
 - De-duplicate testcase files by resolved path while preserving first occurrence.
 - Execution order:
   - CLI multiple files: user-provided order
-  - directory discovery: sorted by path for reproducibility
   - suite setup/tests: order in the suite file
   - shell-expanded globs: treated as CLI multiple files in the order received
 
@@ -146,13 +142,14 @@ steps:
 
 Then normal suite tests can use `${token}` without repeating the login step in every file.
 
-Open design points:
+Deferred from v1:
 
-- Whether directory/glob discovery should be implemented in suite v1 or a separate follow-up.
+- Directory discovery, including recursive YAML/JSON scanning and stable sorted ordering.
+- A discovered batch result shape for directory runs.
 
 ### 2. JUnit XML Reporter
 
-After suite result shape exists, add CI-friendly reporting:
+Next recommended work. After suite result shape exists, add CI-friendly reporting:
 
 - `--report json|junit`
 - `--output path`
@@ -162,7 +159,7 @@ Design notes:
 
 - Keep stdout JSON-compatible when no output file is requested.
 - If `--output` is provided, write the selected report to the file and keep terminal summary on stderr.
-- JSON reporter should support both single `TestResult` and `SuiteResult`.
+- JSON reporter already supports both single `TestResult` and `SuiteResult`.
 
 ### 3. Dry-Run / Execution Plan
 
@@ -244,4 +241,4 @@ These are valuable, but should wait until suite/reporting/filtering foundations 
 
 ## Near-Term Recommendation
 
-Start with **suite / multi-file execution**. It affects the shape of reporting, dry-run, tags, and CI behavior, so implementing it first should reduce later redesign.
+Start with **JUnit XML reporting** next. Suite / multi-file execution now provides the aggregate result model that CI reporting and dry-run planning can share.
