@@ -236,16 +236,23 @@ Deferred:
 
 ### 5. HTTP Session Reuse
 
-Improve API testing ergonomics and performance:
+Status: **implemented**.
+
+HTTP actions now reuse one `httpx.AsyncClient` within a single testcase run.
+
+Implemented behavior:
 
 - Reuse `httpx.AsyncClient` within one testcase run.
-- Preserve cookie jar across HTTP steps.
-- Close clients at the end of the run.
+- Preserve cookie jar and connection pool across HTTP steps in the same testcase.
+- Close runtime resources at the end of `Scheduler.run()`, including successful and failed runs.
+- Keep testcase isolation; sessions do not cross testcase files in suite runs.
+- Keep redirect behavior unchanged from the underlying client default.
+- Keep step-level `timeout` as a per-request setting.
 
 Design notes:
 
-- Keep testcase isolation; sessions should not cross testcase files in suite runs.
-- Be explicit about whether redirects, cookies, and default headers are preserved.
+- Scheduler only closes generic context runtime resources and does not know HTTP implementation details.
+- Cross-testcase auth should use explicit suite setup `extract` / `export` variables, not implicit cookie sharing.
 
 ## Later Work
 
@@ -261,4 +268,4 @@ These are valuable, but should wait until suite/reporting/filtering foundations 
 
 ## Near-Term Recommendation
 
-Start with **HTTP session reuse** next. Suite execution, JUnit reporting, dry-run planning, and step filtering now cover the core team-scale and CI-facing workflow.
+Start with **directory and glob-based test discovery** next. Suite execution, CI reporting, dry-run planning, tag filtering, and testcase-scoped HTTP session reuse now cover the main team-scale workflow; discovery is the next authoring and CI ergonomics gap.

@@ -176,6 +176,92 @@ class TestScheduler:
         assert scheduler_action_registry == ["execute:boom", "execute:after"]
 
     @pytest.mark.asyncio
+    async def test_scheduler_closes_context_resources_on_failure(self):
+        actions = snapshot_actions()
+
+        class Resource:
+            def __init__(self):
+                self.closed = False
+
+            async def aclose(self):
+                self.closed = True
+
+        resource = Resource()
+
+        async def execute(config, ctx):
+            ctx.set_resource("resource", resource)
+            raise RuntimeError("boom")
+
+        register_action(ActionSpec(
+            name="resource_action",
+            parse_config=lambda config: config,
+            execute=execute,
+            extract=lambda result, config, ctx: {},
+            validate=lambda result, assertions: [],
+            summarize=lambda config: "resource",
+        ))
+        try:
+            testcase = CaseModel(
+                version=1,
+                steps={
+                    "boom": StepNode(
+                        name="boom",
+                        action=ActionNode(type="resource_action", config={}),
+                    ),
+                },
+            )
+
+            result = await Scheduler(testcase).run()
+
+            assert result.status.value == "failed"
+            assert resource.closed is True
+        finally:
+            restore_actions(actions)
+
+    @pytest.mark.asyncio
+    async def test_scheduler_closes_context_resources_on_success(self):
+        actions = snapshot_actions()
+
+        class Resource:
+            def __init__(self):
+                self.closed = False
+
+            async def aclose(self):
+                self.closed = True
+
+        resource = Resource()
+
+        async def execute(config, ctx):
+            ctx.set_resource("resource", resource)
+            return ActionResult(data={})
+
+        register_action(ActionSpec(
+            name="successful_resource_action",
+            parse_config=lambda config: config,
+            execute=execute,
+            extract=lambda result, config, ctx: {},
+            validate=lambda result, assertions: [],
+            summarize=lambda config: "resource",
+        ))
+        try:
+            testcase = CaseModel(
+                version=1,
+                steps={
+                    "ok": StepNode(
+                        name="ok",
+                        action=ActionNode(type="successful_resource_action", config={}),
+                    ),
+                },
+            )
+
+            result = await Scheduler(testcase).run()
+
+            assert result.status.value == "success"
+            assert resource.closed is True
+        finally:
+            restore_actions(actions)
+
+    @pytest.mark.asyncio
     async def test_failed_dependency_is_skipped_even_when_fail_fast_disabled(self, scheduler_action_registry):
         testcase = CaseModel(
             version=1,

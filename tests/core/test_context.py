@@ -1,5 +1,7 @@
 """context.py unit tests"""
 
+import pytest
+
 from nextgen.core.context import Context
 
 
@@ -124,6 +126,36 @@ class TestContext:
         assert child.get("token") == "updated"
         assert child.get("local") == "value"
         assert child.metadata is ctx.metadata
+
+    def test_derive_shares_runtime_resources(self):
+        ctx = Context()
+        resource = object()
+        ctx.set_resource("resource", resource)
+
+        child = ctx.derive()
+
+        assert child.get_resource("resource") is resource
+        child.set_resource("other", resource)
+        assert ctx.get_resource("other") is resource
+
+    @pytest.mark.asyncio
+    async def test_close_resources_closes_async_resources(self):
+        ctx = Context()
+
+        class Resource:
+            def __init__(self):
+                self.closed = False
+
+            async def aclose(self):
+                self.closed = True
+
+        resource = Resource()
+        ctx.set_resource("resource", resource)
+
+        await ctx.close_resources()
+
+        assert resource.closed is True
+        assert ctx.resources == {}
 
     def test_merge_sets_each_update(self):
         ctx = Context({"a": 1})

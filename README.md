@@ -249,6 +249,33 @@ Dry-run 输出只包含 env key，不输出 env value，避免泄露 token/passw
 
 Suite 计划还会包含 `setup`、`tests`、`setup_export_keys` 和 `runtime_setup_exports: true`。其中 setup export 的实际值只有运行时才能知道，dry-run 只静态列出声明的 export key。
 
+## HTTP Session Reuse
+
+同一个 testcase run 内的 HTTP steps 会自动复用一个 `httpx.AsyncClient`。这会复用连接池，并让 cookie jar 在同一 testcase 的多个 HTTP step 之间保持。
+
+```yaml
+steps:
+  login:
+    request:
+      method: GET
+      url: https://example.com/login
+
+  profile:
+    depends_on: [login]
+    request:
+      method: GET
+      url: https://example.com/profile
+```
+
+Session 边界：
+
+- session 只在单个 testcase 内共享
+- suite 中每个 setup/test testcase 都有独立 session，不跨 testcase 文件共享 cookie
+- suite setup 如果要给普通 testcase 传递登录态，应通过 `extract` / `export` 显式传 token/header 等变量
+- testcase 结束后会自动关闭 HTTP client
+- v1 不新增 DSL 配置项
+- redirect 行为保持 httpx/client 默认语义；step 级 `timeout` 仍按 request 配置传入
+
 ## 执行语义（mode / depends_on / fail_fast）
 
 - `depends_on` 是唯一依赖来源，默认不会自动给步骤补依赖
@@ -370,7 +397,7 @@ nextgen/
 
 ## 扩展新 Action 类型
 
-完整扩展示例见 [设计文档 §12](docs/design.md#12-扩展新-action-类型)。注册入口是 `ActionSpec`：
+完整扩展示例见 [设计文档 §13](docs/design.md#13-扩展新-action-类型)。注册入口是 `ActionSpec`：
 
 ```python
 from nextgen import ActionSpec, register_action

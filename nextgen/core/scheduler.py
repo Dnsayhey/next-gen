@@ -483,4 +483,7 @@ class Scheduler:
 
             return self._build_result(start_time, scheduler_errors + after_all_errors)
         finally:
-            restore_hooks(hook_snapshot)
+            try:
+                await self.context.close_resources()
+            finally:
+                restore_hooks(hook_snapshot)

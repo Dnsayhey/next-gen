@@ -14,6 +14,8 @@ from nextgen.core.result import ActionResult
 from .model import RequestConfig
 from .utils import check_content_type_conflict
 
+HTTP_CLIENT_RESOURCE = "http.client"
+
 
 def _render_body(body_type: str | None, request: RequestConfig, ctx: Context) -> Any:
     if body_type == "json":
@@ -89,79 +91,68 @@ async def execute_request(
     action_input = _build_action_input(request, ctx, headers, params, body_type, rendered_body)
     logger.info(f"Sending request: {request.method} {url}")
 
-    # Configure timeout.
-    timeout = request.timeout if request.timeout else None
-
     # Send request according to body type.
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            if body_type == "json":
-                response = await client.request(
-                    method=request.method,
-                    url=url,
-                    headers=headers,
-                    params=params,
-                    json=rendered_body,
-                )
+        client = get_http_client(ctx)
+        request_kwargs = {
+            "method": request.method,
+            "url": url,
+            "headers": headers,
+            "params": params,
+        }
+        if request.timeout:
+            request_kwargs["timeout"] = request.timeout
 
-            elif body_type == "form":
-                response = await client.request(
-                    method=request.method,
-                    url=url,
-                    headers=headers,
-                    params=params,
-                    data=rendered_body,
-                )
+        if body_type == "json":
+            response = await client.request(
+                **request_kwargs,
+                json=rendered_body,
+            )
 
-            elif body_type == "multipart":
-                # Multipart data needs special handling for @-prefixed files.
-                files = {}
-                form_fields = {}
+        elif body_type == "form":
+            response = await client.request(
+                **request_kwargs,
+                data=rendered_body,
+            )
 
-                for key, value in (rendered_body or {}).items():
-                    if isinstance(value, str) and value.startswith("@"):
-                        # File upload.
-                        file_content = load_file_content(value, base_dir)
-                        file_path = resolve_case_path(value[1:], base_dir)
-                        files[key] = (
-                            file_path.name,
-                            file_content,
-                            "application/octet-stream",
-                        )
-                    else:
-                        form_fields[key] = value
+        elif body_type == "multipart":
+            # Multipart data needs special handling for @-prefixed files.
+            files = {}
+            form_fields = {}
 
-                response = await client.request(
-                    method=request.method,
-                    url=url,
-                    headers=headers,
-                    params=params,
-                    files=files,
-                    data=form_fields if form_fields else None,
-                )
+            for key, value in (rendered_body or {}).items():
+                if isinstance(value, str) and value.startswith("@"):
+                    # File upload.
+                    file_content = load_file_content(value, base_dir)
+                    file_path = resolve_case_path(value[1:], base_dir)
+                    files[key] = (
+                        file_path.name,
+                        file_content,
+                        "application/octet-stream",
+                    )
+                else:
+                    form_fields[key] = value
 
-            elif body_type == "raw":
-                # Handle @-prefixed files.
-                raw_content = load_file_content(rendered_body, base_dir)
-                if isinstance(raw_content, str):
-                    raw_content = ctx.render(raw_content)
+            response = await client.request(
+                **request_kwargs,
+                files=files,
+                data=form_fields if form_fields else None,
+            )
 
-                response = await client.request(
-                    method=request.method,
-                    url=url,
-                    headers=headers,
-                    params=params,
-                    content=raw_content.encode("utf-8") if isinstance(raw_content, str) else raw_content,
-                )
+        elif body_type == "raw":
+            # Handle @-prefixed files.
+            raw_content = load_file_content(rendered_body, base_dir)
+            if isinstance(raw_content, str):
+                raw_content = ctx.render(raw_content)
 
-            else:
-                # No request body.
-                response = await client.request(
-                    method=request.method,
-                    url=url,
-                    headers=headers,
-                    params=params,
-                )
+            response = await client.request(
+                **request_kwargs,
+                content=raw_content.encode("utf-8") if isinstance(raw_content, str) else raw_content,
+            )
+
+        else:
+            # No request body.
+            response = await client.request(**request_kwargs)
     except Exception as exc:
         raise ActionExecutionError(str(exc), action_input) from exc
 
@@ -184,3 +175,12 @@ async def execute_request(
         action_output=data,
         metric={"label": "status_code", "value": response.status_code},
     )
+
+
+def get_http_client(ctx: Context) -> httpx.AsyncClient:
+    """Return the testcase-scoped HTTP client."""
+    client = ctx.get_resource(HTTP_CLIENT_RESOURCE)
+    if client is None:
+        client = httpx.AsyncClient()
+        ctx.set_resource(HTTP_CLIENT_RESOURCE, client)
+    return client

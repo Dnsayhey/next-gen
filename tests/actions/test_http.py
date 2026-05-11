@@ -6,7 +6,7 @@ from nextgen.core.context import Context
 from nextgen.core.errors import ActionExecutionError
 from nextgen.core.files import load_file_content, resolve_case_path
 from nextgen.core.model import AssertionNode
-from nextgen.actions.http.client import execute_request
+from nextgen.actions.http.client import HTTP_CLIENT_RESOURCE, execute_request
 from nextgen.actions.http.extract import extract_variables
 from nextgen.actions.http.model import RequestConfig
 from nextgen.actions.http.validate import validate_response
@@ -169,6 +169,101 @@ class TestRequestConfig:
         assert captured["json"] == {"password": "secret"}
         assert result.action_input["body"] == {"password": "secret"}
         assert ctx.rendered_password_count == 1
+
+    @pytest.mark.asyncio
+    async def test_execute_request_reuses_context_http_client(self, monkeypatch):
+        created = []
+
+        class FakeResponse:
+            status_code = 200
+            headers = {}
+
+            def json(self):
+                return {"ok": True}
+
+        class FakeClient:
+            def __init__(self):
+                self.requests = []
+                self.closed = False
+                created.append(self)
+
+            async def request(self, **kwargs):
+                self.requests.append(kwargs)
+                return FakeResponse()
+
+            async def aclose(self):
+                self.closed = True
+
+        monkeypatch.setattr("nextgen.actions.http.client.httpx.AsyncClient", FakeClient)
+
+        ctx = Context()
+        request = RequestConfig(method="GET", url="https://example.com")
+
+        await execute_request(request, ctx)
+        await execute_request(request, ctx)
+
+        assert len(created) == 1
+        assert len(created[0].requests) == 2
+        assert ctx.get_resource(HTTP_CLIENT_RESOURCE) is created[0]
+
+    @pytest.mark.asyncio
+    async def test_execute_request_keeps_cookies_in_reused_client(self, monkeypatch):
+        class FakeResponse:
+            status_code = 200
+            headers = {}
+
+            def __init__(self, body):
+                self._body = body
+
+            def json(self):
+                return self._body
+
+        class FakeClient:
+            def __init__(self):
+                self.cookies = {}
+
+            async def request(self, **kwargs):
+                if kwargs["url"].endswith("/login"):
+                    self.cookies["sid"] = "abc"
+                    return FakeResponse({"login": True})
+                return FakeResponse({"cookie": self.cookies.get("sid")})
+
+            async def aclose(self):
+                pass
+
+        monkeypatch.setattr("nextgen.actions.http.client.httpx.AsyncClient", FakeClient)
+
+        ctx = Context()
+        await execute_request(RequestConfig(method="GET", url="https://example.com/login"), ctx)
+        result = await execute_request(RequestConfig(method="GET", url="https://example.com/profile"), ctx)
+
+        assert result.data["body"] == {"cookie": "abc"}
+
+    @pytest.mark.asyncio
+    async def test_execute_request_timeout_remains_per_request(self, monkeypatch):
+        captured = []
+
+        class FakeResponse:
+            status_code = 200
+            headers = {}
+
+            def json(self):
+                return {"ok": True}
+
+        class FakeClient:
+            async def request(self, **kwargs):
+                captured.append(kwargs)
+                return FakeResponse()
+
+            async def aclose(self):
+                pass
+
+        monkeypatch.setattr("nextgen.actions.http.client.httpx.AsyncClient", FakeClient)
+
+        ctx = Context()
+        await execute_request(RequestConfig(method="GET", url="https://example.com", timeout=3), ctx)
+
+        assert captured[0]["timeout"] == 3
 
 
 class TestExtractVariables:

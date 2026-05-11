@@ -636,9 +636,27 @@ nextgen case.yaml --tags smoke --skip-tags slow
 
 ---
 
-## 8. AST 设计
+## 8. HTTP Session Reuse
 
-### 8.1 StepNode
+HTTP action 在同一个 testcase run 内复用一个 `httpx.AsyncClient`。这个 client 作为运行时资源存放在 `Context`，因此所有由同一个 scheduler 派生出的 step context 都能共享它。
+
+行为：
+
+- 同一个 testcase 内的 HTTP steps 共享连接池和 cookie jar
+- suite 中每个 setup/test testcase 都由独立 scheduler 执行，因此 session 不跨 testcase 文件共享
+- testcase 结束时，scheduler 在 `finally` 中关闭 context 里的运行时资源
+- scheduler 只知道通用 resource cleanup，不感知 HTTP client 细节
+- v1 不新增 DSL 配置项
+- redirect 行为保持 httpx/client 默认语义
+- step 级 `timeout` 仍按 request 配置传入，不提升为 client 级默认值
+
+跨 testcase 的登录态不依赖 cookie jar 共享。suite setup 如果要把认证结果传给普通 testcase，应通过 `extract` / `export` 显式导出 token、header 值或其它变量。
+
+---
+
+## 9. AST 设计
+
+### 9.1 StepNode
 
 ```python
 @dataclass
@@ -662,7 +680,7 @@ class StepNode:
     tags: list[str]
 ```
 
-### 8.2 Suite
+### 9.2 Suite
 
 ```python
 @dataclass
@@ -677,7 +695,7 @@ class Suite:
 
 ---
 
-### 8.3 AssertionNode
+### 9.3 AssertionNode
 
 ```python
 @dataclass
@@ -687,7 +705,7 @@ class AssertionNode:
     right: Any   # 期望值
 ```
 
-### 8.4 HookAction / Hooks
+### 9.4 HookAction / Hooks
 
 ```python
 @dataclass
@@ -710,7 +728,7 @@ class TestCaseHooks:
     after_each: list[HookAction]
 ```
 
-### 8.5 TestCase
+### 9.5 TestCase
 
 ```python
 @dataclass
@@ -727,9 +745,9 @@ class TestCase:
 
 ---
 
-## 9. 核心模块
+## 10. 核心模块
 
-### 9.1 Parser（DSL → AST）
+### 10.1 Parser（DSL → AST）
 
 **职责：**
 - 加载 YAML/JSON 文件
@@ -751,7 +769,7 @@ def register_action(spec: ActionSpec) -> None: ...
 def get_action(name: str) -> ActionSpec | None: ...
 ```
 
-### 9.2 Context（变量系统）
+### 10.2 Context（变量系统）
 
 **职责：**
 - 管理全局变量和提取的变量
@@ -767,13 +785,18 @@ class Context:
     def render(self, value: Any) -> Any: ...
     def render_value(self, value: Any) -> Any: ...
     def render_dict(self, data: dict) -> dict: ...
+    def get_resource(self, name: str) -> Any | None: ...
+    def set_resource(self, name: str, value: Any) -> None: ...
+    async def close_resources(self) -> None: ...
 ```
 
 调度器运行时会基于全局上下文派生步骤局部上下文，以支持：
 - `set_vars` 和 step hooks 的局部可见性
 - `extract` / `export` 成功后再回写全局上下文
 
-### 9.3 Planner（DAG 规划）
+派生出的 step context 会共享同一份 runtime resources，例如 testcase 级 HTTP client。变量 snapshot 仍保持局部隔离，resource lifecycle 由 scheduler 在 testcase run 结束时清理。
+
+### 10.3 Planner（DAG 规划）
 
 **职责：**
 - 构建依赖图
@@ -788,7 +811,7 @@ def get_execution_order(graph: dict[str, list[str]]) -> list[list[str]]: ...
 
 `get_execution_order` 是 planner 的辅助能力，用于 dry-run、可视化和调试分层拓扑顺序；当前 scheduler 采用运行时动态调度，不直接依赖该函数。
 
-### 9.4 Scheduler（调度器）
+### 10.4 Scheduler（调度器）
 
 **职责：**
 - 状态机驱动的 DAG 调度
@@ -797,10 +820,11 @@ def get_execution_order(graph: dict[str, list[str]]) -> list[list[str]]: ...
 - 重试逻辑
 - hook 生命周期调度
 - 自动发现并加载 `hooks.py`
+- testcase 结束时关闭 context runtime resources
 
 Scheduler 从 Action 注册表读取 `execute / extract / validate / summarize`，不再维护独立 action 实现注册表。
 
-### 9.5 Hooks（hook 注册表）
+### 10.5 Hooks（hook 注册表）
 
 ```python
 @dataclass(frozen=True)
@@ -826,7 +850,7 @@ Hook 函数通过签名绑定 YAML 参数。声明 `ctx` 或 `context` 时自动
 返回非 `None` 值会被忽略并记录 warning，写变量应显式调用 `ctx.set(...)`。
 同名 hook 默认禁止重复注册，需要覆盖时必须显式传入 `override=True`。
 
-### 9.6 Action
+### 10.6 Action
 
 action 实现通过 `ActionSpec` 注册到 action 注册表：
 ```python
@@ -858,7 +882,7 @@ ActionResult(
 当 action 在拿到业务结果前失败（如网络/连接异常）时，建议抛出 `ActionExecutionError(message, action_input)`，
 调度器会将 `action_input` 带入步骤报告，便于排查。
 
-### 9.7 DB Action
+### 10.7 DB Action
 
 支持 PostgreSQL、MySQL、SQLite 三种数据库。
 
@@ -907,7 +931,7 @@ steps:
 
 ---
 
-## 10. 状态机设计
+## 11. 状态机设计
 
 ### 状态流转
 
@@ -933,7 +957,7 @@ class StepStatus(str, Enum):
 
 ---
 
-## 11. 项目结构
+## 12. 项目结构
 
 ```text
 nextgen/
@@ -941,7 +965,7 @@ nextgen/
 ├── bootstrap.py        # 内置 action 加载
 ├── core/
 │   ├── model.py        # 通用 AST 模型（StepNode, TestCase 等）
-│   ├── context.py      # 变量系统
+│   ├── context.py      # 变量系统与运行时资源
 │   ├── actions.py      # action 注册表
 │   ├── planner.py      # DAG 规划
 │   ├── condition.py    # 条件评估器
@@ -983,7 +1007,7 @@ nextgen/
 
 ---
 
-## 12. 扩展新 Action 类型
+## 13. 扩展新 Action 类型
 
 ```python
 from dataclasses import dataclass, field
@@ -1022,7 +1046,7 @@ register_action(ActionSpec(
 
 ---
 
-## 13. CLI 使用
+## 14. CLI 使用
 
 ```bash
 # 基本执行
@@ -1067,7 +1091,7 @@ uv run nextgen demo.yaml
 
 ---
 
-## 14. 迭代路线
+## 15. 迭代路线
 
 ### 已完成
 
@@ -1091,15 +1115,15 @@ uv run nextgen demo.yaml
 * [x] Suite / 多文件执行 v1
 * [x] Dry-run / execution plan
 * [x] Tags / step filtering
+* [x] HTTP session reuse
 
 ### 待实现
 
-* [ ] HTTP session reuse
 * [ ] 目录发现
 
 ---
 
-## 15. 关键设计原则
+## 16. 关键设计原则
 
 * **DSL ≠ 执行逻辑**：DSL 只描述"做什么"，不描述"怎么做"
 * **AST ≠ Runtime**：AST 是静态描述，Runtime 是动态执行

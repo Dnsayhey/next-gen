@@ -241,3 +241,46 @@ async def test_suite_runner_applies_tag_filters_to_setup_and_tests(monkeypatch):
 
     assert result.status == CaseRunStatus.SUCCESS
     assert seen_steps == [["login", "profile"], ["login", "profile"]]
+
+
+@pytest.mark.asyncio
+async def test_suite_runner_keeps_runtime_resources_isolated_between_testcases(monkeypatch):
+    resource_ids = []
+
+    def fake_load_testcase(path):
+        return CaseModel(version=1, steps={}, source_path=str(path))
+
+    class FakeResource:
+        async def aclose(self):
+            pass
+
+    class FakeScheduler:
+        def __init__(self, testcase, max_concurrency=10):
+            from nextgen.core.context import Context
+
+            self.context = Context()
+
+        async def run(self):
+            resource = FakeResource()
+            self.context.set_resource("http.client", resource)
+            resource_ids.append(id(resource))
+            await self.context.close_resources()
+            return CaseRunResult(
+                testcase="case.yaml",
+                total_duration_ms=1,
+                status=CaseRunStatus.SUCCESS,
+                steps=[],
+            )
+
+    monkeypatch.setattr("nextgen.core.suite.load_testcase", fake_load_testcase)
+    monkeypatch.setattr("nextgen.core.suite.Scheduler", FakeScheduler)
+    suite = Suite(
+        name="smoke",
+        tests=["/tmp/one.yaml", "/tmp/two.yaml"],
+    )
+
+    result = await SuiteRunner(suite).run()
+
+    assert result.status == CaseRunStatus.SUCCESS
+    assert len(resource_ids) == 2
+    assert resource_ids[0] != resource_ids[1]

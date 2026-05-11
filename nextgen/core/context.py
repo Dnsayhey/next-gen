@@ -24,6 +24,7 @@ class Context:
     ):
         self.vars: dict[str, Any] = initial or {}
         self.metadata: dict[str, Any] = metadata or {}
+        self.resources: dict[str, Any] = {}
 
     def set(self, key: str, value: Any) -> None:
         """Set a variable."""
@@ -43,7 +44,9 @@ class Context:
         data = self.snapshot()
         if initial:
             data.update(initial)
-        return Context(data, metadata=self.metadata)
+        child = Context(data, metadata=self.metadata)
+        child.resources = self.resources
+        return child
 
     def merge(self, updates: dict[str, Any]) -> None:
         """Merge variables in bulk."""
@@ -99,3 +102,20 @@ class Context:
     def render_dict(self, data: dict[str, Any]) -> dict[str, Any]:
         """Recursively render variables in a dictionary."""
         return self.render_value(data)
+
+    def get_resource(self, name: str) -> Any | None:
+        """Get a runtime resource by name."""
+        return self.resources.get(name)
+
+    def set_resource(self, name: str, value: Any) -> None:
+        """Store a runtime resource by name."""
+        self.resources[name] = value
+
+    async def close_resources(self) -> None:
+        """Close runtime resources that expose an async close method."""
+        resources = list(self.resources.values())
+        self.resources.clear()
+        for resource in resources:
+            close = getattr(resource, "aclose", None)
+            if close is not None:
+                await close()
