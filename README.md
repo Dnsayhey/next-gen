@@ -69,7 +69,7 @@ steps:
 # 基本执行
 uv run nextgen demo.yaml
 
-# 指定并发数
+# 指定并发数（默认 10）
 uv run nextgen demo.yaml --parallel=5
 
 # 显示详细日志
@@ -108,6 +108,12 @@ uv run nextgen "tests/**/*.yaml"
 # 或使用 python -m 方式
 uv run python -m nextgen.cli demo.yaml
 ```
+
+CLI 退出码语义：
+
+- `0`：执行完成且 testcase / suite 成功
+- `1`：配置和解析都有效，但至少一个 testcase 或 step 失败
+- `2`：文件不存在、配置/解析错误、DAG 校验失败、tag 过滤无有效步骤、报告格式错误等执行前错误
 
 ## 环境文件
 
@@ -267,12 +273,13 @@ Dry-run 输出只包含 env key，不输出 env value，避免泄露 token/passw
 
 - `testcase`、`mode`、`fail_fast`
 - `env_keys`
+- `filters`
 - `hook_files`
 - `declared_export_keys`
 - `steps`
 - `execution_order`
 
-Suite 计划还会包含 `setup`、`tests`、`setup_export_keys` 和 `runtime_setup_exports: true`。其中 setup export 的实际值只有运行时才能知道，dry-run 只静态列出声明的 export key。
+Suite 计划也包含 `filters`，并额外包含 `setup`、`tests`、`setup_export_keys` 和 `runtime_setup_exports: true`。其中 setup export 的实际值只有运行时才能知道，dry-run 只静态列出声明的 export key。
 
 ## HTTP Session Reuse
 
@@ -312,6 +319,8 @@ Session 边界：
 ## 执行结果与报告
 
 CLI 默认将 JSON 结果输出到 stdout。单个 testcase 输出 `TestResult`；suite 文件或多个 testcase 输入输出 `SuiteResult`，其中 `tests` 包含每个 testcase 的 `TestResult`。
+
+同时，CLI 会把紧凑的人类可读摘要输出到 stderr。单 testcase 以 `-- result --` 开头，suite 以 `-- suite result --` 开头；失败时会列出失败步骤或失败 testcase。使用 `--output` 写报告到文件时，stdout 保持为空，stderr 仍显示摘要。
 
 每个步骤包含：
 
@@ -390,6 +399,21 @@ request:
 
 `@` 文件路径可以使用相对路径或绝对路径；相对路径以 testcase 文件所在目录为基准。
 
+## HTTP 响应路径
+
+HTTP action 的 `validate` 和 `extract` 默认从响应 JSON body 读取 `$.path`；响应元信息使用 `$$` 根：
+
+- `$$.status_code`：响应状态码
+- `$$.headers.Content-Type`：响应头，大小写不敏感；`$$.headers.content-type` 也可以
+
+```yaml
+validate:
+  - eq: [$$.status_code, 200]
+  - contains: [$$.headers.Content-Type, application/json]
+extract:
+  content_type: $$.headers.Content-Type
+```
+
 ## 项目结构
 
 ```
@@ -444,6 +468,8 @@ register_action(ActionSpec(
     summarize=lambda config: config.summary(),
 ))
 ```
+
+自定义 action 如果在拿到业务结果前失败，建议抛出 `ActionExecutionError(message, action_input)`；调度器会把已渲染的输入快照写入报告，方便定位连接、鉴权或参数问题。
 
 ## 文档
 

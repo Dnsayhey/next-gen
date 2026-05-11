@@ -212,7 +212,7 @@ steps:
 - `${var}` — 从全局 vars 或已提取的变量中替换
 - `$.data.token` — 从 HTTP response body 提取（JSONPath），`$` 表示 body 根
 - `$$.status_code` — 提取状态码
-- `$$.headers.xxx` — 从 HTTP 响应头提取，`$$` 表示 HTTP metadata 根
+- `$$.headers.xxx` — 从 HTTP 响应头提取，`$$` 表示 HTTP metadata 根；header 名大小写不敏感，例如 `$$.headers.Content-Type` 和 `$$.headers.content-type` 等价
 - `{jsonpath: "$.data.token"}` — JSONPath 显式写法
 - `{regex: "token=([a-z0-9]+)", group: 1}` — 正则提取，使用 Python `re.search`
 - `default` — 可选，未匹配或提取失败时使用默认值
@@ -497,7 +497,7 @@ before_each -> set_vars -> when -> before -> action -> validate -> extract -> ex
 - 用户可在 `hooks.py` 中通过 `from nextgen import hook` 注册
 - 大型项目也可以拆分为 `hooks_*.py`，例如 `hooks_auth.py`、`hooks_db.py`
 - 运行时会从 testcase 所在目录向上扫描到当前工作目录，按从外到内顺序加载；同一目录内先加载 `hooks.py`，再按文件名加载 `hooks_*.py`
-- hook 参数在执行期按函数签名绑定；标量简写优先绑定到唯一必填业务参数，没有必填参数时绑定到第一个非 `ctx` / `context` 的业务参数
+- hook 参数在执行期按函数签名绑定；标量简写优先绑定到唯一必填业务参数，没有必填参数时绑定到第一个非 `ctx` / `context` 的业务参数；如果有多个必填业务参数，标量简写会报错，需改用 dict 参数
 - `ctx` / `context` 是保留注入参数名，不应作为业务参数名使用
 
 ---
@@ -620,6 +620,7 @@ Dry-run 不会执行 action，不会加载或执行 hook，也不会输出 env v
 - `mode`
 - `fail_fast`
 - `env_keys`
+- `filters`
 - `hook_files`
 - `declared_export_keys`
 - `steps`
@@ -629,12 +630,33 @@ Suite 计划包含：
 
 - `suite`
 - `env_keys`
+- `filters`
 - `setup_export_keys`
 - `runtime_setup_exports`
 - `setup`
 - `tests`
 
 Dry-run 是严格计划校验器：任意 testcase 解析失败或 DAG 校验失败都会让 dry-run 失败并返回 exit code 2。
+
+---
+
+## 7.1 退出码与终端摘要
+
+CLI 退出码：
+
+- `0`：执行完成且 testcase / suite 成功
+- `1`：配置和解析都有效，但至少一个 testcase 或 step 失败
+- `2`：执行前错误，例如文件不存在、配置/解析错误、DAG 校验失败、tag 过滤无有效步骤或报告格式错误
+
+结构化报告默认输出到 stdout；如果传入 `--output`，报告写入文件且 stdout 为空。无论是否使用 `--output`，CLI 都会把紧凑摘要输出到 stderr：
+
+```text
+-- result --
+  case.yaml  success  12ms
+  steps: 2 passed, 0 failed, 0 skipped
+```
+
+Suite 摘要以 `-- suite result --` 开头，并按 testcase 统计 passed / failed / skipped；失败时摘要会追加失败 step 或 testcase 名称。
 
 ---
 
@@ -892,6 +914,12 @@ Hook 函数通过签名绑定 YAML 参数。声明 `ctx` 或 `context` 时自动
 返回非 `None` 值会被忽略并记录 warning，写变量应显式调用 `ctx.set(...)`。
 同名 hook 默认禁止重复注册，需要覆盖时必须显式传入 `override=True`。
 
+```python
+@hook("log", override=True)
+def custom_log(ctx, message="", level="info"):
+    ctx.set("last_log_message", message)
+```
+
 ### 11.6 Action
 
 action 实现通过 `ActionSpec` 注册到 action 注册表：
@@ -966,7 +994,7 @@ steps:
 ```
 
 **支持的 URL 格式：**
-- PostgreSQL: `postgres://user:pass@host:5432/dbname`
+- PostgreSQL: `postgres://user:pass@host:5432/dbname` 或 `postgresql://user:pass@host:5432/dbname`
 - MySQL: `mysql://user:pass@host:3306/dbname`
 - SQLite: `sqlite:///path/to/db.sqlite`
 - SQLite 相对路径: `sqlite://./examples/test.db`
@@ -1095,7 +1123,7 @@ register_action(ActionSpec(
 # 基本执行
 nextgen demo.yaml
 
-# 指定并发数
+# 指定并发数（默认 10）
 nextgen demo.yaml --parallel=5
 
 # 显示详细日志

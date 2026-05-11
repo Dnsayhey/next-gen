@@ -17,7 +17,9 @@ steps:
         token: token-${run_id}
     hooks:
       after:
+        - remember_phase: split-hook-file
         - mask_value: { source: "token", target: "masked_token" }
+        - log: "phase=${remembered_phase}"
         - log: "masked token=${masked_token}"
     extract:
       token: $.json.token

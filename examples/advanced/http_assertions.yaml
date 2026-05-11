@@ -1,0 +1,37 @@
+version: 1
+
+vars:
+  base_url: https://httpbin.org
+
+steps:
+  response_metadata:
+    request:
+      method: GET
+      url: ${base_url}/response-headers
+      params:
+        Content-Type: application/json
+        X-Trace-Id: trace-123
+    extract:
+      trace_id: $$.headers.X-Trace-Id
+      content_type: $$.headers.content-type
+      missing_header:
+        jsonpath: $$.headers.X-Missing-Header
+        default: not-present
+    validate:
+      - eq: [$$.status_code, 200]
+      - eq: [$$.headers.x-trace-id, trace-123]
+      - contains: [$$.headers.Content-Type, application/json]
+      - matches: [$$.headers.X-Trace-Id, "^trace-[0-9]+$"]
+
+  raw_body:
+    depends_on: [response_metadata]
+    request:
+      method: POST
+      url: ${base_url}/post
+      body: '{"ids":[1,2,3],"trace":"${trace_id}"}'
+      content_type: application/json
+    validate:
+      - eq: [$.json.trace, trace-123]
+      - len_ne: [$.json.ids, 0]
+      - len_gte: [$.json.ids, 3]
+      - len_lte: [$.json.ids, 5]

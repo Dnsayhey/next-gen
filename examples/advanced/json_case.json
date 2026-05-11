@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "vars": {
+    "base_url": "https://httpbin.org"
+  },
+  "steps": {
+    "json_testcase": {
+      "request": {
+        "method": "GET",
+        "url": "${base_url}/get",
+        "params": {
+          "format": "json"
+        }
+      },
+      "validate": [
+        {
+          "eq": [
+            "$.args.format",
+            "json"
+          ]
+        }
+      ]
+    }
+  }
+}
