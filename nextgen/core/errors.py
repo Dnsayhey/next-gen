@@ -23,6 +23,10 @@ class HookError(ExecutionError):
     """Hook execution failed."""
 
 
+class ReporterError(NextgenError):
+    """Reporter selection or rendering failed."""
+
+
 class ActionExecutionError(ExecutionError):
     """Action execution failed with the rendered input snapshot."""
 

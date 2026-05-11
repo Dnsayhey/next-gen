@@ -31,7 +31,7 @@
 
 * **变量作用域**：`set_vars` 和大部分 step hook 默认只在当前步骤内可见，`extract` 声明的变量会回写全局上下文
 * **断言操作符**：基础比较、字符串、集合、正则、长度等通用操作符，`validate` 和 `when` 共用同一套语义
-* **报告格式**：JSON 输出到 stdout，支持单 testcase 结果与 suite 聚合结果，步骤报告包含 `action_input / action_output`
+* **报告格式**：支持 JSON 与 JUnit XML，支持单 testcase 结果与 suite 聚合结果，步骤报告包含 `action_input / action_output`
 * **DSL 格式**：支持 YAML 和 JSON 两种格式
 * **Action / Hook 架构**：注册表模式，支持扩展 action 和自定义 hook
 * **Suite 优先于 include**：多文件执行保持 testcase 边界清晰；暂不引入 YAML `include` 合并语义
@@ -897,6 +897,7 @@ nextgen/
 │           └── sqlite.py
 └── reporter/
     ├── base.py          # reporter 接口
+    ├── junit_reporter.py # JUnit XML 报告实现
     └── json_reporter.py # JSON 报告实现
 ```
 
@@ -959,6 +960,12 @@ nextgen demo.json
 # 从环境文件加载变量
 nextgen demo.yaml --env env/base.yaml --env env/staging.yaml
 
+# 输出 JUnit XML
+nextgen demo.yaml --report junit
+
+# 写报告到文件
+nextgen smoke.yaml --report junit --output reports/junit.xml
+
 # 执行 suite 文件
 nextgen smoke.yaml
 
@@ -988,6 +995,7 @@ uv run nextgen demo.yaml
 * [x] 重试机制
 * [x] 并发控制
 * [x] JSON 报告
+* [x] JUnit XML 报告
 * [x] CLI 工具
 * [x] Action 注册表架构
 * [x] Hook 系统（内置 + 自定义）
@@ -998,7 +1006,6 @@ uv run nextgen demo.yaml
 
 ### 待实现
 
-* [ ] JUnit XML 报告
 * [ ] Dry-run / execution plan
 * [ ] Tags / step filtering
 * [ ] HTTP session reuse

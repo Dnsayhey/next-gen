@@ -8,7 +8,7 @@ import typer
 from loguru import logger
 
 from nextgen.bootstrap import load_builtin_actions
-from nextgen.core.errors import NextgenError
+from nextgen.core.errors import NextgenError, ReporterError
 from nextgen.core.planner import validate_testcase
 from nextgen.core.scheduler import Scheduler
 from nextgen.core.suite import SuiteRunner
@@ -16,7 +16,7 @@ from nextgen.core.result import StepResult, StepStatus, SuiteResult, TestResult,
 from nextgen.core.model import Suite
 from nextgen.parser.env_loader import load_env_files
 from nextgen.parser.loader import FileKind, classify_file, load_suite, load_testcase
-from nextgen.reporter.json_reporter import JsonReporter
+from nextgen.reporter import get_reporter, list_reporters
 
 app = typer.Typer(
     name="nextgen",
@@ -109,6 +109,8 @@ def run(
         help="Environment variable file, YAML or JSON. Can be passed multiple times.",
     ),
     parallel: int = typer.Option(10, "--parallel", "-p", help="Maximum concurrency"),
+    report: str = typer.Option("json", "--report", help="Report format"),
+    output: Path | None = typer.Option(None, "--output", "-o", help="Write report to a file"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show verbose logs"),
 ) -> None:
     """Run a testcase or suite."""
@@ -122,7 +124,12 @@ def run(
         result = asyncio.run(run_inputs(files, env_files or [], parallel))
 
         # Output report.
-        print(JsonReporter().render(result))
+        rendered = render_report(result, report)
+        if output is None:
+            print(rendered)
+        else:
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(rendered, encoding="utf-8")
         typer.echo(render_terminal_summary(result), err=True)
 
         # Exit code.
@@ -141,6 +148,15 @@ def run(
     except RuntimeError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(code=2)
+
+
+def render_report(result: TestResult | SuiteResult, report: str) -> str:
+    """Render a result using a registered reporter."""
+    reporter = get_reporter(report)
+    if reporter is None:
+        available = ", ".join(sorted(list_reporters()))
+        raise ReporterError(f"unsupported report format: {report}; supported: {available}")
+    return reporter.render(result)
 
 
 async def run_inputs(

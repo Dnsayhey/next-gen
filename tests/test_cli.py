@@ -4,6 +4,8 @@ from typer.testing import CliRunner
 
 from nextgen.cli import app
 from nextgen.cli import render_terminal_summary
+from nextgen.cli import render_report
+from nextgen.core.errors import ReporterError
 from nextgen.core.result import (
     StepResult,
     StepStatus,
@@ -294,3 +296,142 @@ def test_run_multiple_files_returns_suite_result(tmp_path, monkeypatch):
 
     assert result.exit_code == 0
     assert '"suite": "cli"' in result.stdout
+
+
+def test_render_report_rejects_unknown_reporter():
+    result = CaseRunResult(
+        testcase="case.yaml",
+        total_duration_ms=1,
+        status=CaseRunStatus.SUCCESS,
+        steps=[],
+    )
+
+    try:
+        render_report(result, "missing")
+    except ReporterError as exc:
+        assert "unsupported report format: missing" in str(exc)
+        assert "json" in str(exc)
+        assert "junit" in str(exc)
+    else:
+        raise AssertionError("expected ReporterError")
+
+
+def test_run_reports_unknown_report_format_without_testcase_format_prefix(tmp_path, monkeypatch):
+    case_file = tmp_path / "case.yaml"
+    case_file.write_text(
+        "\n".join([
+            "version: 1",
+            "steps:",
+            "  one:",
+            "    request:",
+            "      method: GET",
+            "      url: https://example.com",
+        ]),
+        encoding="utf-8",
+    )
+
+    class FakeScheduler:
+        def __init__(self, testcase, max_concurrency=10):
+            pass
+
+        async def run(self):
+            return CaseRunResult(
+                testcase="case.yaml",
+                total_duration_ms=1,
+                status=CaseRunStatus.SUCCESS,
+                steps=[],
+            )
+
+    monkeypatch.setattr("nextgen.cli.Scheduler", FakeScheduler)
+
+    result = runner.invoke(app, [str(case_file), "--report", "missing"])
+
+    assert result.exit_code == 2
+    assert "unsupported report format: missing" in result.stderr
+    assert "Invalid testcase format" not in result.stderr
+
+
+def test_run_writes_report_to_output_file(tmp_path, monkeypatch):
+    case_file = tmp_path / "case.yaml"
+    case_file.write_text(
+        "\n".join([
+            "version: 1",
+            "steps:",
+            "  one:",
+            "    request:",
+            "      method: GET",
+            "      url: https://example.com",
+        ]),
+        encoding="utf-8",
+    )
+    output_file = tmp_path / "reports" / "result.xml"
+
+    class FakeScheduler:
+        def __init__(self, testcase, max_concurrency=10):
+            pass
+
+        async def run(self):
+            return CaseRunResult(
+                testcase="case.yaml",
+                total_duration_ms=1,
+                status=CaseRunStatus.SUCCESS,
+                steps=[
+                    StepResult(
+                        name="one",
+                        status=StepStatus.SUCCESS,
+                        duration_ms=1,
+                        action_summary="GET https://example.com",
+                    )
+                ],
+            )
+
+    monkeypatch.setattr("nextgen.cli.Scheduler", FakeScheduler)
+
+    result = runner.invoke(app, [
+        str(case_file),
+        "--report",
+        "junit",
+        "--output",
+        str(output_file),
+    ])
+
+    assert result.exit_code == 0
+    assert result.stdout == ""
+    assert "-- result --" in result.stderr
+    assert output_file.read_text(encoding="utf-8").startswith("<?xml")
+    assert "testsuite" in output_file.read_text(encoding="utf-8")
+
+
+def test_run_prints_junit_to_stdout(tmp_path, monkeypatch):
+    case_file = tmp_path / "case.yaml"
+    case_file.write_text(
+        "\n".join([
+            "version: 1",
+            "steps:",
+            "  one:",
+            "    request:",
+            "      method: GET",
+            "      url: https://example.com",
+        ]),
+        encoding="utf-8",
+    )
+
+    class FakeScheduler:
+        def __init__(self, testcase, max_concurrency=10):
+            pass
+
+        async def run(self):
+            return CaseRunResult(
+                testcase="case.yaml",
+                total_duration_ms=1,
+                status=CaseRunStatus.SUCCESS,
+                steps=[],
+            )
+
+    monkeypatch.setattr("nextgen.cli.Scheduler", FakeScheduler)
+
+    result = runner.invoke(app, [str(case_file), "--report", "junit"])
+
+    assert result.exit_code == 0
+    assert result.stdout.startswith("<?xml")
+    assert "<testsuites>" in result.stdout

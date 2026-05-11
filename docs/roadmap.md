@@ -15,7 +15,8 @@ The core engine is already usable for internal API and database testing:
 - Lifecycle hooks and discovered `hooks.py`
 - Environment files via `--env`
 - Suite / multi-file execution v1
-- JSON reporter and terminal summary for both testcase and suite results
+- JSON and JUnit XML reporters
+- Terminal summary for both testcase and suite results
 - Structured CLI error handling
 
 The next work should focus on CI integration, execution planning, and authoring ergonomics rather than adding many new action types.
@@ -149,17 +150,21 @@ Deferred from v1:
 
 ### 2. JUnit XML Reporter
 
-Next recommended work. After suite result shape exists, add CI-friendly reporting:
+Status: **implemented**.
+
+Suite result shape now supports CI-friendly reporting:
 
 - `--report json|junit`
 - `--output path`
-- JUnit maps naturally from suite/testcase/step hierarchy.
+- JUnit maps suite/testcase/step hierarchy to XML.
 
-Design notes:
+Implemented behavior:
 
-- Keep stdout JSON-compatible when no output file is requested.
-- If `--output` is provided, write the selected report to the file and keep terminal summary on stderr.
-- JSON reporter already supports both single `TestResult` and `SuiteResult`.
+- Default report remains JSON.
+- If `--output` is provided, the selected report is written to the file and terminal summary stays on stderr.
+- Without `--output`, the selected report is written to stdout.
+- JSON and JUnit reporters both support single `TestResult` and `SuiteResult`.
+- JUnit maps each step to a testcase entry; file-level failed or skipped results use a synthetic testcase entry.
 
 ### 3. Dry-Run / Execution Plan
 
@@ -241,4 +246,4 @@ These are valuable, but should wait until suite/reporting/filtering foundations 
 
 ## Near-Term Recommendation
 
-Start with **JUnit XML reporting** next. Suite / multi-file execution now provides the aggregate result model that CI reporting and dry-run planning can share.
+Start with **dry-run / execution plan** next. Suite / multi-file execution and JUnit reporting now provide the aggregate model and first CI-facing report format.
