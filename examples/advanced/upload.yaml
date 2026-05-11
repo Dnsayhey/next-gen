@@ -9,6 +9,7 @@ steps:
       method: POST
       url: ${base_url}/post
       multipart:
+        # @ paths are resolved relative to this YAML file.
         file: "@../assets/test_upload.csv"
         description: guide upload
     validate:

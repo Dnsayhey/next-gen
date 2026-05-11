@@ -4,6 +4,8 @@ This directory is a runnable walkthrough rather than a feature dump. Start with 
 
 ## 1. First testcase
 
+In HTTP assertions, `$` reads the response body (for example JSON fields) and `$$` reads response metadata such as `status_code` and headers.
+
 ```bash
 uv run nextgen examples/guide/01_first_test.yaml
 ```
@@ -36,6 +38,8 @@ Directory discovery skips `suite.yaml` with a warning and collects only testcase
 ```bash
 uv run nextgen examples/guide/suite.yaml --tags smoke
 ```
+
+This runs only steps tagged `smoke`, while still keeping any required dependency steps. In this suite, `login`, `fetch_profile`, and `create_order` run; `fetch_order` is excluded because it is tagged only `orders`.
 
 ## 6. CI-style report
 

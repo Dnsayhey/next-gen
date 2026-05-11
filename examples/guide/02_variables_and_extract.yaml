@@ -16,6 +16,8 @@ steps:
     extract:
       username: $.json.username
       token: $.json.token
+    # export is useful when a suite setup testcase needs to share values with later testcases.
+    # Inside this single testcase, later steps can also use extracted values directly.
     export:
       auth_header: Bearer ${token}
     validate:

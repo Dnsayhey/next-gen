@@ -1,0 +1,46 @@
+# Demonstrates conditional step execution with `when`.
+# Steps are skipped when their condition evaluates to false.
+# Try changing tier: printf 'tier: premium\n' > /tmp/premium.yaml && uv run nextgen examples/advanced/conditional.yaml --env /tmp/premium.yaml
+
+version: 1
+
+vars:
+  base_url: https://httpbin.org
+  tier: standard
+
+steps:
+  health_check:
+    tags: [smoke]
+    request:
+      method: GET
+      url: ${base_url}/get
+    extract:
+      origin: $.origin
+    validate:
+      - eq: [$$.status_code, 200]
+
+  # Skipped: tier is "standard", not "premium"
+  premium_check:
+    depends_on: [health_check]
+    when:
+      - eq: ["${tier}", premium]
+    request:
+      method: GET
+      url: ${base_url}/get
+      params:
+        tier: premium
+    validate:
+      - eq: [$.args.tier, premium]
+
+  # Runs: origin was extracted and is non-empty
+  log_origin:
+    depends_on: [health_check]
+    when:
+      - ne: ["${origin}", ""]
+    request:
+      method: POST
+      url: ${base_url}/post
+      json:
+        origin: ${origin}
+    validate:
+      - eq: [$.json.origin, "${origin}"]

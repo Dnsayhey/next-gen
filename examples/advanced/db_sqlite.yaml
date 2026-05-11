@@ -39,7 +39,7 @@ steps:
       query: SELECT * FROM users WHERE name = $1
       params: [Alice]
     extract:
-      user_id: $.rows[0].id
+      user_id: "$.rows[0].id"
     validate:
       - eq: [$.row_count, 1]
       - eq: ["$.rows[0].email", alice@example.com]
