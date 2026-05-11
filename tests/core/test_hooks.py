@@ -1,4 +1,4 @@
-"""hooks.py unit tests"""
+"""Hook system unit tests."""
 
 from pathlib import Path
 
@@ -26,7 +26,7 @@ def hook_registry_snapshot():
 
 
 class TestDiscoverHooks:
-    """Test hooks.py discovery"""
+    """Test hook file discovery"""
 
     def test_discover_hooks_from_outer_to_inner(self, tmp_path):
         root = tmp_path
@@ -45,6 +45,30 @@ class TestDiscoverHooks:
             root / "hooks.py",
             cases / "hooks.py",
             api / "hooks.py",
+        ]
+
+    def test_discover_hooks_supports_split_hook_files(self, tmp_path):
+        root = tmp_path
+        cases = root / "testcases"
+        cases.mkdir()
+
+        (root / "hooks.py").write_text("# root main\n", encoding="utf-8")
+        (root / "hooks_auth.py").write_text("# root auth\n", encoding="utf-8")
+        (root / "hooks_db.py").write_text("# root db\n", encoding="utf-8")
+        (root / "hook_misc.py").write_text("# ignored\n", encoding="utf-8")
+        (cases / "hooks.py").write_text("# cases main\n", encoding="utf-8")
+        (cases / "hooks_api.py").write_text("# cases api\n", encoding="utf-8")
+        case_file = cases / "login.yaml"
+        case_file.write_text("version: 1\nsteps: {}\n", encoding="utf-8")
+
+        found = discover_hooks(case_file, root)
+
+        assert found == [
+            root / "hooks.py",
+            root / "hooks_auth.py",
+            root / "hooks_db.py",
+            cases / "hooks.py",
+            cases / "hooks_api.py",
         ]
 
     def test_discover_hooks_returns_empty_when_case_is_outside_cwd(self, tmp_path):

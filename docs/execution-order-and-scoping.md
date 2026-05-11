@@ -7,7 +7,7 @@
 ```
 Scheduler.run()
   │
-  ├─ 1. load_discovered_hooks()        加载 hooks.py 文件
+  ├─ 1. load_discovered_hooks()        加载 hook 文件
   ├─ 2. execute_hooks(before_all)       全局 context
   ├─ 3. DAG 调度，执行各步骤
   │     ├─ step A (run_step)

@@ -12,7 +12,7 @@ The core engine is already usable for internal API and database testing:
 - `depends_on`, `fail_fast`, retry, backoff, and timeout
 - `when` conditions
 - Matrix expansion
-- Lifecycle hooks and discovered `hooks.py`
+- Lifecycle hooks and discovered hook files
 - Environment files via `--env`
 - Suite / multi-file execution v1
 - JSON and JUnit XML reporters

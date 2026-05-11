@@ -253,7 +253,7 @@ uv run nextgen case.yaml --tags smoke --skip-tags slow
 
 ## Dry-run / 执行计划
 
-`--dry-run` 会完整加载 testcase 或 suite、合并 env 文件、展开 matrix、校验 DAG、发现 `hooks.py`，然后输出 JSON 执行计划，但不会执行 action，也不会加载或执行 hook。
+`--dry-run` 会完整加载 testcase 或 suite、合并 env 文件、展开 matrix、校验 DAG、发现 hook 文件，然后输出 JSON 执行计划，但不会执行 action，也不会加载或执行 hook。
 
 ```bash
 uv run nextgen smoke.yaml --dry-run

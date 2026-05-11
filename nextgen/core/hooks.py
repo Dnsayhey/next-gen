@@ -230,7 +230,7 @@ def set_vars(ctx: Context, **vars: object) -> None:
 
 
 def discover_hooks(testcase_path: str | Path, cwd: str | Path) -> list[Path]:
-    """Scan upward from the testcase directory to cwd for hooks.py files."""
+    """Scan upward from the testcase directory to cwd for hook files."""
     current = Path(testcase_path).resolve().parent
     root = Path(cwd).resolve()
     hook_files: list[Path] = []
@@ -238,19 +238,30 @@ def discover_hooks(testcase_path: str | Path, cwd: str | Path) -> list[Path]:
     if root not in [current, *current.parents]:
         return []
 
+    directories: list[Path] = []
     while True:
-        hook_file = current / "hooks.py"
-        if hook_file.exists():
-            hook_files.append(hook_file)
+        directories.append(current)
         if current == root:
             break
         current = current.parent
 
-    return list(reversed(hook_files))
+    for directory in reversed(directories):
+        hook_files.extend(_hook_files_in_directory(directory))
+
+    return hook_files
+
+
+def _hook_files_in_directory(directory: Path) -> list[Path]:
+    hooks_file = directory / "hooks.py"
+    hook_files: list[Path] = []
+    if hooks_file.is_file():
+        hook_files.append(hooks_file)
+    hook_files.extend(sorted(path for path in directory.glob("hooks_*.py") if path.is_file()))
+    return hook_files
 
 
 def _load_hooks_module(path: Path) -> None:
-    """Dynamically load one hooks.py module."""
+    """Dynamically load one hook module."""
     digest = hashlib.sha256(str(path.resolve()).encode("utf-8")).hexdigest()[:16]
     module_name = f"nextgen_user_hooks_{digest}"
     spec = importlib.util.spec_from_file_location(module_name, path)
@@ -259,11 +270,11 @@ def _load_hooks_module(path: Path) -> None:
 
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    logger.debug(f"Loaded hooks.py: {path}")
+    logger.debug(f"Loaded hook file: {path}")
 
 
 def load_discovered_hooks(testcase_path: str | Path, cwd: str | Path) -> list[Path]:
-    """Discover and load hooks.py files."""
+    """Discover and load hook files."""
     loaded = discover_hooks(testcase_path, cwd)
     for hook_file in loaded:
         _load_hooks_module(hook_file)
