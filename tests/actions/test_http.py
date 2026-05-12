@@ -265,6 +265,25 @@ class TestRequestConfig:
 
         assert captured[0]["timeout"] == 3
 
+    @pytest.mark.asyncio
+    async def test_execute_request_uses_exception_type_when_message_is_blank(self, monkeypatch):
+        class BlankMessageError(Exception):
+            def __str__(self):
+                return ""
+
+        class FakeClient:
+            async def request(self, **kwargs):
+                raise BlankMessageError()
+
+            async def aclose(self):
+                pass
+
+        monkeypatch.setattr("nextgen.actions.http.client.httpx.AsyncClient", FakeClient)
+
+        ctx = Context()
+        with pytest.raises(ActionExecutionError, match="BlankMessageError"):
+            await execute_request(RequestConfig(method="GET", url="https://example.com"), ctx)
+
 
 class TestExtractVariables:
     """Test extract_variables"""

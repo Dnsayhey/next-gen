@@ -3,6 +3,14 @@
 from typing import Any
 
 
+def describe_exception(exc: Exception) -> str:
+    """Render an exception message that is never blank."""
+    message = str(exc).strip()
+    if message:
+        return message
+    return exc.__class__.__name__
+
+
 class NextgenError(Exception):
     """Base error type for Nextgen."""
 

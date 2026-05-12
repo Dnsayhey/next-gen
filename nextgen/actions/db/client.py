@@ -3,7 +3,7 @@
 from loguru import logger
 
 from nextgen.core.context import Context
-from nextgen.core.errors import ActionExecutionError
+from nextgen.core.errors import ActionExecutionError, describe_exception
 from nextgen.core.result import ActionResult
 from nextgen.actions.db.drivers import get_driver
 from nextgen.actions.db.model import DbConfig
@@ -39,7 +39,7 @@ async def execute_query(config: DbConfig, ctx: Context) -> ActionResult:
     try:
         result = await driver.execute(url, query, params)
     except Exception as exc:
-        raise ActionExecutionError(str(exc), action_input) from exc
+        raise ActionExecutionError(describe_exception(exc), action_input) from exc
 
     logger.info(f"Query completed: returned {result['row_count']} rows")
     return ActionResult(

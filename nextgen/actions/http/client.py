@@ -7,7 +7,7 @@ import httpx
 from loguru import logger
 
 from nextgen.core.context import Context
-from nextgen.core.errors import ActionExecutionError
+from nextgen.core.errors import ActionExecutionError, describe_exception
 from nextgen.core.files import load_file_content, resolve_case_path
 from nextgen.core.result import ActionResult
 
@@ -154,7 +154,7 @@ async def execute_request(
             # No request body.
             response = await client.request(**request_kwargs)
     except Exception as exc:
-        raise ActionExecutionError(str(exc), action_input) from exc
+        raise ActionExecutionError(describe_exception(exc), action_input) from exc
 
     logger.info(f"Response status: {response.status_code}")
 
