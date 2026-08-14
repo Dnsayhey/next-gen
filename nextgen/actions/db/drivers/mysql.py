@@ -36,10 +36,16 @@ async def execute(url: str, query: str, params: list[Any] | None = None) -> dict
             rows = await cursor.fetchall()
             columns = [desc[0] for desc in cursor.description] if cursor.description else []
 
-            return {
+            result = {
                 "rows": rows or [],
                 "row_count": cursor.rowcount,
                 "columns": columns,
             }
+
+        await conn.commit()
+        return result
+    except Exception:
+        await conn.rollback()
+        raise
     finally:
         conn.close()

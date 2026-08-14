@@ -10,6 +10,7 @@ from nextgen.actions.db.extract import extract_variables
 from nextgen.actions.db.model import DbConfig
 from nextgen.actions.db.validate import validate_result
 from nextgen.actions.db.drivers import get_driver
+from nextgen.actions.db.drivers import mysql
 from nextgen.actions.db.drivers import postgres
 from nextgen.actions.db.drivers.sqlite import resolve_db_path
 
@@ -180,6 +181,115 @@ class TestPostgresDriver:
         assert messages == ["Connecting to PostgreSQL: db.example.com:15432/app"]
         assert "secret" not in messages[0]
         assert "user" not in messages[0]
+
+
+class TestMysqlDriver:
+    """Test MySQL transaction behavior."""
+
+    @pytest.mark.asyncio
+    async def test_successful_query_commits_before_closing(self, monkeypatch):
+        events = []
+
+        class FakeCursor:
+            description = None
+            rowcount = 1
+
+            async def __aenter__(self):
+                events.append("cursor_enter")
+                return self
+
+            async def __aexit__(self, exc_type, exc, traceback):
+                events.append("cursor_exit")
+
+            async def execute(self, query, params):
+                events.append(("execute", query, params))
+
+            async def fetchall(self):
+                events.append("fetchall")
+                return []
+
+        class FakeConnection:
+            def cursor(self, cursor_class):
+                assert cursor_class is mysql.aiomysql.DictCursor
+                return FakeCursor()
+
+            async def commit(self):
+                events.append("commit")
+
+            async def rollback(self):
+                events.append("rollback")
+
+            def close(self):
+                events.append("close")
+
+        async def fake_connect(**config):
+            return FakeConnection()
+
+        monkeypatch.setattr(mysql.aiomysql, "connect", fake_connect)
+
+        result = await mysql.execute(
+            "mysql://user:secret@db.example.com/app",
+            "UPDATE users SET active = 1 WHERE id = %s",
+            [7],
+        )
+
+        assert result == {"rows": [], "row_count": 1, "columns": []}
+        assert events == [
+            "cursor_enter",
+            ("execute", "UPDATE users SET active = 1 WHERE id = %s", [7]),
+            "fetchall",
+            "cursor_exit",
+            "commit",
+            "close",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_failed_query_rolls_back_before_closing(self, monkeypatch):
+        events = []
+
+        class FakeCursor:
+            async def __aenter__(self):
+                events.append("cursor_enter")
+                return self
+
+            async def __aexit__(self, exc_type, exc, traceback):
+                events.append("cursor_exit")
+
+            async def execute(self, query, params):
+                events.append("execute")
+                raise RuntimeError("query failed")
+
+        class FakeConnection:
+            def cursor(self, cursor_class):
+                return FakeCursor()
+
+            async def commit(self):
+                events.append("commit")
+
+            async def rollback(self):
+                events.append("rollback")
+
+            def close(self):
+                events.append("close")
+
+        async def fake_connect(**config):
+            return FakeConnection()
+
+        monkeypatch.setattr(mysql.aiomysql, "connect", fake_connect)
+
+        with pytest.raises(RuntimeError, match="query failed"):
+            await mysql.execute(
+                "mysql://user:secret@db.example.com/app",
+                "UPDATE users SET active = 1",
+            )
+
+        assert events == [
+            "cursor_enter",
+            "execute",
+            "cursor_exit",
+            "rollback",
+            "close",
+        ]
 
 
 class TestSqliteDriver:
