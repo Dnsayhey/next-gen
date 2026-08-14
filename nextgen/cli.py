@@ -176,6 +176,8 @@ def run(
     except ValueError as e:
         typer.echo(f"Invalid testcase format: {e}", err=True)
         raise typer.Exit(code=2)
+    except typer.Exit:
+        raise
     except RuntimeError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(code=2)

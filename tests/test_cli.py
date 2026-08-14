@@ -105,6 +105,50 @@ def test_run_reports_parse_error_without_traceback(tmp_path):
     assert "Traceback" not in result.stderr
 
 
+def test_run_returns_exit_code_one_for_test_failure(tmp_path, monkeypatch):
+    case_file = tmp_path / "case.yaml"
+    case_file.write_text(
+        "\n".join([
+            "version: 1",
+            "steps:",
+            "  one:",
+            "    request:",
+            "      method: GET",
+            "      url: https://example.com",
+        ]),
+        encoding="utf-8",
+    )
+
+    class FakeScheduler:
+        def __init__(self, testcase, max_concurrency=10):
+            pass
+
+        async def run(self):
+            return CaseRunResult(
+                testcase=str(case_file),
+                total_duration_ms=1,
+                status=CaseRunStatus.FAILED,
+                steps=[
+                    StepResult(
+                        name="one",
+                        status=StepStatus.FAILED,
+                        duration_ms=1,
+                        action_summary="GET https://example.com",
+                        error="request failed",
+                    )
+                ],
+            )
+
+    monkeypatch.setattr("nextgen.cli.Scheduler", FakeScheduler)
+
+    result = runner.invoke(app, [str(case_file)])
+
+    assert result.exit_code == 1
+    assert json.loads(result.stdout)["status"] == "failed"
+    assert "request failed" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
 def test_run_keeps_stdout_json_clean_when_non_verbose(tmp_path):
     case_file = tmp_path / "bad.yaml"
     case_file.write_text("version: 1\nsteps: {}\n", encoding="utf-8")
