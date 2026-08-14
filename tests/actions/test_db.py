@@ -47,6 +47,17 @@ class TestDbConfig:
                 "params": {"id": 1},
             })
 
+    @pytest.mark.parametrize(
+        ("config", "message"),
+        [
+            ({"url": 123, "query": "SELECT 1"}, "db.url must be a non-empty string"),
+            ({"url": "sqlite:///tmp/test.db", "query": []}, "db.query must be a non-empty string"),
+        ],
+    )
+    def test_url_and_query_must_be_non_empty_strings(self, config, message):
+        with pytest.raises(ValueError, match=message):
+            DbConfig.from_dict(config)
+
     @pytest.mark.asyncio
     async def test_execute_query_includes_rendered_action_input_and_output(self, monkeypatch):
         async def fake_execute(url, query, params):

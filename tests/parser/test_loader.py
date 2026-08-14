@@ -61,6 +61,20 @@ class TestLoadFile:
         with pytest.raises(ValueError, match="unsupported file format"):
             load_file(file)
 
+    @pytest.mark.parametrize(
+        ("filename", "content"),
+        [
+            ("broken.yaml", "version: 1\nsteps:\n  broken: [\n"),
+            ("broken.json", '{"version": 1, "steps": '),
+        ],
+    )
+    def test_malformed_document_raises_parse_error_with_path(self, tmp_path, filename, content):
+        file = tmp_path / filename
+        file.write_text(content, encoding="utf-8")
+
+        with pytest.raises(ParseError, match=rf"invalid testcase file '{file}'"):
+            load_file(file)
+
 
 class TestFindActionType:
     """Test find_action_type"""
@@ -100,6 +114,53 @@ class TestParseRequest:
             "form": {"key": "value"},
         }
         with pytest.raises(ValueError, match="mutually exclusive"):
+            RequestConfig.from_dict(config)
+
+    @pytest.mark.parametrize(
+        ("config", "message"),
+        [
+            ({"method": 123, "url": "http://test.com"}, "request.method must be a non-empty string"),
+            ({"method": "GET", "url": []}, "request.url must be a non-empty string"),
+            (
+                {"method": "GET", "url": "http://test.com", "headers": []},
+                "request.headers must be a dict",
+            ),
+            (
+                {"method": "GET", "url": "http://test.com", "params": []},
+                "request.params must be a dict",
+            ),
+            (
+                {"method": "POST", "url": "http://test.com", "json": []},
+                "request.json must be a dict",
+            ),
+            (
+                {"method": "POST", "url": "http://test.com", "form": "x=1"},
+                "request.form must be a dict",
+            ),
+            (
+                {"method": "POST", "url": "http://test.com", "multipart": []},
+                "request.multipart must be a dict",
+            ),
+            (
+                {"method": "POST", "url": "http://test.com", "body": {}},
+                "request.body must be a string",
+            ),
+            (
+                {"method": "POST", "url": "http://test.com", "content_type": 1},
+                "request.content_type must be a string",
+            ),
+            (
+                {"method": "GET", "url": "http://test.com", "timeout": "5"},
+                "request.timeout must be a positive number",
+            ),
+            (
+                {"method": "GET", "url": "http://test.com", "timeout": 0},
+                "request.timeout must be a positive number",
+            ),
+        ],
+    )
+    def test_rejects_invalid_field_types(self, config, message):
+        with pytest.raises(ParseError, match=message):
             RequestConfig.from_dict(config)
 
 
@@ -166,6 +227,19 @@ class TestParseHookAction:
         with pytest.raises(ValueError, match="invalid testcase hooks format"):
             parse_testcase_hooks([])
 
+    @pytest.mark.parametrize("field", ["before", "after"])
+    def test_parse_step_hooks_rejects_non_list_phase(self, field):
+        with pytest.raises(ParseError, match=rf"step hooks.{field} must be a list"):
+            parse_step_hooks({field: {"log": "hello"}})
+
+    @pytest.mark.parametrize(
+        "field",
+        ["before_all", "after_all", "before_each", "after_each"],
+    )
+    def test_parse_testcase_hooks_rejects_non_list_phase(self, field):
+        with pytest.raises(ParseError, match=rf"testcase hooks.{field} must be a list"):
+            parse_testcase_hooks({field: {"log": "hello"}})
+
 
 class TestParseStep:
     """Test parse_step"""
@@ -189,6 +263,57 @@ class TestParseStep:
     def test_missing_action(self):
         with pytest.raises(ValueError, match="missing an action field"):
             parse_step("test", {"depends_on": ["a"]})
+
+    def test_rejects_non_mapping_step(self):
+        with pytest.raises(ParseError, match="step 'test' must be a dict"):
+            parse_step("test", [])
+
+    @pytest.mark.parametrize("action_type", ["request", "db"])
+    def test_rejects_non_mapping_action_config(self, action_type):
+        with pytest.raises(ParseError, match=rf"step 'test'.{action_type} must be a dict"):
+            parse_step("test", {action_type: None})
+
+    @pytest.mark.parametrize(
+        ("field", "value", "expected_type"),
+        [
+            ("depends_on", "login", "list"),
+            ("extract", [], "dict"),
+            ("export", [], "dict"),
+            ("validate", {}, "list"),
+            ("set_vars", [], "dict"),
+            ("config", [], "dict"),
+        ],
+    )
+    def test_rejects_invalid_structured_field(self, field, value, expected_type):
+        data = {
+            "request": {"method": "GET", "url": "http://test.com"},
+            field: value,
+        }
+
+        with pytest.raises(
+            ParseError,
+            match=rf"step 'test'.{field} must be a {expected_type}",
+        ):
+            parse_step("test", data)
+
+    def test_rejects_invalid_dependency_name(self):
+        data = {
+            "request": {"method": "GET", "url": "http://test.com"},
+            "depends_on": [""],
+        }
+
+        with pytest.raises(ParseError, match="depends_on must contain non-empty strings"):
+            parse_step("test", data)
+
+    @pytest.mark.parametrize("field", ["extract", "export", "set_vars", "config"])
+    def test_rejects_non_string_mapping_keys(self, field):
+        data = {
+            "request": {"method": "GET", "url": "http://test.com"},
+            field: {1: "value"},
+        }
+
+        with pytest.raises(ParseError, match=rf"step 'test'.{field} keys must be strings"):
+            parse_step("test", data)
 
     def test_rejects_multiple_actions_in_one_step(self):
         data = {
@@ -253,6 +378,16 @@ class TestParseStep:
             "when": {"invalid": []},
         }
         with pytest.raises(ValueError, match="invalid when format"):
+            parse_step("test", data)
+
+    @pytest.mark.parametrize("operator", ["and", "or"])
+    def test_step_rejects_non_list_when_group(self, operator):
+        data = {
+            "request": {"method": "GET", "url": "http://test.com"},
+            "when": {operator: {"eq": [1, 1]}},
+        }
+
+        with pytest.raises(ParseError, match=rf"when.{operator} must be a list"):
             parse_step("test", data)
 
     def test_step_with_set_vars(self):
@@ -405,6 +540,20 @@ class TestParseTestcase:
         with pytest.raises(ValueError, match="invalid matrix format"):
             parse_testcase(data)
 
+    def test_matrix_rejects_invalid_variable_name(self):
+        data = {
+            "version": 1,
+            "steps": {
+                "login": {
+                    "matrix": {1: ["admin"]},
+                    "request": {"method": "GET", "url": "http://test.com"},
+                }
+            },
+        }
+
+        with pytest.raises(ParseError, match="matrix variable names must be non-empty strings"):
+            parse_testcase(data)
+
     def test_matrix_rejects_set_vars_conflict(self):
         data = {
             "version": 1,
@@ -432,6 +581,49 @@ class TestParseTestcase:
         data = {"version": 1}
         with pytest.raises(ValueError, match="steps"):
             parse_testcase(data)
+
+    def test_rejects_non_mapping_steps(self):
+        with pytest.raises(ParseError, match="steps must be a dict"):
+            parse_testcase({"version": 1, "steps": ["one"]})
+
+    def test_rejects_non_mapping_vars(self):
+        data = {
+            "version": 1,
+            "vars": ["base_url"],
+            "steps": {
+                "test": {"request": {"method": "GET", "url": "http://test.com"}},
+            },
+        }
+
+        with pytest.raises(ParseError, match="vars must be a dict"):
+            parse_testcase(data)
+
+    def test_rejects_non_string_var_key(self):
+        data = {
+            "version": 1,
+            "vars": {1: "value"},
+            "steps": {
+                "test": {"request": {"method": "GET", "url": "http://test.com"}},
+            },
+        }
+
+        with pytest.raises(ParseError, match="vars keys must be strings"):
+            parse_testcase(data)
+
+    def test_rejects_invalid_step_name(self):
+        data = {
+            "version": 1,
+            "steps": {
+                1: {"request": {"method": "GET", "url": "http://test.com"}},
+            },
+        }
+
+        with pytest.raises(ParseError, match="step names must be non-empty strings"):
+            parse_testcase(data)
+
+    def test_rejects_non_mapping_step_definition(self):
+        with pytest.raises(ParseError, match="step 'test' must be a dict"):
+            parse_testcase({"version": 1, "steps": {"test": []}})
 
     def test_default_mode(self):
         data = {

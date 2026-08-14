@@ -21,13 +21,22 @@ class DbConfig:
             raise ParseError("db must include a url field")
         if "query" not in config:
             raise ParseError("db must include a query field")
+
+        url = config["url"]
+        if not isinstance(url, str) or not url:
+            raise ParseError("db.url must be a non-empty string")
+
+        query = config["query"]
+        if not isinstance(query, str) or not query:
+            raise ParseError("db.query must be a non-empty string")
+
         params = config.get("params", [])
         if not isinstance(params, list):
             raise ParseError("db.params must be a list")
 
         return cls(
-            url=config["url"],
-            query=config["query"],
+            url=url,
+            query=query,
             params=params,
         )
 

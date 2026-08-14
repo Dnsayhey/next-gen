@@ -2,6 +2,7 @@
 
 import json
 
+import pytest
 from typer.testing import CliRunner
 
 from nextgen.cli import app
@@ -102,6 +103,27 @@ def test_run_reports_parse_error_without_traceback(tmp_path):
 
     assert result.exit_code == 2
     assert "missing steps field or steps is empty" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("content", "error"),
+    [
+        ("version: 1\nsteps:\n  broken: [\n", "invalid testcase file"),
+        (
+            "version: 1\nsteps:\n  broken:\n    request:\n",
+            "step 'broken'.request must be a dict",
+        ),
+    ],
+)
+def test_run_reports_malformed_dsl_without_traceback(tmp_path, content, error):
+    case_file = tmp_path / "bad.yaml"
+    case_file.write_text(content, encoding="utf-8")
+
+    result = runner.invoke(app, [str(case_file)])
+
+    assert result.exit_code == 2
+    assert error in result.stderr
     assert "Traceback" not in result.stderr
 
 

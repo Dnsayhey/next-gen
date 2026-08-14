@@ -48,10 +48,13 @@ def load_file(path: str | Path) -> dict[str, Any]:
         raise ParseError(f"unsupported file format: {ext}; supported: {SUPPORTED_EXTENSIONS}")
 
     with open(path, "r", encoding="utf-8") as f:
-        if ext == ".json":
-            data = json.load(f)
-        else:
-            data = yaml.safe_load(f)
+        try:
+            if ext == ".json":
+                data = json.load(f)
+            else:
+                data = yaml.safe_load(f)
+        except (json.JSONDecodeError, yaml.YAMLError) as exc:
+            raise ParseError(f"invalid testcase file '{path}': {exc}") from exc
 
     if not isinstance(data, dict):
         raise ParseError(f"invalid file format: expected dict, got {type(data).__name__}")
@@ -188,12 +191,18 @@ def parse_when(data: list | dict | None) -> ConditionNode | None:
 
     if isinstance(data, dict):
         if "and" in data:
-            return AndCondition([parse_when_item(item) for item in data["and"]])
+            return AndCondition(_parse_when_group(data["and"], "when.and"))
         if "or" in data:
-            return OrCondition([parse_when_item(item) for item in data["or"]])
+            return OrCondition(_parse_when_group(data["or"], "when.or"))
         raise ParseError(f"invalid when format: dict must include 'and' or 'or', got {list(data.keys())}")
 
     raise ParseError(f"invalid when format: expected list or dict, got {type(data).__name__}")
+
+
+def _parse_when_group(data: Any, path: str) -> list[ConditionNode]:
+    if not isinstance(data, list):
+        raise ParseError(f"{path} must be a list")
+    return [parse_when_item(item) for item in data]
 
 
 def parse_when_item(item: dict[str, Any]) -> ConditionNode:
@@ -202,9 +211,9 @@ def parse_when_item(item: dict[str, Any]) -> ConditionNode:
         raise ParseError(f"invalid condition item format: {item}")
 
     if "and" in item:
-        return AndCondition([parse_when_item(child) for child in item["and"]])
+        return AndCondition(_parse_when_group(item["and"], "when.and"))
     if "or" in item:
-        return OrCondition([parse_when_item(child) for child in item["or"]])
+        return OrCondition(_parse_when_group(item["or"], "when.or"))
 
     if len(item) != 1:
         raise ParseError(f"invalid expression format: {item}")
@@ -238,6 +247,9 @@ def expand_step_matrix(name: str, data: dict[str, Any]) -> list[tuple[str, dict[
         raise ParseError(f"step '{name}' has invalid matrix format: expected a non-empty dict")
 
     keys = list(matrix.keys())
+    if any(not isinstance(key, str) or not key for key in keys):
+        raise ParseError(f"step '{name}' matrix variable names must be non-empty strings")
+
     value_lists: list[list[Any]] = []
     for key in keys:
         values = matrix[key]
@@ -265,10 +277,14 @@ def parse_step_hooks(data: dict[str, Any] | None) -> StepHooks:
     if not isinstance(data, dict):
         raise ParseError(f"invalid step hooks format: expected dict, got {type(data).__name__}")
 
-    return StepHooks(
-        before=[parse_hook_action(item) for item in data.get("before", [])],
-        after=[parse_hook_action(item) for item in data.get("after", [])],
-    )
+    phases = {}
+    for field in ("before", "after"):
+        value = data.get(field, [])
+        if not isinstance(value, list):
+            raise ParseError(f"step hooks.{field} must be a list")
+        phases[field] = [parse_hook_action(item) for item in value]
+
+    return StepHooks(**phases)
 
 
 def parse_tags(data: Any, step_name: str) -> list[str]:
@@ -293,12 +309,14 @@ def parse_testcase_hooks(data: dict[str, Any] | None) -> TestCaseHooks:
     if not isinstance(data, dict):
         raise ParseError(f"invalid testcase hooks format: expected dict, got {type(data).__name__}")
 
-    return TestCaseHooks(
-        before_all=[parse_hook_action(item) for item in data.get("before_all", [])],
-        after_all=[parse_hook_action(item) for item in data.get("after_all", [])],
-        before_each=[parse_hook_action(item) for item in data.get("before_each", [])],
-        after_each=[parse_hook_action(item) for item in data.get("after_each", [])],
-    )
+    phases = {}
+    for field in ("before_all", "after_all", "before_each", "after_each"):
+        value = data.get(field, [])
+        if not isinstance(value, list):
+            raise ParseError(f"testcase hooks.{field} must be a list")
+        phases[field] = [parse_hook_action(item) for item in value]
+
+    return TestCaseHooks(**phases)
 
 
 def resolve_depends_on(depends_on: list[str], matrix_map: dict[str, list[str]]) -> list[str]:
@@ -313,6 +331,33 @@ def resolve_depends_on(depends_on: list[str], matrix_map: dict[str, list[str]]) 
 
 def parse_step(name: str, data: dict[str, Any]) -> StepNode:
     """Parse one step."""
+    if not isinstance(data, dict):
+        raise ParseError(f"step '{name}' must be a dict, got {type(data).__name__}")
+
+    mapping_fields = ("extract", "export", "set_vars", "config")
+    for field in mapping_fields:
+        value = data.get(field, {})
+        if not isinstance(value, dict):
+            raise ParseError(
+                f"step '{name}'.{field} must be a dict, got {type(value).__name__}"
+            )
+        if any(not isinstance(key, str) for key in value):
+            raise ParseError(f"step '{name}'.{field} keys must be strings")
+
+    depends_on = data.get("depends_on", [])
+    if not isinstance(depends_on, list):
+        raise ParseError(
+            f"step '{name}'.depends_on must be a list, got {type(depends_on).__name__}"
+        )
+    if any(not isinstance(dep, str) or not dep for dep in depends_on):
+        raise ParseError(f"step '{name}'.depends_on must contain non-empty strings")
+
+    validate = data.get("validate", [])
+    if not isinstance(validate, list):
+        raise ParseError(
+            f"step '{name}'.validate must be a list, got {type(validate).__name__}"
+        )
+
     # Find action type.
     action_type = find_action_type(data)
 
@@ -333,15 +378,22 @@ def parse_step(name: str, data: dict[str, Any]) -> StepNode:
     if action is None:
         raise ParseError(f"unregistered action type: {action_type}")
 
-    parsed_config = action.parse_config(data[action_type])
+    raw_action_config = data[action_type]
+    if not isinstance(raw_action_config, dict):
+        raise ParseError(
+            f"step '{name}'.{action_type} must be a dict, "
+            f"got {type(raw_action_config).__name__}"
+        )
+
+    parsed_config = action.parse_config(raw_action_config)
 
     return StepNode(
         name=name,
         action=ActionNode(type=action_type, config=parsed_config),
-        depends_on=data.get("depends_on", []),
+        depends_on=depends_on,
         extract=data.get("extract", {}),
         export=data.get("export", {}),
-        validate=parse_assertions(data.get("validate", [])),
+        validate=parse_assertions(validate),
         when=parse_when(data.get("when")),
         set_vars=data.get("set_vars", {}),
         config=data.get("config", {}),
@@ -358,6 +410,16 @@ def parse_testcase(data: dict[str, Any]) -> TestCase:
     if "steps" not in data or not data["steps"]:
         raise ParseError("missing steps field or steps is empty")
 
+    raw_steps = data["steps"]
+    if not isinstance(raw_steps, dict):
+        raise ParseError(f"steps must be a dict, got {type(raw_steps).__name__}")
+
+    testcase_vars = data.get("vars", {})
+    if not isinstance(testcase_vars, dict):
+        raise ParseError(f"vars must be a dict, got {type(testcase_vars).__name__}")
+    if any(not isinstance(key, str) for key in testcase_vars):
+        raise ParseError("vars keys must be strings")
+
     mode = data.get("mode", "sequential")
     if mode not in ("sequential", "parallel"):
         raise ParseError(f"unsupported execution mode: {mode}; supported: sequential, parallel")
@@ -369,7 +431,12 @@ def parse_testcase(data: dict[str, Any]) -> TestCase:
     steps: dict[str, StepNode] = {}
     matrix_map: dict[str, list[str]] = {}
 
-    for name, raw in data["steps"].items():
+    for name, raw in raw_steps.items():
+        if not isinstance(name, str) or not name:
+            raise ParseError("step names must be non-empty strings")
+        if not isinstance(raw, dict):
+            raise ParseError(f"step '{name}' must be a dict, got {type(raw).__name__}")
+
         variants = expand_step_matrix(name, raw)
         matrix_map[name] = [variant_name for variant_name, _, _ in variants]
 
@@ -394,7 +461,7 @@ def parse_testcase(data: dict[str, Any]) -> TestCase:
 
     return TestCase(
         version=data["version"],
-        vars=data.get("vars", {}),
+        vars=testcase_vars,
         steps=steps,
         mode=mode,
         fail_fast=fail_fast,
