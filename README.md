@@ -27,7 +27,7 @@ pip install -e .
 创建测试用例 `demo.yaml`：
 
 ```yaml
-version: 1
+version: 1  # 当前唯一支持的 DSL 版本
 
 vars:
   base_url: https://httpbin.org
@@ -69,7 +69,7 @@ steps:
 # 基本执行
 uv run nextgen demo.yaml
 
-# 指定并发数（默认 10）
+# 指定并发数（默认 10，必须大于等于 1）
 uv run nextgen demo.yaml --parallel=5
 
 # 显示详细日志

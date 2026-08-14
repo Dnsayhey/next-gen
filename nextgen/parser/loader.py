@@ -28,6 +28,7 @@ from nextgen.core.model import (
 )
 
 SUPPORTED_EXTENSIONS = {".yaml", ".yml", ".json"}
+SUPPORTED_DSL_VERSIONS = {1}
 
 
 class FileKind(str, Enum):
@@ -407,6 +408,13 @@ def parse_testcase(data: dict[str, Any]) -> TestCase:
     if "version" not in data:
         raise ParseError("missing version field")
 
+    version = data["version"]
+    if type(version) is not int:
+        raise ParseError(f"version must be an integer, got {type(version).__name__}")
+    if version not in SUPPORTED_DSL_VERSIONS:
+        supported = ", ".join(str(item) for item in sorted(SUPPORTED_DSL_VERSIONS))
+        raise ParseError(f"unsupported DSL version: {version}; supported: {supported}")
+
     if "steps" not in data or not data["steps"]:
         raise ParseError("missing steps field or steps is empty")
 
@@ -460,7 +468,7 @@ def parse_testcase(data: dict[str, Any]) -> TestCase:
         step.depends_on = resolve_depends_on(step.depends_on, matrix_map)
 
     return TestCase(
-        version=data["version"],
+        version=version,
         vars=testcase_vars,
         steps=steps,
         mode=mode,

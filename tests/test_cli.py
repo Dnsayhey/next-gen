@@ -127,6 +127,56 @@ def test_run_reports_malformed_dsl_without_traceback(tmp_path, content, error):
     assert "Traceback" not in result.stderr
 
 
+def test_run_rejects_unsupported_dsl_version(tmp_path):
+    case_file = tmp_path / "case.yaml"
+    case_file.write_text(
+        "\n".join([
+            "version: 2",
+            "steps:",
+            "  one:",
+            "    request:",
+            "      method: GET",
+            "      url: https://example.com",
+        ]),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(app, [str(case_file)])
+
+    assert result.exit_code == 2
+    assert "unsupported DSL version: 2; supported: 1" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+@pytest.mark.parametrize("parallel", ["0", "-1"])
+def test_run_rejects_non_positive_parallel_before_scheduling(tmp_path, monkeypatch, parallel):
+    case_file = tmp_path / "case.yaml"
+    case_file.write_text(
+        "\n".join([
+            "version: 1",
+            "steps:",
+            "  one:",
+            "    request:",
+            "      method: GET",
+            "      url: https://example.com",
+        ]),
+        encoding="utf-8",
+    )
+
+    class UnexpectedScheduler:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("scheduler must not be created")
+
+    monkeypatch.setattr("nextgen.cli.Scheduler", UnexpectedScheduler)
+
+    result = runner.invoke(app, [str(case_file), "--parallel", parallel])
+
+    assert result.exit_code == 2
+    assert "x>=1" in result.stderr
+    assert "scheduler must not be created" not in result.stderr
+    assert "Traceback" not in result.stderr
+
+
 def test_run_returns_exit_code_one_for_test_failure(tmp_path, monkeypatch):
     case_file = tmp_path / "case.yaml"
     case_file.write_text(

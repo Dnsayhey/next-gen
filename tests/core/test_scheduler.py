@@ -108,6 +108,13 @@ def hook_registry_snapshot():
 class TestScheduler:
     """Test Scheduler runtime semantics"""
 
+    @pytest.mark.parametrize("max_concurrency", [0, -1, True, 1.5])
+    def test_rejects_invalid_max_concurrency(self, max_concurrency):
+        testcase = CaseModel(version=1, steps={})
+
+        with pytest.raises(ValueError, match="max_concurrency must be a positive integer"):
+            Scheduler(testcase, max_concurrency=max_concurrency)
+
     @pytest.mark.asyncio
     async def test_sequential_mode_runs_one_runnable_step_at_a_time(self, scheduler_action_registry):
         testcase = CaseModel(

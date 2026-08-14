@@ -577,6 +577,33 @@ class TestParseTestcase:
         with pytest.raises(ValueError, match="version"):
             parse_testcase(data)
 
+    @pytest.mark.parametrize("version", ["1", True])
+    def test_rejects_invalid_version_type(self, version):
+        data = {
+            "version": version,
+            "steps": {
+                "test": {"request": {"method": "GET", "url": "http://test.com"}},
+            },
+        }
+
+        with pytest.raises(ParseError, match="version must be an integer"):
+            parse_testcase(data)
+
+    @pytest.mark.parametrize("version", [0, 2])
+    def test_rejects_unsupported_version(self, version):
+        data = {
+            "version": version,
+            "steps": {
+                "test": {"request": {"method": "GET", "url": "http://test.com"}},
+            },
+        }
+
+        with pytest.raises(
+            ParseError,
+            match=rf"unsupported DSL version: {version}; supported: 1",
+        ):
+            parse_testcase(data)
+
     def test_missing_steps(self):
         data = {"version": 1}
         with pytest.raises(ValueError, match="steps"):

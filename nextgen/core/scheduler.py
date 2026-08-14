@@ -71,6 +71,13 @@ class Scheduler:
         testcase: TestCase,
         max_concurrency: int = 10,
     ):
+        if (
+            isinstance(max_concurrency, bool)
+            or not isinstance(max_concurrency, int)
+            or max_concurrency < 1
+        ):
+            raise ValueError("max_concurrency must be a positive integer")
+
         self.testcase = testcase
         metadata = {"base_dir": testcase.base_dir} if testcase.base_dir else {}
         self.context = Context(testcase.vars, metadata=metadata)
