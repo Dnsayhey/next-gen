@@ -5,10 +5,22 @@ from typing import Any, Awaitable, Callable, Protocol
 from nextgen.actions.db.drivers import postgres, mysql, sqlite
 
 
+class DbResource(Protocol):
+    """Case-scoped database execution resource."""
+
+    async def execute(
+        self,
+        query: str,
+        params: list[Any] | None = None,
+    ) -> dict[str, Any]: ...
+
+    async def aclose(self) -> None: ...
+
+
 class DbDriver(Protocol):
     """Database driver module protocol."""
 
-    execute: Callable[[str, str, list[Any] | None], Awaitable[dict[str, Any]]]
+    create_resource: Callable[[str, int], Awaitable[DbResource]]
 
 # URL scheme -> driver mapping.
 DRIVERS: dict[str, DbDriver] = {

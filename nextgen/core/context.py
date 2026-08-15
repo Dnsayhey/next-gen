@@ -1,8 +1,9 @@
 """Variable context for test execution."""
 
+import asyncio
 import re
 from copy import deepcopy
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from loguru import logger
 
@@ -25,6 +26,7 @@ class Context:
         self.vars: dict[str, Any] = initial or {}
         self.metadata: dict[str, Any] = metadata or {}
         self.resources: dict[str, Any] = {}
+        self._resource_locks: dict[str, asyncio.Lock] = {}
 
     def set(self, key: str, value: Any) -> None:
         """Set a variable."""
@@ -46,6 +48,7 @@ class Context:
             data.update(initial)
         child = Context(data, metadata=self.metadata)
         child.resources = self.resources
+        child._resource_locks = self._resource_locks
         return child
 
     def merge(self, updates: dict[str, Any]) -> None:
@@ -111,10 +114,29 @@ class Context:
         """Store a runtime resource by name."""
         self.resources[name] = value
 
+    async def get_or_create_resource(
+        self,
+        name: str,
+        factory: Callable[[], Awaitable[Any]],
+    ) -> Any:
+        """Return a shared resource, initializing it once across derived contexts."""
+        resource = self.get_resource(name)
+        if resource is not None:
+            return resource
+
+        lock = self._resource_locks.setdefault(name, asyncio.Lock())
+        async with lock:
+            resource = self.get_resource(name)
+            if resource is None:
+                resource = await factory()
+                self.set_resource(name, resource)
+            return resource
+
     async def close_resources(self) -> None:
         """Close runtime resources that expose an async close method."""
         resources = list(self.resources.values())
         self.resources.clear()
+        self._resource_locks.clear()
         for resource in resources:
             close = getattr(resource, "aclose", None)
             if close is not None:

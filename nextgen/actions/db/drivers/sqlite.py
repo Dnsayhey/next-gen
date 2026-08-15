@@ -1,5 +1,7 @@
 """SQLite driver."""
 
+import asyncio
+from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlparse
 from pathlib import Path
@@ -20,42 +22,56 @@ def resolve_db_path(url: str) -> str:
     return parsed.path
 
 
-async def execute(url: str, query: str, params: list[Any] | None = None) -> dict[str, Any]:
-    """Execute a SQLite query.
+@dataclass
+class SqliteResource:
+    """Case-scoped serialized SQLite connection."""
 
-    Args:
-        url: Connection string, such as sqlite:///path/to/db.sqlite.
-        query: SQL query.
-        params: Query parameters.
+    connection: aiosqlite.Connection
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
-    Returns:
-        {"rows": [...], "row_count": int, "columns": [...]}
-    """
+    async def execute(
+        self,
+        query: str,
+        params: list[Any] | None = None,
+    ) -> dict[str, Any]:
+        async with self.lock:
+            cursor = None
+            try:
+                cursor = await self.connection.execute(query, params or [])
+                rows = await cursor.fetchall() if cursor.description else []
+                columns = [desc[0] for desc in cursor.description] if cursor.description else []
+
+                row_dicts = [dict(row) for row in rows]
+
+                if columns:
+                    row_count = len(row_dicts)
+                else:
+                    row_count = max(cursor.rowcount, 0)
+
+                await self.connection.commit()
+                return {
+                    "rows": row_dicts,
+                    "row_count": row_count,
+                    "columns": columns,
+                }
+            except Exception:
+                await self.connection.rollback()
+                raise
+            finally:
+                if cursor is not None:
+                    await cursor.close()
+
+    async def aclose(self) -> None:
+        async with self.lock:
+            await self.connection.close()
+
+
+async def create_resource(url: str, max_size: int) -> SqliteResource:
+    """Create a case-scoped SQLite connection."""
     db_path = resolve_db_path(url)
 
     logger.debug(f"Connecting to SQLite: {db_path}")
 
-    db = await aiosqlite.connect(db_path)
-    try:
-        db.row_factory = aiosqlite.Row
-        cursor = await db.execute(query, params or [])
-        await db.commit()
-
-        rows = await cursor.fetchall() if cursor.description else []
-        columns = [desc[0] for desc in cursor.description] if cursor.description else []
-
-        row_dicts = [dict(row) for row in rows]
-
-        # rowcount: SELECT uses len(rows), INSERT/UPDATE/DELETE uses cursor.rowcount, DDL returns 0.
-        if columns:
-            row_count = len(row_dicts)
-        else:
-            row_count = max(cursor.rowcount, 0)
-
-        return {
-            "rows": row_dicts,
-            "row_count": row_count,
-            "columns": columns,
-        }
-    finally:
-        await db.close()
+    connection = await aiosqlite.connect(db_path)
+    connection.row_factory = aiosqlite.Row
+    return SqliteResource(connection)

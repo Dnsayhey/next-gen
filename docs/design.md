@@ -999,6 +999,15 @@ steps:
 - SQLite: `sqlite:///path/to/db.sqlite`
 - SQLite 相对路径: `sqlite://./examples/test.db`
 
+**连接复用：**
+
+- 连接资源的生命周期限定在单个 testcase run 内
+- 使用相同渲染后 URL 的 DB steps 共享资源，不同 URL 分别创建资源
+- PostgreSQL 和 MySQL 使用连接池，最大连接数与 scheduler 的 `max_concurrency`（CLI `--parallel`）一致
+- SQLite 复用单个连接，并通过异步锁串行执行查询
+- 每个 action 独立提交或回滚，不提供跨 step 事务
+- testcase 结束后由 scheduler 统一关闭资源；suite setup 和各普通 testcase 之间不共享连接
+
 ---
 
 ## 12. 状态机设计

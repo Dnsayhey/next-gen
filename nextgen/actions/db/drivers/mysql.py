@@ -1,5 +1,6 @@
 """MySQL driver."""
 
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
 
@@ -7,17 +8,43 @@ import aiomysql
 from loguru import logger
 
 
-async def execute(url: str, query: str, params: list[Any] | None = None) -> dict[str, Any]:
-    """Execute a MySQL query.
+@dataclass
+class MysqlResource:
+    """Case-scoped MySQL connection pool."""
 
-    Args:
-        url: Connection string, such as mysql://user:pass@host:3306/dbname.
-        query: SQL query.
-        params: Query parameters.
+    pool: Any
 
-    Returns:
-        {"rows": [...], "row_count": int, "columns": [...]}
-    """
+    async def execute(
+        self,
+        query: str,
+        params: list[Any] | None = None,
+    ) -> dict[str, Any]:
+        async with self.pool.acquire() as conn:
+            try:
+                async with conn.cursor(aiomysql.DictCursor) as cursor:
+                    await cursor.execute(query, params)
+                    rows = await cursor.fetchall()
+                    columns = [desc[0] for desc in cursor.description] if cursor.description else []
+
+                    result = {
+                        "rows": rows or [],
+                        "row_count": cursor.rowcount,
+                        "columns": columns,
+                    }
+
+                await conn.commit()
+                return result
+            except Exception:
+                await conn.rollback()
+                raise
+
+    async def aclose(self) -> None:
+        self.pool.close()
+        await self.pool.wait_closed()
+
+
+async def create_resource(url: str, max_size: int) -> MysqlResource:
+    """Create a case-scoped MySQL connection pool."""
     parsed = urlparse(url)
     db_config = {
         "host": parsed.hostname or "localhost",
@@ -29,23 +56,9 @@ async def execute(url: str, query: str, params: list[Any] | None = None) -> dict
 
     logger.debug(f"Connecting to MySQL: {db_config['host']}:{db_config['port']}/{db_config['db']}")
 
-    conn = await aiomysql.connect(**db_config)
-    try:
-        async with conn.cursor(aiomysql.DictCursor) as cursor:
-            await cursor.execute(query, params)
-            rows = await cursor.fetchall()
-            columns = [desc[0] for desc in cursor.description] if cursor.description else []
-
-            result = {
-                "rows": rows or [],
-                "row_count": cursor.rowcount,
-                "columns": columns,
-            }
-
-        await conn.commit()
-        return result
-    except Exception:
-        await conn.rollback()
-        raise
-    finally:
-        conn.close()
+    pool = await aiomysql.create_pool(
+        **db_config,
+        minsize=1,
+        maxsize=max_size,
+    )
+    return MysqlResource(pool)

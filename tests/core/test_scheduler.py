@@ -115,6 +115,13 @@ class TestScheduler:
         with pytest.raises(ValueError, match="max_concurrency must be a positive integer"):
             Scheduler(testcase, max_concurrency=max_concurrency)
 
+    def test_exposes_max_concurrency_to_case_resources(self):
+        testcase = CaseModel(version=1, steps={})
+
+        scheduler = Scheduler(testcase, max_concurrency=3)
+
+        assert scheduler.context.metadata["max_concurrency"] == 3
+
     @pytest.mark.asyncio
     async def test_sequential_mode_runs_one_runnable_step_at_a_time(self, scheduler_action_registry):
         testcase = CaseModel(

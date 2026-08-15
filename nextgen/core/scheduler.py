@@ -79,7 +79,9 @@ class Scheduler:
             raise ValueError("max_concurrency must be a positive integer")
 
         self.testcase = testcase
-        metadata = {"base_dir": testcase.base_dir} if testcase.base_dir else {}
+        metadata = {"max_concurrency": max_concurrency}
+        if testcase.base_dir:
+            metadata["base_dir"] = testcase.base_dir
         self.context = Context(testcase.vars, metadata=metadata)
         self.max_concurrency = max_concurrency
         self.graph = build_graph(testcase)

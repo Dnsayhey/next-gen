@@ -8,6 +8,8 @@ from nextgen.core.result import ActionResult
 from nextgen.actions.db.drivers import get_driver
 from nextgen.actions.db.model import DbConfig
 
+DB_RESOURCE_PREFIX = "db.resource:"
+
 
 async def execute_query(config: DbConfig, ctx: Context) -> ActionResult:
     """Execute a database query.
@@ -37,7 +39,12 @@ async def execute_query(config: DbConfig, ctx: Context) -> ActionResult:
 
     driver = get_driver(url)
     try:
-        result = await driver.execute(url, query, params)
+        max_size = ctx.metadata.get("max_concurrency", 10)
+        resource = await ctx.get_or_create_resource(
+            f"{DB_RESOURCE_PREFIX}{url}",
+            lambda: driver.create_resource(url, max_size),
+        )
+        result = await resource.execute(query, params)
     except Exception as exc:
         raise ActionExecutionError(describe_exception(exc), action_input) from exc
 

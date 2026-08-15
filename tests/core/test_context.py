@@ -1,5 +1,7 @@
 """context.py unit tests"""
 
+import asyncio
+
 import pytest
 
 from nextgen.core.context import Context
@@ -156,6 +158,59 @@ class TestContext:
 
         assert resource.closed is True
         assert ctx.resources == {}
+
+    @pytest.mark.asyncio
+    async def test_get_or_create_resource_initializes_once_across_derived_contexts(self):
+        ctx = Context()
+        child_one = ctx.derive()
+        child_two = ctx.derive()
+        factory_started = asyncio.Event()
+        allow_factory_to_finish = asyncio.Event()
+        resource = object()
+        factory_calls = 0
+
+        async def factory():
+            nonlocal factory_calls
+            factory_calls += 1
+            factory_started.set()
+            await allow_factory_to_finish.wait()
+            return resource
+
+        first = asyncio.create_task(
+            child_one.get_or_create_resource("database", factory)
+        )
+        await factory_started.wait()
+        second = asyncio.create_task(
+            child_two.get_or_create_resource("database", factory)
+        )
+        await asyncio.sleep(0)
+        allow_factory_to_finish.set()
+
+        first_resource, second_resource = await asyncio.gather(first, second)
+
+        assert first_resource is resource
+        assert second_resource is resource
+        assert ctx.get_resource("database") is resource
+        assert factory_calls == 1
+
+    @pytest.mark.asyncio
+    async def test_get_or_create_resource_retries_after_factory_failure(self):
+        ctx = Context()
+        resource = object()
+        factory_calls = 0
+
+        async def factory():
+            nonlocal factory_calls
+            factory_calls += 1
+            if factory_calls == 1:
+                raise RuntimeError("connection failed")
+            return resource
+
+        with pytest.raises(RuntimeError, match="connection failed"):
+            await ctx.get_or_create_resource("database", factory)
+
+        assert await ctx.get_or_create_resource("database", factory) is resource
+        assert factory_calls == 2
 
     def test_merge_sets_each_update(self):
         ctx = Context({"a": 1})

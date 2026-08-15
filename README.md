@@ -308,6 +308,17 @@ Session 边界：
 - v1 不新增 DSL 配置项
 - redirect 行为保持 httpx/client 默认语义；step 级 `timeout` 仍按 request 配置传入
 
+## DB Connection Reuse
+
+同一个 testcase run 内，使用相同渲染后 `url` 的 DB steps 会自动复用数据库资源；不同 `url` 使用相互独立的资源。
+
+- PostgreSQL 和 MySQL 为每个 URL 创建连接池，池上限跟随 `--parallel`
+- SQLite 为每个 URL 复用一个连接，并串行执行该连接上的并发查询
+- 每个 DB action 仍独立提交或回滚，不会跨 step 共享事务
+- suite setup 和每个普通 testcase 都有独立资源，不跨 testcase 共享连接
+- testcase 结束后会自动关闭连接池或 SQLite 连接
+- 不新增 DSL 配置项
+
 ## 执行语义（mode / depends_on / fail_fast）
 
 - `depends_on` 是唯一依赖来源，默认不会自动给步骤补依赖
