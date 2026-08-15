@@ -1,8 +1,8 @@
-# Advanced Examples
+# 进阶示例
 
-These examples focus on individual DSL features. Some are intentionally failing so you can inspect retry, timeout, and fail-fast behavior.
+这些示例分别展示独立 DSL 能力。部分示例会故意失败，用于观察 retry、timeout 和 fail-fast 行为。
 
-Suggested commands:
+建议命令：
 
 ```bash
 uv run nextgen examples/advanced/tags.yaml --tags smoke --dry-run
@@ -19,7 +19,8 @@ uv run nextgen examples/advanced/failure_and_retry.yaml
 uv run nextgen examples/advanced/timeout_failure.yaml
 ```
 
-`upload.yaml` demonstrates multipart file upload using `examples/assets/test_upload.csv`.
-`http_assertions.yaml` demonstrates response metadata paths (`$$.headers.*`), regex and length assertions, raw request bodies with `content_type`, and extract defaults.
-`hooks.yaml` uses hooks from both `hooks.py` and `hooks_extra.py` to show split hook file discovery.
-`json_case.json` shows that testcase files can be written as JSON as well as YAML.
+- `db_sqlite.yaml` 展示 DB 查询、结果提取与断言；同一 testcase 中的步骤会复用一个串行 SQLite 连接。
+- `upload.yaml` 使用 `examples/assets/test_upload.csv` 展示 multipart 文件上传。
+- `http_assertions.yaml` 展示响应元信息路径（`$$.headers.*`）、正则与长度断言、带 `content_type` 的 raw body，以及 extract 默认值。
+- `hooks.yaml` 同时使用 `hooks.py` 和 `hooks_extra.py`，展示拆分 hook 文件的发现顺序。
+- `json_case.json` 展示使用 JSON 而不是 YAML 编写 testcase。

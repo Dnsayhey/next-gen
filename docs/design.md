@@ -1,4 +1,4 @@
-# Next-Gen API Test Engine（Python版）设计文档
+# Next-Gen API Test Engine 设计与 DSL 参考
 
 ## 1. 项目目标
 
@@ -838,6 +838,7 @@ def get_action(name: str) -> ActionSpec | None: ...
 **职责：**
 - 管理全局变量和提取的变量
 - 渲染 `${var}` 语法
+- 管理 testcase 级运行时资源及其并发初始化
 
 ```python
 class Context:
@@ -851,6 +852,7 @@ class Context:
     def render_dict(self, data: dict) -> dict: ...
     def get_resource(self, name: str) -> Any | None: ...
     def set_resource(self, name: str, value: Any) -> None: ...
+    async def get_or_create_resource(self, name: str, factory: Callable) -> Any: ...
     async def close_resources(self) -> None: ...
 ```
 
@@ -858,7 +860,7 @@ class Context:
 - `set_vars` 和 step hooks 的局部可见性
 - `extract` / `export` 成功后再回写全局上下文
 
-派生出的 step context 会共享同一份 runtime resources，例如 testcase 级 HTTP client。变量 snapshot 仍保持局部隔离，resource lifecycle 由 scheduler 在 testcase run 结束时清理。
+派生出的 step context 会共享同一份 runtime resources 和资源初始化锁，例如 testcase 级 HTTP client，以及按 URL 区分的 DB 连接池或 SQLite 连接。`get_or_create_resource()` 保证并发步骤只初始化一次同名资源。变量 snapshot 仍保持局部隔离，resource lifecycle 由 scheduler 在 testcase run 结束时清理。
 
 ### 11.3 Planner（DAG 规划）
 
@@ -879,7 +881,7 @@ def get_execution_order(graph: dict[str, list[str]]) -> list[list[str]]: ...
 
 **职责：**
 - 状态机驱动的 DAG 调度
-- 并发控制（asyncio.Semaphore）
+- 通过 active task 数量和剩余 capacity 控制并发上限
 - `fail_fast` 控制失败后是否继续启动尚未开始的步骤
 - 重试逻辑
 - hook 生命周期调度
@@ -973,31 +975,38 @@ steps:
       - eq: [$.row_count, 1]
 ```
 
-**结果格式：**
+**内部 ActionResult：**
 ```python
-{
-    "rows": [{"id": 1, "name": "Alice"}, ...],
-    "row_count": 1,
-    "columns": ["id", "name"],
-    "action_input": {
+ActionResult(
+    data={
+        "rows": [{"id": 1, "name": "Alice"}],
+        "row_count": 1,
+        "columns": ["id", "name"],
+    },
+    action_input={
         "type": "db",
         "url": "postgres://user:pass@localhost:5432/mydb",
         "query": "SELECT * FROM users WHERE id = $1",
         "params": [1],
     },
-    "action_output": {
+    action_output={
         "row_count": 1,
         "columns": ["id", "name"],
         "rows": [{"id": 1, "name": "Alice"}],
     },
-}
+    metric={"label": "row_count", "value": 1},
+)
 ```
+
+`data` 提供给当前步骤的 `validate` 和 `extract`。最终 JSON 报告不会把 `data` 直接铺到 step 顶层，而是输出 `metric`、`action_input` 和 `action_output`。
 
 **支持的 URL 格式：**
 - PostgreSQL: `postgres://user:pass@host:5432/dbname` 或 `postgresql://user:pass@host:5432/dbname`
 - MySQL: `mysql://user:pass@host:3306/dbname`
 - SQLite: `sqlite:///path/to/db.sqlite`
 - SQLite 相对路径: `sqlite://./examples/test.db`
+
+参数占位符由底层驱动决定：PostgreSQL 使用 `$1`、`$2`，MySQL 使用 `%s`，SQLite 可使用 `?` 或 `$1`。
 
 **连接复用：**
 
@@ -1089,40 +1098,22 @@ nextgen/
 
 ## 14. 扩展新 Action 类型
 
+`ActionSpec` 是公开的 Python 扩展接口：
+
 ```python
-from dataclasses import dataclass, field
-from typing import Any
-
-
-@dataclass
-class DbConfig:
-    url: str
-    query: str
-    params: list[Any] = field(default_factory=list)
-
-
-# 1. 实现 action 函数
-async def execute_db(config: DbConfig, ctx: Context) -> ActionResult:
-    ...
-
-def extract_db(result: dict, config: dict, ctx: Context) -> dict:
-    ...
-
-def validate_db(result: dict, assertions: list) -> list[str]:
-    ...
-
-# 2. 注册
 from nextgen import ActionSpec, register_action
 
 register_action(ActionSpec(
-    name="db",
-    parse_config=DbConfig.from_dict,
-    execute=execute_db,
-    extract=extract_db,
-    validate=validate_db,
+    name="echo",
+    parse_config=EchoConfig.from_dict,
+    execute=execute_echo,
+    extract=extract_echo,
+    validate=validate_echo,
     summarize=lambda config: config.summary(),
 ))
 ```
+
+扩展 action 应使用未注册的独立名称，避免覆盖内置 `request` 或 `db`。CLI 当前只自动加载内置 action，自定义模块需要由宿主程序在解析 testcase 前导入。完整的 `echo` 实现和注册示例见 [README：通过 Python 扩展 Action](../README.md#通过-python-扩展-action)。
 
 ---
 
@@ -1177,30 +1168,7 @@ uv run nextgen demo.yaml
 
 ## 16. 迭代路线
 
-### 已完成
-
-* [x] DSL 解析（YAML/JSON）
-* [x] AST 模型
-* [x] DAG 调度
-* [x] HTTP action
-* [x] DB action
-* [x] 变量系统
-* [x] 断言系统
-* [x] 重试机制
-* [x] 并发控制
-* [x] JSON 报告
-* [x] JUnit XML 报告
-* [x] CLI 工具
-* [x] Action 注册表架构
-* [x] Hook 系统（内置 + 自定义）
-* [x] 超时配置
-* [x] 指数退避重试
-* [x] fail-fast 策略
-* [x] Suite / 多文件执行 v1
-* [x] Dry-run / execution plan
-* [x] Tags / step filtering
-* [x] HTTP session reuse
-* [x] Directory / glob discovery
+当前能力边界、仍然有效的设计决策和后续优先级统一维护在 [Roadmap](roadmap.md)，不在设计文档中重复维护完成清单。
 
 ---
 

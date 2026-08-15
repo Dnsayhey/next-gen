@@ -13,11 +13,15 @@ Scheduler.run()
   │     ├─ step A (run_step)
   │     ├─ step B (run_step)            可能并发
   │     └─ ...
-  └─ 4. execute_hooks(after_all)        全局 context
+  ├─ 4. execute_hooks(after_all)        全局 context
+  └─ 5. finally
+        ├─ close_resources()             关闭 HTTP client / DB 资源
+        └─ restore_hooks()               恢复 hook 注册表
 ```
 
 - `before_all` 使用全局 `self.context`，它初始化自 testcase 的 `vars` 字段。
-- `after_all` 同样使用全局 `self.context`，此时已包含所有成功步骤 extract 的变量。
+- `after_all` 同样使用全局 `self.context`，此时已包含所有成功步骤的 extract 和 export 变量。
+- `before_all` 失败时不会进入 DAG 调度和 `after_all`，但 `finally` 中的资源清理和 hook 注册表恢复仍会执行。
 
 ---
 
@@ -48,7 +52,7 @@ run_step()
        │   │    │  ★ SUCCESS                           │
        │   │    └─ 8. hooks.after (非阻断)             │
        │   │                                          │
-       │   └── extract 之前失败则重试 ──────────────────┘
+       │   └── hooks.after 之前的阻断性失败则重试 ───────┘
        │
        ├─ finally:
        │    ├─ execute_hooks(after_each)    使用最后一次重试的 step_ctx
@@ -79,9 +83,7 @@ steps:
 steps:
   cleanup:
     when:
-      op: eq
-      left: "${should_cleanup}"
-      right: "true"
+      - eq: ["${should_cleanup}", true]
 ```
 
 - **时机：** set_vars 之后，hooks.before 之前。每个重试尝试都会判断。
@@ -107,11 +109,9 @@ steps:
 ```yaml
 steps:
   login:
-    action:
-      type: http
-      config:
-        method: POST
-        url: "${base_url}/login"
+    request:
+      method: POST
+      url: "${base_url}/login"
 ```
 
 - **时机：** hooks.before 之后，validate 之前。
@@ -181,7 +181,7 @@ steps:
 ```
 全局 context (self.context)
 │  初始来源：testcase.vars
-│  增量来源：成功步骤的 extract 合并
+│  增量来源：成功步骤的 extract / export 合并
 │  用于：before_all, after_all
 │
 ├─ base_step_ctx = self.context.derive()
@@ -206,6 +206,7 @@ steps:
 | 规则 | 说明 |
 |------|------|
 | **derive 是深拷贝** | `derive()` 对 vars 做 `deepcopy`，子 context 的修改不影响父级 |
+| **runtime resources 是共享引用** | 派生 context 共享 testcase 级资源和初始化锁；HTTP client、同 URL 的 DB 资源可被并发步骤复用 |
 | **每次重试都是全新的 step_ctx** | `step_ctx = base_step_ctx.derive()` 在每次重试循环顶部执行，前一次重试的 set_vars、extract、hook 修改变量等全部丢弃 |
 | **before_each 写入可跨重试** | before_each 操作的是 `base_step_ctx`，它在重试循环外部，所以 before_each 设置的变量对所有重试可见 |
 | **extract/export 延迟合并** | extract/export 结果先存在 pending 区，只有步骤最终 SUCCESS 才 merge 到全局，且 export 同名覆盖 extract |
@@ -264,6 +265,9 @@ steps:
 │  (parallel 下独立步骤并发执行，不能假设看到彼此 extract)
 │
 ├─ after_all hooks                     [全局 context]
+│
+├─ close_resources                     [关闭 testcase 级 HTTP / DB 资源]
+├─ restore_hooks                       [恢复运行前 hook 注册表]
 │
 用例结束
 ```

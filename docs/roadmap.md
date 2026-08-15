@@ -1,279 +1,93 @@
-# Next-Gen Roadmap Notes
+# Next-Gen Roadmap
 
-This document captures the current product and engineering direction after the core engine reached daily-use readiness.
+最后更新：2026-08-16。
 
-## Current State
+本文只记录当前能力边界、仍然有效的架构决策和后续优先级。已经稳定的 DSL 与实现细节分别以 [设计文档](design.md) 和 [执行顺序文档](execution-order-and-scoping.md) 为准。
 
-The core engine is already usable for internal API and database testing:
+## 当前基线
 
-- HTTP and DB actions
-- Variable system: `vars`, `set_vars`, `extract`, `export`
-- DAG scheduler with sequential and parallel modes
-- `depends_on`, `fail_fast`, retry, backoff, and timeout
-- `when` conditions
-- Matrix expansion
-- Lifecycle hooks and discovered hook files
-- Environment files via `--env`
-- Suite / multi-file execution v1
-- JSON and JUnit XML reporters
-- Terminal summary for both testcase and suite results
-- Structured CLI error handling
+项目已经具备内部 API 与数据库测试所需的核心执行能力：
 
-The next work should focus on CI integration, execution planning, and authoring ergonomics rather than adding many new action types.
+- YAML / JSON testcase DSL 与严格配置校验
+- HTTP、PostgreSQL、MySQL、SQLite action
+- `vars`、`set_vars`、`extract`、`export` 变量流
+- `sequential` / `parallel` DAG 调度、`depends_on` 和 `fail_fast`
+- retry、指数退避、请求超时和步骤总超时
+- `when` 条件、matrix 参数化和 step tag filtering
+- testcase / step 生命周期 hook，以及 `hooks.py`、`hooks_*.py` 自动发现
+- env 文件、suite setup、多文件执行、目录与 glob discovery
+- dry-run 执行计划、JSON / JUnit XML 报告和终端摘要
+- testcase 级 HTTP session 复用
+- testcase 级 DB 资源复用：PostgreSQL/MySQL 连接池和 SQLite 串行单连接
 
-## Suite Before Include
+## 有效架构决策
 
-Prefer **suite / multi-file execution** before YAML `include`.
+### Testcase 是资源隔离边界
 
-### Why Suite First
+每个 testcase 拥有独立的 scheduler、context、hooks、result 和运行时资源。suite setup 与普通 testcase 只通过显式 `export` 传递数据，不共享 HTTP cookie、DB 连接或隐式事务状态。
 
-Suite execution keeps testcase boundaries clear:
+当前不提供 run/global 级连接池。若未来增加，必须先确定：
 
-- Each testcase has its own parser, scheduler, hooks, context, and result.
-- Step names do not collide across files.
-- Env and hooks scoping remain understandable.
-- CI reporting maps naturally to suites and testcase files.
-- Future JUnit XML and dry-run output can share the same aggregate model.
+- pool key 和配置覆盖规则
+- suite、多个 CLI 输入与并发 testcase 的所有权
+- 初始化失败、取消和进程退出时的清理语义
+- 凭据变更与同 URL 配置漂移如何处理
+- SQLite 是否应参与全局复用
 
-YAML `include` would merge multiple files into one testcase and immediately raise harder questions:
+### Suite 优先于 YAML include
 
-- Step name collisions
-- `vars`, hooks, mode, and `fail_fast` merge rules
-- Cross-file `depends_on`
-- Relative path resolution
-- Whether reports represent one testcase or many testcases
+Suite 保持 testcase 边界清晰，避免 step 名冲突以及 `vars`、hooks、mode、`fail_fast` 的跨文件合并规则。近期不实现 YAML `include`；只有当 env、hooks、suite setup 和未来模板仍无法解决复用需求时再重新评估。
 
-Decision: do **not** implement include in the near term. Revisit only if there is a strong need for YAML fragment reuse that cannot be solved with env files, hooks, or future templates.
+### 数据流必须显式
 
-## Recommended Sequence
+- step 依赖只来自 `depends_on`
+- step 局部变量通过 `extract` / `export` 发布
+- suite setup 通过 `export` 向普通 testcase 传值
+- 不依赖并发执行完成顺序或跨 testcase 隐式共享状态
 
-### 1. Suite / Multi-File Execution
+### Scheduler 只管理通用生命周期
 
-Status: **implemented in v1**.
+Scheduler 负责 DAG、状态、并发、retry、hook 和通用资源清理，不感知 HTTP client 或具体数据库驱动。Action 负责协议语义并通过 `Context` 注册 testcase 级资源。
 
-This was done before JUnit XML and dry-run so those features can be designed against the aggregate run model from the beginning.
+## 近期优先级
 
-Implemented scope:
+### 1. 更精确的解析错误路径
 
-- `SuiteResult` containing multiple `TestResult` objects.
-- `TestStatus.SKIPPED` for skipped testcase-level results.
-- Suite file format:
-
-```yaml
-name: smoke
-env:
-  - env/base.yaml
-  - env/staging.yaml
-setup:
-  - tests/_setup/login.yaml
-tests:
-  - tests/user/profile.yaml
-  - tests/order/create.yaml
-```
-
-- `tests` is required and must contain at least one non-empty testcase path.
-- Suite `setup`, `tests`, and `env` paths are resolved relative to the suite file.
-- Suite-level `env` applies to all testcases.
-- CLI `--env` still applies and overrides suite env.
-- Optional `setup` testcases run before normal `tests`.
-- Setup testcases are ordinary testcase files.
-- Successful setup exports are collected as suite-level variables for normal tests.
-- Variable precedence for setup testcases:
+把错误从 `invalid assertion format` 提升为带完整位置的信息，例如：
 
 ```text
-testcase.vars < suite env files < CLI --env files
+steps.login.validate[0].eq: expected [left, right]
 ```
 
-- Variable precedence for normal testcases:
+这能直接改善 DSL 编写体验，也便于编辑器和 CI 定位问题。
 
-```text
-testcase.vars < suite env files < setup exports < CLI --env files
-```
+### 2. 文档与示例持续校验
 
-If CLI env files define the same key as setup exports, the CLI value wins. For example, a `token` supplied via `--env` overrides a `token` exported by setup.
+- 保证 README 和 docs 中的相对链接有效
+- 自动解析所有 runnable examples
+- 对离线可运行示例增加 smoke test
+- 明确区分可复制运行的示例和仅用于说明结构的片段
 
-- Testcases run sequentially in the first version.
-- Testcase contexts, hooks, and results remain isolated.
-- Normal tests can read setup exports, but they do not share runtime contexts with each other.
-- Multiple setup files may export the same variable; later setup exports override earlier ones.
-- Setup failure makes the suite failed and prevents normal tests from running.
-- Normal tests skipped because of setup failure appear as synthetic skipped `TestResult` entries so reports preserve the full planned test list.
-- Any failed testcase makes the suite failed.
-- Normal testcase load, parse, validation, or execution errors become failed `TestResult` entries, and later normal testcases continue running to produce a complete report.
-- No cross-testcase `depends_on`.
-- No suite hooks in the first version.
-- No teardown in the first version.
-- No file-level parallelism in the first version.
+### 3. 自定义 Action 加载入口
 
-Input discovery and output shape:
+`ActionSpec` 已是公开 Python API，但 CLI 目前只自动加载内置 action。后续可设计显式的模块加载参数或 entry point 机制，避免要求用户维护自定义 CLI wrapper。
 
-- Explicit single testcase file -> run as one testcase and output `TestResult`.
-- Explicit suite file -> run as suite and output `SuiteResult`.
-- Multiple explicit testcase files -> output `SuiteResult`.
-- Directory or glob discovery -> output `SuiteResult`, even when only one testcase is found.
-- Explicit files are classified by content:
-  - only `steps` -> testcase
-  - only `tests` -> suite
-  - both `steps` and `tests` -> error: ambiguous file format
-  - neither -> error: unrecognized file format
-- Directory/glob-discovered files are classified by content:
-  - only `steps` -> collect as testcase
-  - only `tests` -> warn and skip; suite files must be passed explicitly
-  - both `steps` and `tests` -> error: ambiguous file format
-  - neither -> ignore, so env/example YAML files do not break directory runs
-- Do not allow suite files to be mixed with other CLI inputs in the first version.
-- De-duplicate testcase files by resolved path while preserving first occurrence.
-- Execution order:
-  - CLI multiple files: user-provided order
-  - suite setup/tests: order in the suite file
-  - discovered directories/globs: stable path ordering
+### 4. CI 使用模板
 
-Setup example:
+JUnit reporter 已完成，但仓库还没有可直接采用的 CI workflow 示例。可以补充最小 GitHub Actions 或通用 CI 配置，展示退出码、报告落盘和 artifact 收集。
 
-```yaml
-# tests/_setup/login.yaml
-version: 1
-steps:
-  login:
-    request:
-      method: POST
-      url: ${base_url}/login
-      json:
-        username: ${username}
-        password: ${password}
-    extract:
-      token: $.data.token
-    export:
-      token: ${token}
-```
+## 后续候选
 
-Then normal suite tests can use `${token}` without repeating the login step in every file.
+- Shell/exec action，用于非 Python setup 工作流
+- JSON Schema 或 OpenAPI 响应校验
+- `--var key=value` 命令行覆盖
+- 面向外部报告的可选字段脱敏
+- 在存在明确跨 testcase 性能需求后，评估 run/global 级连接池
+- 仅在需要执行不可信 testcase 时增加 ReDoS 等安全加固
 
-Directory / glob discovery implemented after suite v1:
+## 暂不规划
 
-- Directory input recursively scans `.yaml`, `.yml`, and `.json`.
-- Nextgen expands glob patterns itself, including `**`.
-- Glob patterns with no matches fail with exit code 2.
-- Directory or glob discovery with no testcase files fails with exit code 2.
-- Discovery is testcase collection, not suite orchestration; no directory-level env/setup/hooks are introduced.
-
-### 2. JUnit XML Reporter
-
-Status: **implemented**.
-
-Suite result shape now supports CI-friendly reporting:
-
-- `--report json|junit`
-- `--output path`
-- JUnit maps suite/testcase/step hierarchy to XML.
-
-Implemented behavior:
-
-- Default report remains JSON.
-- If `--output` is provided, the selected report is written to the file and terminal summary stays on stderr.
-- Without `--output`, the selected report is written to stdout.
-- JSON and JUnit reporters both support single `TestResult` and `SuiteResult`.
-- JUnit maps each step to a testcase entry; file-level failed or skipped results use a synthetic testcase entry.
-
-### 3. Dry-Run / Execution Plan
-
-Status: **implemented**.
-
-Dry-run uses the same loading and planning code as suite execution, then stops before scheduler/action execution.
-
-Implemented behavior:
-
-- Load testcase or suite.
-- Load env files.
-- Expand matrix steps.
-- Validate DAGs.
-- Discover hook files.
-- Print execution plan without running actions.
-- Do not load or execute hooks.
-- Output env variable keys, not values.
-- Keep action summaries unresolved/raw, such as `POST ${base_url}/login`.
-- Fail fast with exit code 2 on parse or DAG validation errors.
-
-Output includes:
-
-- testcase file paths
-- mode and fail_fast
-- step names and dependencies
-- matrix-expanded step names
-- env variable keys, not values
-- discovered hook files
-- declared export keys
-- suite setup export keys and `runtime_setup_exports`
-
-### 4. Tags / Step Filtering
-
-Status: **implemented in v1**.
-
-Tags improve day-to-day authoring and selective execution.
-
-Example:
-
-```yaml
-steps:
-  login:
-    tags: [auth, smoke]
-    request: ...
-```
-
-CLI:
-
-```bash
-nextgen case.yaml --tags smoke
-nextgen case.yaml --tags auth --skip-tags slow
-```
-
-Implemented decisions:
-
-- `tags: list[str]` on `StepNode`.
-- Filtering should happen after parsing and graph validation but before scheduling.
-- Default behavior should include dependencies of selected steps.
-- `--skip-tags` takes precedence over `--tags`.
-- If a selected step requires a skipped dependency, filtering fails with exit code 2.
-- If a selected target step is itself skipped, it is silently excluded.
-- Suite setup testcases and normal testcases both receive the same tag filter; filtering setup steps can affect setup exports.
-- Dry-run shows the filtered step set and active filters.
-- Avoid putting tag filtering directly in the scheduler main loop.
-
-Deferred:
-
-- Add an option later for strict filtering where missing selected dependencies are reported instead of auto-included.
-
-### 5. HTTP Session Reuse
-
-Status: **implemented**.
-
-HTTP actions now reuse one `httpx.AsyncClient` within a single testcase run.
-
-Implemented behavior:
-
-- Reuse `httpx.AsyncClient` within one testcase run.
-- Preserve cookie jar and connection pool across HTTP steps in the same testcase.
-- Close runtime resources at the end of `Scheduler.run()`, including successful and failed runs.
-- Keep testcase isolation; sessions do not cross testcase files in suite runs.
-- Keep redirect behavior unchanged from the underlying client default.
-- Keep step-level `timeout` as a per-request setting.
-
-Design notes:
-
-- Scheduler only closes generic context runtime resources and does not know HTTP implementation details.
-- Cross-testcase auth should use explicit suite setup `extract` / `export` variables, not implicit cookie sharing.
-
-## Later Work
-
-These are valuable, but should wait until suite/reporting/filtering foundations are stable:
-
-- Better `ParseError` paths, such as `steps.login.validate[0].eq`
-- Shell/exec action for non-Python setup workflows
-- JSON Schema or OpenAPI validation
-- Optional `--var key=value` CLI overrides
-- Optional reporter redaction for externally shared artifacts
-- ReDoS hardening if untrusted testcase execution becomes a goal
-
-## Near-Term Recommendation
-
-Start with **better `ParseError` paths** next. Suite execution, CI reporting, dry-run planning, tag filtering, testcase-scoped HTTP session reuse, and directory/glob discovery now cover the main team-scale workflow; precise error locations are the next biggest authoring ergonomics gap.
+- 重型 UI、权限系统和服务端管理平台
+- 跨 testcase `depends_on`
+- 默认共享跨 testcase cookie 或事务
+- 没有明确复用场景的 YAML fragment include

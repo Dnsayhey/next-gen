@@ -308,6 +308,38 @@ Session 边界：
 - v1 不新增 DSL 配置项
 - redirect 行为保持 httpx/client 默认语义；step 级 `timeout` 仍按 request 配置传入
 
+## DB Action
+
+DB step 使用 `db` 字段，查询结果可通过 `$.rows`、`$.row_count` 和 `$.columns` 断言或提取：
+
+```yaml
+version: 1
+
+vars:
+  db_url: sqlite://./examples/assets/guide.db
+
+steps:
+  query_user:
+    db:
+      url: ${db_url}
+      query: SELECT id, name FROM users WHERE name = $1
+      params: [Alice]
+    extract:
+      user_id: $.rows[0].id
+    validate:
+      - eq: [$.row_count, 1]
+      - eq: [$.rows[0].name, Alice]
+```
+
+支持的连接 URL：
+
+- PostgreSQL：`postgres://user:pass@host:5432/dbname` 或 `postgresql://...`
+- MySQL：`mysql://user:pass@host:3306/dbname`
+- SQLite 绝对路径：`sqlite:///path/to/database.db`
+- SQLite 相对路径：`sqlite://./path/to/database.db`，相对于当前工作目录
+
+参数占位符由驱动决定：PostgreSQL 使用 `$1`、`$2`，MySQL 使用 `%s`，SQLite 可使用 `?` 或 `$1`。完整可运行示例见 [SQLite DB 示例](examples/advanced/db_sqlite.yaml)。
+
 ## DB Connection Reuse
 
 同一个 testcase run 内，使用相同渲染后 `url` 的 DB steps 会自动复用数据库资源；不同 `url` 使用相互独立的资源。
@@ -427,65 +459,93 @@ extract:
 
 ## 项目结构
 
-```
-nextgen/
-├── cli.py              # CLI 入口
-├── bootstrap.py        # 内置 action 加载
-├── core/
-│   ├── model.py        # AST 模型
-│   ├── errors.py       # 通用错误层级
-│   ├── context.py      # 变量系统
-│   ├── actions.py      # action 注册表
-│   ├── hooks.py        # hook 注册表与发现
-│   ├── discovery.py    # CLI 目录 / glob 输入发现
-│   ├── planner.py      # DAG 规划
-│   ├── condition.py    # when 条件评估
-│   ├── operators.py    # 通用断言操作符
-│   ├── extract.py      # 通用提取规则
-│   ├── result.py       # 执行结果模型
-│   ├── scheduler.py    # 调度器
-│   └── suite.py        # Suite / 多文件执行编排
-├── parser/
-│   └── loader.py       # YAML/JSON 解析
-├── actions/
-│   ├── http/           # 内置 HTTP action 实现
-│   └── db/             # 内置 DB action 实现
-└── reporter/
-    ├── base.py          # reporter 接口
-    ├── junit_reporter.py # JUnit XML 报告实现
-    └── json_reporter.py # JSON 报告实现
-```
+- `nextgen/core/`：AST、Context、DAG planner、scheduler、suite 和运行时扩展注册表
+- `nextgen/parser/`：testcase、suite 与 env 文件解析
+- `nextgen/actions/`：内置 HTTP 和 DB action
+- `nextgen/reporter/`：JSON 与 JUnit reporter
+- `nextgen/cli.py`：命令行入口、输入发现和报告输出编排
 
-## 扩展新 Action 类型
+更完整的模块职责见 [设计文档的核心模块](docs/design.md#11-核心模块)。
 
-完整扩展示例见 [设计文档 §14](docs/design.md#14-扩展新-action-类型)。注册入口是 `ActionSpec`：
+## 通过 Python 扩展 Action
+
+注册入口是公开的 `ActionSpec`。下面的最小 `echo` action 使用独立名称，不会覆盖内置 `request` 或 `db`：
 
 ```python
+from dataclasses import dataclass
+from typing import Any
+
 from nextgen import ActionSpec, register_action
+from nextgen.core.context import Context
+from nextgen.core.errors import ParseError
+from nextgen.core.extract import extract_value
+from nextgen.core.model import AssertionNode
+from nextgen.core.operators import evaluate_operator
 from nextgen.core.result import ActionResult
 
-# 1. 实现 action 函数
-async def execute_db(config, ctx) -> ActionResult: ...
-def extract_db(result, config, ctx): ...
-def validate_db(result, assertions): ...
 
-# 2. 注册
+@dataclass
+class EchoConfig:
+    value: Any
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> "EchoConfig":
+        if "value" not in raw:
+            raise ParseError("echo must include a value field")
+        return cls(value=raw["value"])
+
+    def summary(self) -> str:
+        return "echo"
+
+
+async def execute_echo(config: EchoConfig, ctx: Context) -> ActionResult:
+    value = ctx.render_value(config.value)
+    data = {"value": value}
+    return ActionResult(
+        data=data,
+        action_input={"type": "echo", "value": value},
+        action_output=data,
+    )
+
+
+def extract_echo(result, rules, ctx):
+    extracted = {}
+    for name, rule in rules.items():
+        value = extract_value(result, rule)
+        ctx.set(name, value)
+        extracted[name] = value
+    return extracted
+
+
+def validate_echo(result, assertions: list[AssertionNode]):
+    errors = []
+    for assertion in assertions:
+        actual = extract_value(result, assertion.left)
+        if not evaluate_operator(assertion.op, actual, assertion.right):
+            errors.append(
+                f"{assertion.op} assertion failed: "
+                f"actual={actual}, expected={assertion.right}"
+            )
+    return errors
+
 register_action(ActionSpec(
-    name="db",
-    parse_config=DbConfig.from_dict,
-    execute=execute_db,
-    extract=extract_db,
-    validate=validate_db,
+    name="echo",
+    parse_config=EchoConfig.from_dict,
+    execute=execute_echo,
+    extract=extract_echo,
+    validate=validate_echo,
     summarize=lambda config: config.summary(),
 ))
 ```
+
+CLI 当前只自动加载内置 action。自定义 action 模块必须由宿主程序在解析 testcase 前导入并完成注册；若需要命令行入口，可先导入自定义模块，再调用 `nextgen.cli.app()`。完整接口说明见 [设计文档 §14](docs/design.md#14-扩展新-action-类型)。
 
 自定义 action 如果在拿到业务结果前失败，建议抛出 `ActionExecutionError(message, action_input)`；调度器会把已渲染的输入快照写入报告，方便定位连接、鉴权或参数问题。
 
 ## 文档
 
-- [设计文档](docs/design.md)
-
-## License
-
-MIT
+- [设计与 DSL 参考](docs/design.md)
+- [步骤执行顺序与变量作用域](docs/execution-order-and-scoping.md)
+- [Roadmap](docs/roadmap.md)
+- [入门示例](examples/guide/README.md)
+- [进阶示例](examples/advanced/README.md)
