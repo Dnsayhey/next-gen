@@ -34,7 +34,6 @@
 * **报告格式**：支持 JSON 与 JUnit XML，支持单 testcase 结果与 suite 聚合结果，步骤报告包含 `action_input / action_output`
 * **DSL 格式**：支持 YAML 和 JSON 两种格式
 * **Action / Hook 架构**：注册表模式，支持扩展 action 和自定义 hook
-* **Suite 优先于 include**：多文件执行保持 testcase 边界清晰；暂不引入 YAML `include` 合并语义
 
 ---
 
@@ -552,7 +551,6 @@ Setup testcase 成功后，会收集成功步骤的 `exported` 变量作为 suit
 - 不支持跨 testcase `depends_on`
 - setup 失败会让 suite 失败，并把所有普通 tests 记录为 testcase 级 `skipped`
 - 普通 testcase 失败不会阻止后续普通 testcase 执行，suite 尽量产出完整报告
-- suite v1 不包含 suite hooks、teardown 或文件级并行
 
 **结果模型：**
 
@@ -1166,9 +1164,9 @@ uv run nextgen demo.yaml
 
 ---
 
-## 16. 迭代路线
+## 16. 当前状态
 
-当前能力边界、仍然有效的设计决策和后续优先级统一维护在 [Roadmap](roadmap.md)，不在设计文档中重复维护完成清单。
+已实现能力和当前架构边界统一维护在 [当前状态](status.md)，不在设计文档中重复维护完成清单。
 
 ---
 

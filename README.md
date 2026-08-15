@@ -546,6 +546,10 @@ CLI 当前只自动加载内置 action。自定义 action 模块必须由宿主�
 
 - [设计与 DSL 参考](docs/design.md)
 - [步骤执行顺序与变量作用域](docs/execution-order-and-scoping.md)
-- [Roadmap](docs/roadmap.md)
+- [当前状态](docs/status.md)
 - [入门示例](examples/guide/README.md)
 - [进阶示例](examples/advanced/README.md)
+
+## License
+
+[MIT](LICENSE)
