@@ -300,6 +300,19 @@ class TestExtractVariables:
         assert extracted["token"] == "abc123"
         assert ctx.get("token") == "abc123"
 
+    def test_extract_body_root_does_not_include_body_wrapper(self):
+        result = {
+            "status_code": 200,
+            "body": {"id": "account-1"},
+            "headers": {},
+        }
+        ctx = Context()
+
+        extracted = extract_variables(result, {"account_id": "$.id"}, ctx)
+
+        assert extracted == {"account_id": "account-1"}
+        assert ctx.get("account_id") == "account-1"
+
     def test_extract_status_code(self):
         result = {
             "status_code": 200,

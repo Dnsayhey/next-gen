@@ -16,10 +16,13 @@ def extract_variables(
 ) -> dict[str, Any]:
     """Extract variables from an HTTP response.
 
-    Supports JSONPath syntax:
-    - $.data.token -> extract from body
-    - $$.status_code -> status code
-    - $$.headers.xxx -> HTTP response header
+    Supports HTTP response path syntax:
+    - $.data.token -> extract ``data.token`` from the response body
+    - $$.status_code -> status code metadata
+    - $$.headers.xxx -> HTTP response header metadata
+
+    The ``$.`` root is the response body root; ``body`` is not an
+    additional path segment. Use ``$$.`` for response metadata.
     """
     extracted = {}
 

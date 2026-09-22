@@ -17,10 +17,13 @@ class HttpValidator:
     ) -> list[str]:
         """Validate an HTTP response.
 
-        Supports JSONPath syntax:
-        - $.code -> extract from body
-        - $$.status_code -> status code
-        - $$.headers.xxx -> HTTP response header
+        Supports HTTP response path syntax:
+        - $.code -> read ``code`` from the response body
+        - $$.status_code -> status code metadata
+        - $$.headers.xxx -> HTTP response header metadata
+
+        The ``$.`` root is the response body root; ``body`` is not an
+        additional path segment. Use ``$$.`` for response metadata.
         """
         errors = []
 
